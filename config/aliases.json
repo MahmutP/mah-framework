@@ -1,0 +1,5 @@
+{
+    "quit": "exit",
+    "bye": "exit",
+    "?": "help"
+}

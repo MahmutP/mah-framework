@@ -4,3 +4,7 @@ Mah Framework Main repository.
 kodlar çok dağınık olduğundan gemini ile kodları "clear code" şekline sokuldu. ek yapı kodlandırılmadı.
 her hangi bir yapay zeka kulolanımı ve ne için kullanıldığıda yorum satırlarıyla belirtildi.
 ```
+kütüphane kullanılan kütüphaneleri indirmek
+```
+pip3 install rich prompt-toolkit asciistuff # typing
+```

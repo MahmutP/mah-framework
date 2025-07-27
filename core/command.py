@@ -2,6 +2,7 @@
 from typing import List, Dict, Amy, Callable, Optional # çok işe yarıyor bu kütüphane.
 from core.shared_state import shared_state # bu çok iyi oldu.
 from core.cont import COMMAND_CATEGORIES
+from rich import print
 class Command:
     Name: str = "COMMAND" # komut adı
     Description: str = "Description for command" # komut açıklaması
@@ -22,6 +23,6 @@ class Command:
             try:
                 return self.completer_function(text, word_before_cursor)
             except Exception as e:
-                self.logger.error(f"Komut '{self.Name}' tamamlama fonksiyonunda hata: {e}")
+                print(f"Komut '{self.Name}' tamamlama fonksiyonunda hata: {e}")
                 return []
         return []

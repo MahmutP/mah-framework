@@ -4,6 +4,7 @@ from typing import Dict, Optional, Tuple
 from core.module import BaseModule # temel modül sınıfı
 from core.shared_state import shared_state
 from rich import print
+import os
 class ModuleManager:
     def __init__(self, modules_dir="modules"):
         self.modules_dir = modules_dir # modüllerin bulunduğu dizin

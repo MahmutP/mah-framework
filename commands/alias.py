@@ -7,6 +7,7 @@ from core.command import Command
 from core.shared_state import shared_state
 from core.command_manager import CommandManager 
 from core.cont import ALIASES_FILE, LEFT_PADDING, COL_SPACING, DEFAULT_TERMINAL_WIDTH
+from rich import  print
 class Alias(Command):
     Name = "alias"
     Description = "Komutlar için kısayollar oluşturur, listeler ve siler."

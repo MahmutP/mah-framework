@@ -1,5 +1,5 @@
 #command sınıfı, temel komut sınıfı kodlandı burada.
-from typing import List, Dict, Amy, Callable, Optional # çok işe yarıyor bu kütüphane.
+from typing import List, Dict, Any, Callable, Optional # çok işe yarıyor bu kütüphane.
 from core.shared_state import shared_state # bu çok iyi oldu.
 from core.cont import COMMAND_CATEGORIES
 from rich import print

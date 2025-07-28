@@ -2,6 +2,7 @@
 from typing import Any
 from core.command import Command
 from core.shared_state import shared_state
+from rich import  print
 class Back(Command):
     Name = "back"
     Description = "Mevcut modülden çıkarak ana kabuğa döner."

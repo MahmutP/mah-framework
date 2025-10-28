@@ -1,4 +1,5 @@
 {
     "quit": "exit",
-    "?": "help"
+    "?": "help",
+    "bye": "exit"
 }

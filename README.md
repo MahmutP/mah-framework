@@ -10,6 +10,6 @@ kütüphane kullanılan kütüphaneleri indirmek
 pip3 install -r requirements.txt
 ```
 ```
-pip3 install rich prompt-toolkit asciistuff telnetlib3 # typing
+pip3 install rich prompt-toolkit asciistuff telnetlib3 psutil # typing
 ```
 7.08.2025 tarihinden itibaren shadow4strike projesi geliştirilmeye başlandı.

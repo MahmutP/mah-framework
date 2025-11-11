@@ -24,9 +24,9 @@ class BaseModule:
         if option:
             option.value = value
             setattr(self, option_name, value)
-            self.logger.debug(f"[{self.Name}] Option '{option_name}' set to '{value}'.")
+            print(f"[{self.Name}] Option '{option_name}' set to '{value}'.")
             return True
-        self.logger.warning(f"[{self.Name}] Option '{option_name}' bulunamadı.")
+        print(f"[{self.Name}] Option '{option_name}' bulunamadı.")
         return False
     def check_required_options(self) -> bool: # show komutunda zorunluluğunu belirlemek için
         missing_options = []

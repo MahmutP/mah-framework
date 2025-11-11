@@ -7,7 +7,7 @@ her hangi bir yapay zeka kulolanımı ve ne için kullanıldığıda yorum satı
 kütüphane kullanılan kütüphaneleri indirmek
 
 ```
-pip3 install -r req*.txt
+pip3 install -r requirements.txt
 ```
 ```
 pip3 install rich prompt-toolkit asciistuff telnetlib3 # typing

@@ -77,10 +77,10 @@ DEFAULT_REGEX = r".*"
 # ==============================================================================
 
 # Uygulamanın gösterim adı (prompt veya banner için kullanılabilir).
-APP_NAME = "CLI Framework"
+APP_NAME = "Mah Framework"
 
 # Uygulamanın versiyon numarası.
 APP_VERSION = "1.0.0"
 
 # Geliştiricinin iletişim bilgisi veya ekip adı.
-APP_AUTHOR = "Gemini AI"
+APP_AUTHOR = "Mahmut Paşa"

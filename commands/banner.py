@@ -10,6 +10,11 @@ class BannerCommand(Command):
     Category = "system" 
     Aliases = [] 
     def execute(self, *args: str, **kwargs: Any) -> bool:
+        """Komut çalıştırılınca çalışacak kod
+
+        Returns:
+            bool: Başarılı olup olmadığının sonucu
+        """
         try:
             print(Lolcat(Banner("Hello world!"), spread=random.randint(1,11)))
             #("Banner basıldı.")

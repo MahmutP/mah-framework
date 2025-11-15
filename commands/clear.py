@@ -9,6 +9,11 @@ class Clear(Command):
     Category = "system"
     Aliases = [] 
     def execute(self, *args: str, **kwargs: Any) -> bool:
+        """Komut çalıştırılınca çalışacak kod
+
+        Returns:
+            bool: başarılı olup olmadığının kontrol edicek.
+        """
         try:
             os.system('cls' if os.name == 'nt' else 'clear')
             #("Ekran temizlendi.")

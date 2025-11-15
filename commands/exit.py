@@ -10,6 +10,11 @@ class Exit(Command):
     Category = "core"
     Aliases = ["quit"]
     def execute(self, *args: str, **kwargs: Any) -> bool:
+        """Komut çalıştırıldığında çalışacak kod.
+
+        Returns:
+            bool: Komutun başarılı olup olmadığının kontrolü.
+        """
         print("Uygulamadan çıkış yapılıyor...")
         if hasattr(shared_state, 'console_instance') and shared_state.console_instance:
             shared_state.console_instance.shutdown()

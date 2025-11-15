@@ -15,7 +15,7 @@ class deneme(BaseModule):
         }
         for option_name, option_obj in self.Options.items():
             setattr(self, option_name, option_obj.value)
-        def run(self, options: Dict[str, Any]):
-            print(f"Modül: '{self.Name}'")
-            print(f"Toplanacak birinci sayı: {options.get("first_number")}")
-            print(f"")
+    def run(self, options: Dict[str, Any]):
+        print(f"Modül: '{self.Name}'")
+        print(f"Toplanacak birinci sayı: {options.get("first_number")}")
+        print(f"")

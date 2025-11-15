@@ -20,11 +20,11 @@ class Option:
     def value(self, new_value: Any): # value ana fonksiyonu
         if self.regex_check:
             if not re.fullmatch(self.regex, str(new_value)):
-                print(f"'{self.name}' seçeneği için '{new_value}' değeri, '{self.regex}' regex'ine uymuyor.")
+                #print(f"'{self.name}' seçeneği için '{new_value}' değeri, '{self.regex}' regex'ine uymuyor.")
                 self._value = new_value
                 return
         self._value = new_value
-        print(f"Option '{self.name}' set to '{self._value}'")
+        #print(f"Option '{self.name}' set to '{self._value}'")
     def __str__(self): # bunu "io" dan ilham alarak ekledim
         return f"Option(Name='{self.name}', Value='{self.value}', Required={self.required}, Description='{self.description}', Regex_Check={self.regex_check}, Regex='{self.regex}')"
     def to_dict(self): # dict çıktısı, işlemede kolaylık sağlayacak

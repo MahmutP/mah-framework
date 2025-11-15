@@ -2,8 +2,8 @@ from typing import Dict, Any
 from core.module import BaseModule
 from core.option import Option
 from rich import print
-class topla(BaseModule):
-    Name =  "topla"
+class toplama(BaseModule):
+    Name =  "toplama"
     Description = "Bu bir deneme modülü."
     Author= "Mahmut P."
     Category = "example"

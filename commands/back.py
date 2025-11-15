@@ -9,6 +9,11 @@ class Back(Command):
     Category = "module"
     Aliases = []
     def execute(self, *args: str, **kwargs: Any) -> bool:
+        """Komut çalıştığında çalışacak komut
+
+        Returns:
+            bool: başarılı olup olmadığının sonucu
+        """
         selected_module = shared_state.get_selected_module()
         if selected_module:
             shared_state.set_selected_module(None)

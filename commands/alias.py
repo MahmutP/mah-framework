@@ -14,9 +14,20 @@ class Alias(Command):
     Category = "system"
     Aliases = []
     def __init__(self):
+        """init fonksiyon
+        """
         super().__init__()
         self.completer_function = self._alias_completer 
     def _alias_completer(self, text: str, word_before_cursor: str) -> List[str]:
+        """alias komutunun otomatik tamamlaması
+
+        Args:
+            text (str): string girdi
+            word_before_cursor (str): kullanıcının terminalde imlecin (cursor) hemen solunda yazdığı kelimenin tamamını tutar.
+
+        Returns:
+            List[str]: otmatik tamamlama listesi
+        """
         parts = text.split()
         if len(parts) == 1 and text.endswith(' '): 
             return sorted(["add", "list", "remove"])
@@ -29,6 +40,11 @@ class Alias(Command):
             return sorted([alias for alias in all_aliases if alias.startswith(current_alias_part)])
         return []
     def execute(self, *args: str, **kwargs: Any) -> bool:
+        """Komut çalıştırılınca çalışacak fonksiyon
+
+        Returns:
+            bool: sonuç başarılı mı başarısız mı olduğunu belirten çıktı
+        """
         command_manager: CommandManager = shared_state.command_manager
         if not command_manager:
             print("CommandManager başlatılmamış.")
@@ -56,6 +72,14 @@ class Alias(Command):
             print(f"Bilinmeyen 'alias' alt komutu: '{subcommand}'. Kullanım: alias <add|list|remove>")
             return False
     def _list_aliases(self, aliases: Dict[str, str]) -> bool:
+        """Tanımlı tüm komut takma adlarını (aliasları) terminalde tablo formatında görüntüler.
+
+        Args:
+            aliases (Dict[str, str]): Alias adlarını (anahtar) ve bunların hedeflediği asıl komutları (değer) içeren sözlük.
+
+        Returns:
+            bool: İşlem başarıyla tamamlandığında her zaman True döner. (Listede alias olmasa bile)
+        """
         if not aliases:
             print(f"{' ' * LEFT_PADDING}Tanımlı alias bulunmamaktadır.")
             return True
@@ -80,12 +104,26 @@ class Alias(Command):
             print(f"{' ' * LEFT_PADDING}{alias_name.ljust(max_alias_len)}{' ' * COL_SPACING}{display_target_cmd}")
         return True
     def _get_terminal_width(self) -> int:
+        """terminal genişliğini alan fonksiyon
+
+        Returns:
+            int: terminal uzunluğunun int değeri.
+        """
         try:
             return shutil.get_terminal_size().columns
         except OSError:
             print(f"Terminal genişliği alınamadı, varsayılan {DEFAULT_TERMINAL_WIDTH} kullanılıyor.")
             return DEFAULT_TERMINAL_WIDTH
     def _truncate_description(self, description: str, max_len: int) -> str:
+        """Verilen metni (description), belirtilen maksimum uzunluğa keser ve kesildiyse sonuna '...' ekler.
+
+        Args:
+            description (str): Kısaltılacak olan orijinal metin veya komut dizesi.
+            max_len (int): Metnin alabileceği maksimum toplam karakter uzunluğu (üç nokta dahil).
+
+        Returns:
+            str: Kısaltılmış veya orijinal (kısaltılmadıysa) metin dizesi.
+        """
         if len(description) > max_len and max_len > 3: 
             return description[:max_len - 3] + "..."
         return description

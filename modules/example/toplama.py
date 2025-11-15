@@ -2,7 +2,7 @@ from typing import Dict, Any
 from core.module import BaseModule
 from core.option import Option
 from rich import print
-class deneme(BaseModule):
+class topla(BaseModule):
     Name =  "topla"
     Description = "Bu bir deneme modülü."
     Author= "Mahmut P."
@@ -18,4 +18,5 @@ class deneme(BaseModule):
     def run(self, options: Dict[str, Any]):
         print(f"Modül: '{self.Name}'")
         print(f"Toplanacak birinci sayı: {options.get("first_number")}")
-        print(f"")
+        print(f"Toplanacakl ikinci sayı: {options.get("second_number")}")
+        print(f"{options.get("first_number")} + {options.get("second_number")} = {int(options.get("first_number"))+int(options.get("second_number"))}")

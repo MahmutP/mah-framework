@@ -5,6 +5,14 @@ from core.command import Command
 from core.shared_state import shared_state 
 from rich import  print
 class Exit(Command):
+    """Mah Framework'ten çıkmaya yarıyan komut.
+
+    Args:
+        Command (_type_): ana komut sınıfı.
+
+    Returns:
+        _type_: _description_
+    """
     Name = "exit"
     Description = "Uygulamadan çıkar."
     Category = "core"

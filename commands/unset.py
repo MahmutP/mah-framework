@@ -4,14 +4,33 @@ from core.shared_state import shared_state
 from core.module import BaseModule 
 from rich import  print
 class Unset(Command):
+    """Ayarlanmış option'u sıfırlamak (default hali) için kullanılan bir komuttur.
+
+    Args:
+        Command (_type_): Ana komut sınıfı.
+
+    Returns:
+        _type_: _description_
+    """
     Name = "unset"
     Description = "Ayarlanmış option'u sıfırlamak (default hali) için kullanılan bir komuttur."
     Category = "module"
     Aliases = []
     def __init__(self):
+        """init fonksiyon
+        """
         super().__init__()
         self.completer_function = self._unset_completer 
     def _unset_completer(self, text: str, word_before_cursor: str) -> List[str]:
+        """unset komutunun otomatik tamamlaması.
+
+        Args:
+            text (str): text girdisi.
+            word_before_cursor (str): imlecin solundaki text.
+
+        Returns:
+            List[str]: Otomatik tamamlama listesi.
+        """
         parts = text.split()
         if len(parts) == 1 and text.endswith(' '): 
             selected_module: BaseModule = shared_state.get_selected_module()
@@ -27,6 +46,11 @@ class Unset(Command):
             return []
         return []
     def execute(self, *args: str, **kwargs: Any) -> bool:
+        """Komut çalışınca çalışacak komut.
+
+        Returns:
+            bool: başarılı olup olmadığının kontrol sonucu.
+        """
         selected_module: BaseModule = shared_state.get_selected_module()
         if not selected_module:
             print("Herhangi bir modül seçili değil. Lütfen önce 'use <modül_yolu>' komutunu kullanın.")

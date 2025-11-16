@@ -8,9 +8,24 @@ from core.module_manager import ModuleManager
 from core.module import BaseModule 
 from core.cont import LEFT_PADDING, COL_SPACING, DEFAULT_TERMINAL_WIDTH
 class ModuleSearcher:
+    """Modüller ile ilgili aramaya yarıyan tarama Komutunun ana arama yapısı.
+    """
     def __init__(self, module_manager: ModuleManager):
+        """İnit fonksiyon.
+
+        Args:
+            module_manager (ModuleManager): Modül yöneticisi.
+        """
         self.module_manager = module_manager
     def search(self, term: str) -> List[Dict[str, Any]]:
+        """_summary_Terim alarak aramaya sağlayan fonksiyon.
+
+        Args:
+            term (str): Aranacak terim.
+
+        Returns:
+            List[Dict[str, Any]]: Arama sonucunun liste çıktısı.
+        """
         matching_modules = []
         term_lower = term.lower()
         all_modules: Dict[str, BaseModule] = self.module_manager.get_all_modules()
@@ -37,19 +52,43 @@ class ModuleSearcher:
                 })
         return matching_modules
 class Search(Command):
+    """Arama yapmaya sağlayan bir Komut.
+
+    Args:
+        Command (_type_): Ana komut sınıfı.
+
+    Returns:
+        _type_: _description_
+    """
     Name = "search"
     Description = "Modülleri arar."
     Category = "core"
     Aliases = []
     def __init__(self):
+        """init fonksiyonu.
+        """
         super().__init__()
         self.completer_function = self._search_completer 
     def _search_completer(self, text: str, word_before_cursor: str) -> List[str]:
+        """Search komutu otomatik tamamlaması.
+
+        Args:
+            text (str): bildiğimiz girdi.
+            word_before_cursor (str): imlecin solundaki text
+
+        Returns:
+            List[str]: otomatik tamamlama çıktısı.
+        """
         parts = text.split()
         if len(parts) == 1 and text.endswith(' '): 
             return []
         return []
     def execute(self, *args: str, **kwargs: Any) -> bool:
+        """Komut çalışınca çalışacak fonksiyon.
+
+        Returns:
+            bool: Başarılı olup olmadığının kontrolü.
+        """
         if not args:
             print("Kullanım: search <arama_terimi>")
             return False
@@ -66,6 +105,12 @@ class Search(Command):
         self._display_search_results(results, search_term)
         return True
     def _display_search_results(self, results: List[Dict[str, Any]], search_term: str):
+        """Aramanın çıktısını sağlayan fonksiyon.
+
+        Args:
+            results (List[Dict[str, Any]]): sonuçlar liste halinde.
+            search_term (str): aranan terim.
+        """
         terminal_width = self._get_terminal_width()
         path_header = "Path"
         name_header = "Name"
@@ -119,12 +164,27 @@ class Search(Command):
                   f"{display_author.ljust(max_author_len + self._get_ansi_len_diff(display_author))}{' ' * COL_SPACING}"
                   f"{display_category.ljust(max_category_len + self._get_ansi_len_diff(display_category))}")
     def _get_terminal_width(self) -> int:
+        """Terminal genişliğini hesaplayan fonksiyon.
+
+        Returns:
+            int: terminal genişliğinin değeri
+        """
         try:
             return shutil.get_terminal_size().columns
         except OSError:
             print(f"Terminal genişliği alınamadı, varsayılan {DEFAULT_TERMINAL_WIDTH} kullanılıyor.")
             return DEFAULT_TERMINAL_WIDTH
     def _truncate_and_highlight(self, text: str, term: str, max_len: int) -> str:
+        """Terimin uyuşanları renklendiren komut
+
+        Args:
+            text (str): genel yazı.
+            term (str): terim.
+            max_len (int): maksimum uzunluk.
+
+        Returns:
+            str: renklendirilmiş çıktı.
+        """
         highlighted_text = self._highlight_text(text, term)
         clean_text = re.sub(r'\x1b\[[0-9;]*m', '', highlighted_text)
         if len(clean_text) > max_len and max_len > 3:
@@ -132,7 +192,24 @@ class Search(Command):
             return self._highlight_text(truncated_clean_text, term)
         return highlighted_text
     def _highlight_text(self, text: str, term: str) -> str:
+        """Renklendici fonksiyon.
+
+        Args:
+            text (str): genel yazı
+            term (str): aranan terim.
+
+        Returns:
+            str: renkli çıktı.
+        """
         term_pattern = re.compile(re.escape(term), re.IGNORECASE)
         return term_pattern.sub(lambda match: f"\033[91m{match.group(0)}\033[0m", text)
     def _get_ansi_len_diff(self, text: str) -> int:
+        """Metin içindeki ANSI kaçış kodlarının (renklendirme/biçimlendirme) toplam karakter uzunluğunu hesaplar.
+
+        Args:
+            text (str): ANSI kaçış kodları içerebilen orijinal metin dizesi.
+
+        Returns:
+            int: Orijinal metin uzunluğu ile ANSI kodları kaldırılmış metin uzunluğu arasındaki fark (yani, ANSI kodlarının toplam uzunluğu).
+        """
         return len(text) - len(re.sub(r'\x1b\[[0-9;]*m', '', text))

@@ -4,6 +4,14 @@ from core.command import Command
 from core.shared_state import shared_state
 from rich import  print
 class Back(Command):
+    """modül seçili halden, seçilmemiş hale geçişi sağlayan komut.
+
+    Args:
+        Command (_type_): Ana komut sınıfı.
+
+    Returns:
+        _type_: _description_
+    """
     Name = "back"
     Description = "Mevcut modülden çıkarak ana kabuğa döner."
     Category = "module"

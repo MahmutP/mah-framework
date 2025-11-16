@@ -4,11 +4,24 @@ from core.shared_state import shared_state
 from core.module import BaseModule 
 from rich import  print
 class Run(Command):
+    """Modülleri çalıştırmaya yarıyan bir komut.
+
+    Args:
+        Command (_type_): Ana komut sınıfı.
+
+    Returns:
+        _type_: _description_
+    """
     Name = "run"
     Description = "Seçili modülü çalıştırır."
     Category = "module"
     Aliases = []
     def execute(self, *args: str, **kwargs: Any) -> bool:
+        """Komut çalışınca çalışacak komut.
+
+        Returns:
+            bool: Komutun başarılı olup olmadığının sonucu.
+        """
         selected_module: BaseModule = shared_state.get_selected_module()
         if not selected_module:
             print("Çalıştırılacak bir modül seçili değil. Lütfen önce 'use <modül_yolu>' komutunu kullanın.")

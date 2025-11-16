@@ -6,6 +6,14 @@ from core.command_manager import CommandManager
 from core.cont import LEFT_PADDING, COL_SPACING, DEFAULT_TERMINAL_WIDTH # dökümantasyon çıktılarının daha güzel olması için
 from rich import print
 class Help(Command):
+    """Yardım çıktısı vermeye yarıyan komut.
+
+    Args:
+        Command (_type_): Ana komut sınıfı.
+
+    Returns:
+        _type_: _description_
+    """
     Name = "help"
     Description = "Yardım menüsünü gösterir veya belirli bir komut hakkında bilgi verir."
     Category = "core"

@@ -4,11 +4,24 @@ from core.command import Command
 from typing import Any
 from rich import  print
 class Shell(Command):
+    """terminal komutları çalıştırmaya yarıyan komut
+
+    Args:
+        Command (_type_): Ana komut sınıfı
+
+    Returns:
+        _type_: _description_
+    """
     Name = "shell"
     Description = "Sistem kabuğuna düşer."
     Category = "system"
     Aliases = [] 
     def execute(self, *args: str, **kwargs: Any) -> bool:
+        """komut çalıştırılınca çalışacak fonksiyon.
+
+        Returns:
+            bool: _description_
+        """
         command_to_execute = " ".join(args)
         if not command_to_execute:
             print("Sistem kabuğuna düşülüyor. Çıkmak için 'exit' yazın.")

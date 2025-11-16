@@ -4,6 +4,14 @@ from core.command import Command
 from typing import Any
 from rich import  print
 class Clear(Command):
+    """Terminali temizlemeye yarıyan komut.
+
+    Args:
+        Command (_type_): Ana komut sınıfı.
+
+    Returns:
+        _type_: _description_
+    """
     Name = "clear"
     Description = "Ekranı temizler."
     Category = "system"

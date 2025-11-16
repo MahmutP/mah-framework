@@ -9,6 +9,14 @@ from core.command_manager import CommandManager
 from core.cont import ALIASES_FILE, LEFT_PADDING, COL_SPACING, DEFAULT_TERMINAL_WIDTH
 from rich import  print
 class Alias(Command):
+    """alias yani takma ad oluşturup düzenlemeyeye yarayan komut.
+
+    Args:
+        Command (_type_): komutun base classı
+
+    Returns:
+        _type_: _description_
+    """
     Name = "alias"
     Description = "Komutlar için kısayollar oluşturur, listeler ve siler."
     Category = "system"
@@ -40,7 +48,7 @@ class Alias(Command):
             return sorted([alias for alias in all_aliases if alias.startswith(current_alias_part)])
         return []
     def execute(self, *args: str, **kwargs: Any) -> bool:
-        """Komut çalıştırılınca çalışacak fonksiyon
+        """alias yani akma adların kullanılmasını sağlayan komutun main kodu.
 
         Returns:
             bool: sonuç başarılı mı başarısız mı olduğunu belirten çıktı

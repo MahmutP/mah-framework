@@ -4,14 +4,33 @@ from rich import  print
 from core.shared_state import shared_state
 from core.module_manager import ModuleManager 
 class Use(Command):
+    """Modül seçmeye yarıyan komut.
+
+    Args:
+        Command (_type_): Ana komut sınıfı.
+
+    Returns:
+        _type_: _description_
+    """
     Name = "use"
     Description = "Bir modülü adına göre seçer."
     Category = "module"
     Aliases = []
     def __init__(self):
+        """init fonksiyonu.
+        """
         super().__init__()
         self.completer_function = self._use_completer 
     def _use_completer(self, text: str, word_before_cursor: str) -> List[str]:
+        """use komutu otomatik tamamlaması.
+
+        Args:
+            text (str): text girdisi.
+            word_before_cursor (str): imlecin solundaki text.
+
+        Returns:
+            List[str]: otomatik tamamlama listesi.
+        """
         parts = text.split()
         if len(parts) == 1 and text.endswith(' '): 
             module_manager: ModuleManager = shared_state.module_manager
@@ -27,6 +46,11 @@ class Use(Command):
             return []
         return []
     def execute(self, *args: str, **kwargs: Any) -> bool:
+        """Komut çalışınca çalışacak komut.
+
+        Returns:
+            bool: Başarılı olup olmadığının kontrolünü sağlayan sonuç.
+        """
         if not args:
             print("Kullanım: use <modül_yolu>")
             return False

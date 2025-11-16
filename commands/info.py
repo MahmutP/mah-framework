@@ -5,11 +5,24 @@ from core.shared_state import shared_state
 from core.option import Option 
 from rich import  print
 class Info(Command):
+    """Modülle ilgili detaylı bilgi veren bir komut
+
+    Args:
+        Command (_type_): Ana komut sınıfı.
+
+    Returns:
+        _type_: _description_
+    """
     Name = "info"
     Description = "Seçili modül bilgilerini gösterir."
     Category = "module"
     Aliases = [] 
     def execute(self, *args: str, **kwargs: Any) -> bool:
+        """detaylı bilgilendirme komutu
+
+        Returns:
+            bool: Başarılı olup olmadığının kontrolü.
+        """
         selected_module = shared_state.get_selected_module()
         if not selected_module:
             print("Herhangi bir modül seçili değil. Lütfen önce 'use <modül_yolu>' komutunu kullanın.")

@@ -5,6 +5,14 @@ import random
 from typing import Any
 from core.command import Command
 class BannerCommand(Command):
+    """Banner basmaya yarıyan komut.
+
+    Args:
+        Command (_type_): Ana komut sınıfı.
+
+    Returns:
+        _type_: _description_
+    """
     Name = "banner"
     Description = "Rastgele bir banner basar."
     Category = "system" 

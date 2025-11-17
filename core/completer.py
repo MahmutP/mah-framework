@@ -7,10 +7,33 @@ from core.shared_state import shared_state
 from core.command import Command # komut temel sınıfı
 from core.module import BaseModule # modül temel sınıfı
 class CLICompleter(Completer):
+    """Otomatik tamamlama sınıfı.
+
+    Args:
+        Completer (_type_): otomatik tamamlama sınıfı.
+    """
     def __init__(self, command_manager, module_manager):
+        """init fonksiyonu.
+
+        Args:
+            command_manager (_type_): komut yöneticisi.
+            module_manager (_type_): modül yöneticisi.
+        """
         self.command_manager = command_manager # komut yönetimi için
         self.module_manager = module_manager # m modül yönetimi için
     def get_completions(self, document: Document, complete_event) -> Iterable[Completion]: # otomatik tamamlama çağırıcı fonksiyon
+        """İmleçten önceki metne göre bağlama uygun otomatik tamamlama önerilerini üretir.
+
+        Args:
+            document (Document): Kullanıcının terminale girdiği metin ve imleç konumu bilgisini içeren nesne.
+            complete_event (_type_): Otomatik tamamlama olayını tetikleyen bilgileri içeren nesne (genellikle `prompt_toolkit` tarafından sağlanır, burada kullanılmamış olabilir).
+
+        Returns:
+            Iterable[Completion]: Tamamlama önerilerini (Completion nesneleri) döndüren bir iterable (üreteç).
+
+        Yields:
+            Iterator[Iterable[Completion]]: Tamamlama önerileri (`Completion` nesneleri)
+        """
         text_before_cursor = document.text_before_cursor
         words = text_before_cursor.split()
         if not text_before_cursor.strip():
@@ -40,6 +63,17 @@ class CLICompleter(Completer):
             else:
                 pass
     def _get_command_completions(self, current_word: str) -> Iterable[Completion]: # komutun otomatik tamamlamasını çekecek fonksiyon
+        """Kullanıcının yazdığı kelimeye uyan komut ve alias (takma ad) önerilerini üretir.
+
+        Args:
+            current_word (str): İmleçten önceki ve tamamlanması gereken kelime (kullanıcının yazdığı kısmi komut adı).
+
+        Returns:
+            Iterable[Completion]: Tamamlama önerilerini içeren iterable (üreteç).
+
+        Yields:
+            Iterator[Iterable[Completion]]: Tamamlama önerileri (`Completion` nesneleri), komut adı ve varsa açıklama/alias hedefiyle birlikte.
+        """
         all_names = set(self.command_manager.get_all_commands().keys())
         all_aliases = self.command_manager.get_aliases()
         for alias, target_cmd in all_aliases.items():

@@ -4,6 +4,11 @@ from core.shared_state import shared_state # bu çok iyi oldu.
 from core.cont import COMMAND_CATEGORIES
 from rich import print
 class Command:
+    """Ana komut sınıfı.
+
+    Returns:
+        _type_: _description_
+    """
     Name: str = "COMMAND" # komut adı
     Description: str = "Description for command" # komut açıklaması
     Category: str = "core" # komut açıklaması

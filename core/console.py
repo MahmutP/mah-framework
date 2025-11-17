@@ -19,6 +19,12 @@ from core.cont import DEFAULT_TERMINAL_WIDTH
 from rich import print
 class Console:
     def __init__(self, command_manager: CommandManager, module_manager: ModuleManager):
+        """init fonksiyon.
+
+        Args:
+            command_manager (CommandManager): Komut yöneticisi.
+            module_manager (ModuleManager): Modül yöneticisi.
+        """
         self.command_manager = command_manager
         self.module_manager = module_manager
         self.history = InMemoryHistory()
@@ -26,10 +32,20 @@ class Console:
         self.validator = CLIValidator(command_manager, module_manager)
         self.session = self._create_session()
         self.running = True
-    def _create_session(self) -> PromptSession: # otur8k oluşturucu
+    def _create_session(self) -> PromptSession: # oturum oluşturucu
+        """Oturum oluşturucu fonksiyon.
+
+        Returns:
+            PromptSession: Oturum oluşturmak için kullanılan ana fonksiyon.
+        """
         bindings = KeyBindings()
         @bindings.add('c-c')
         def _(event):
+            """ctrl+c ile yapılınca olacak olay.
+
+            Args:
+                event (_type_): mevcut olay.
+            """
             if shared_state.get_selected_module():
                 print("Modül çalışması Ctrl+C ile kesildi (eğer çalışıyorsa).")
             else:
@@ -50,6 +66,11 @@ class Console:
             })
         )
     def _get_prompt_string(self) -> HTML: # prompt stringi, arayüzde modifikasyon sağlayacak
+        """Prompt string çekici.
+
+        Returns:
+            HTML: html text yapısı.
+        """
         selected_module = shared_state.get_selected_module()
         if selected_module:
             module_path = f"{selected_module.Category}/{selected_module.Name}"
@@ -62,6 +83,8 @@ class Console:
             print(f"Terminal genişliği alınamadı, varsayılan {DEFAULT_TERMINAL_WIDTH} kullanılıyor.")
             return DEFAULT_TERMINAL_WIDTH
     def start(self):
+        """Konsol arayüzü başlatıcı.
+        """
         #("Konsol başlatılıyor...")
         while self.running:
             try:
@@ -79,6 +102,8 @@ class Console:
                 print(f"Beklenmedik bir hata oluştu: {e}")
                 print(f"Hata detayı: {e}", exc_info=True) 
     def shutdown(self):
+        """Oturumu kapatıcı
+        """
         #("Konsol kapatılıyor...")
         print("Konsol kapatıldı.")
         sys.exit(0) 

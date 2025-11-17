@@ -6,10 +6,31 @@ if TYPE_CHECKING:
     from core.command_manager import CommandManager
     from core.module_manager import ModuleManager
 class CLIValidator(Validator):
+    """Doğrulayıcı
+
+    Args:
+        Validator (_type_): doğrulama fonksiyonu.
+    """
     def __init__(self, command_manager: 'CommandManager', module_manager: 'ModuleManager'):
+        """init fonksiyon.
+
+        Args:
+            command_manager (CommandManager): komut yöneticisi.
+            module_manager (ModuleManager): Modül yöneticisi.
+        """
         self.command_manager = command_manager # komutların işlenmesi için
         self.module_manager = module_manager # modüllerin işlenmesi için
     def validate(self, document: Document): # ana fonksiyon
+        """doğrulama ana fonksiyon.
+
+        Args:
+            document (Document): doğrulama için kullanılan document objesi.
+
+        Raises:
+            ValidationError: bilinmeyen bir komut hatası.
+            ValidationError: use komutu yol gerektirir hatası.
+            ValidationError: Modül bulunamadı hatası.
+        """
         text = document.text.strip()
         if text.startswith('#'):
             return

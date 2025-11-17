@@ -4,7 +4,7 @@
 # LOGLAMA SABİTLERİ
 # Uygulamanın loglama sistemi için temel ayarları tanımlar.
 # ==============================================================================
-
+# Henüz logging yapısı kodlanmadı.
 LOG_LEVELS = {
     # Hata ayıklama seviyesi: Geliştirme sırasında detaylı bilgileri loglamak için kullanılır.
     "DEBUG": 10,
@@ -83,4 +83,4 @@ APP_NAME = "Mah Framework"
 APP_VERSION = "1.0.0"
 
 # Geliştiricinin iletişim bilgisi veya ekip adı.
-APP_AUTHOR = "Mahmut Paşa"
+APP_AUTHOR = "MahmutP."

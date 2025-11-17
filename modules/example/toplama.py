@@ -3,11 +3,18 @@ from core.module import BaseModule
 from core.option import Option
 from rich import print
 class toplama(BaseModule):
+    """Toplama işlemi yapmaya yarıyan fonksiyon.
+
+    Args:
+        BaseModule (_type_): Ana modül sınıfı.
+    """
     Name =  "toplama"
     Description = "Bu bir deneme modülü."
     Author= "Mahmut P."
     Category = "example"
     def __init__(self):
+        """init fonksiyon.
+        """
         super().__init__()
         self.Options = {
             "first_number": Option("first_number", None, True, "Toplanacak birinci sayı."),
@@ -15,7 +22,13 @@ class toplama(BaseModule):
         }
         for option_name, option_obj in self.Options.items():
             setattr(self, option_name, option_obj.value)
+
     def run(self, options: Dict[str, Any]):
+        """Modül çalıştırılınca çalışacak fonksiyon.
+
+        Args:
+            options (Dict[str, Any]): option'ların listesi.
+        """
         print(f"Modül: '{self.Name}'")
         print(f"Toplanacak birinci sayı: {options.get("first_number")}")
         print(f"Toplanacakl ikinci sayı: {options.get("second_number")}")

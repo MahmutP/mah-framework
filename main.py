@@ -7,6 +7,12 @@ from core.module_manager import ModuleManager
 from core.console import Console
 from core.cont import DEFAULT_TERMINAL_WIDTH, LEFT_PADDING, COL_SPACING
 def print_startup_info(command_manager: CommandManager, module_manager: ModuleManager):
+    """Startup bilgisi basmaya yarıyan fonksiyon.
+
+    Args:
+        command_manager (CommandManager): Komut yöneticisi
+        module_manager (ModuleManager): Modül yöneticisi.
+    """
     try:
         print(Lolcat(Banner("Mah Framework"), spread=random.randint(1,11)))
     except ImportError:
@@ -37,6 +43,8 @@ def print_startup_info(command_manager: CommandManager, module_manager: ModuleMa
         print(f"{' ' * LEFT_PADDING}{line_content.ljust(max_line_content_len)}")
     print(f"\n{' ' * LEFT_PADDING}Yardım için 'help' yazın")
 def main():
+    """Main fonksiyon, objeler tanımlanıyor ve sistem başlatılıyor.
+    """
     print("Uygulama başlatılıyor...")
     command_manager = CommandManager()
     module_manager = ModuleManager()

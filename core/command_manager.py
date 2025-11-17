@@ -8,18 +8,29 @@ from core.shared_state import shared_state
 from core.cont import ALIASES_FILE, COMMAND_CATEGORIES # alias.json ve aliases.json ve komut katagorisi import edildi
 from rich import print
 class CommandManager:
+    """Komut yönetim sınıfı
+    """
     def __init__(self, commands_dir="commands"):
+        """init fonksiyon.
+
+        Args:
+            commands_dir (str, optional): komutların bulunduğu dizin. Defaults to "commands".
+        """
         self.commands_dir = commands_dir # "commands" klasörünün yolu
         self.commands: Dict[str, Command] = shared_state.get_commands() # komutları shared_state üzerinden dict olarak tanımlandı. 
         self.aliases: Dict[str, str] = shared_state.get_aliases() # komutların kendi içinde tanımladığı ve aliases.json daki alias'lar
         self._ensure_aliases_file() # aliases.sjon daki alias'lar 
     def _ensure_aliases_file(self): # aliases.json import edilmesi ya da yenisi oluşturulmalı
+        """Alias dosyası oluşturucu fonksiyon.
+        """
         if not os.path.exists(ALIASES_FILE):
             os.makedirs(os.path.dirname(ALIASES_FILE), exist_ok=True)
             with open(ALIASES_FILE, 'w', encoding='utf-8') as f:
                 json.dump({}, f, indent=4)
             print(f"Varsayılan alias dosyası oluşturuldu: {ALIASES_FILE}")
     def load_aliases(self): # bütün aliasların bir havuza import edilmesi
+        """alias'ları yükleyen fonksiyon.
+        """
         try:
             with open(ALIASES_FILE, 'r', encoding='utf-8') as f:
                 loaded_aliases = json.load(f)
@@ -35,6 +46,8 @@ class CommandManager:
             print(f"Alias dosyası okunurken hata oluştu '{ALIASES_FILE}': {e}. Dosya bozuk olabilir.")
             self.aliases.clear() 
     def save_aliases(self):# alias kaydedece fonksiyon
+        """aliasları kaydeden fonksiyon.
+        """
         try:
             with open(ALIASES_FILE, 'w', encoding='utf-8') as f:
                 json.dump(self.aliases, f, indent=4)
@@ -42,6 +55,15 @@ class CommandManager:
         except Exception as e:
             print(f"Aliaslar kaydedilirken hata oluştu: {e}")
     def add_alias(self, alias_name: str, target_command: str) -> bool: # framework içi ve alias komutu için alias ekleme fonksiyonum
+        """Alias eklemeye yarıyan fonksiyon
+
+        Args:
+            alias_name (str): alias komutu.
+            target_command (str): hedef komut.
+
+        Returns:
+            bool: Başarılı olup olmadığının çıktısı.
+        """
         if alias_name in self.commands or alias_name in self.aliases:
             #print(f"'{alias_name}' zaten bir komut veya alias olarak mevcut.")
             return False
@@ -51,6 +73,14 @@ class CommandManager:
         #print(f"Alias '{alias_name}' -> '{target_command}' eklendi.")
         return True
     def remove_alias(self, alias_name: str) -> bool: # alias silecek
+        """Alias silici fonksiyon
+
+        Args:
+            alias_name (str): alias adı.
+
+        Returns:
+            bool: başarılı olup olmadığının kontrolü.
+        """
         if shared_state.remove_alias(alias_name):
             if alias_name in self.aliases: 
                 del self.aliases[alias_name]
@@ -60,8 +90,15 @@ class CommandManager:
         #(f"Alias '{alias_name}' bulunamadı.")
         return False
     def get_aliases(self) -> Dict[str, str]: # framework içi alias çekmek için
+        """Alias çekmeye yarıyan fonksiyon
+
+        Returns:
+            Dict[str, str]: alias'ların olduğu liste çıktısı.
+        """
         return self.aliases
     def load_commands(self): # komut yüklemek için
+        """Komutları yüklemeye yarıyan ana fonksiyon.
+        """
         self.commands.clear() 
         #("Komutlar yükleniyor...")
         for file in os.listdir(self.commands_dir):
@@ -89,12 +126,28 @@ class CommandManager:
         #(f"{len(self.commands)} komut yüklendi.")
         self.load_aliases() 
     def resolve_command(self, command_input: str) -> Tuple[Optional[str], bool]: # komut çözücü
+        """Komut çözmeye yarıyan fonksiyon.
+
+        Args:
+            command_input (str): Komut girdisi.
+
+        Returns:
+            Tuple[Optional[str], bool]: değiştilemez çıktı ve başarılı olup olmadığının kontrolü.
+        """
         if command_input in self.commands:
             return command_input, False 
         elif command_input in self.aliases:
             return self.aliases[command_input], True 
         return None, False 
     def execute_command(self, command_line: str) -> bool:# komut çalıştırıcı
+        """Kullanıcının girdiği tam komut satırını ayrıştırır, aliasları çözer ve hedef komutu yürütür.
+
+        Args:
+            command_line (str): Kullanıcı tarafından terminale girilen komut ve argümanları içeren tam dize.
+
+        Returns:
+            bool: Komutun başarıyla yürütülüp yürütülmediğini (True) veya bir hata oluştuğunu (False) belirten değer.
+        """
         parts = command_line.strip().split(maxsplit=1)
         if not parts:
             return False
@@ -123,8 +176,18 @@ class CommandManager:
             print(f"'{command_name}' bilinmeyen bir komut veya alias.")
             return False
     def get_all_commands(self) -> Dict[str, Command]: # bütün komutları çekmek için
+        """Bütün komutları çekmeye yarıyan fonksiyon.
+
+        Returns:
+            Dict[str, Command]: Bütün komutların listesi.
+        """
         return self.commands
     def get_categorized_commands(self) -> Dict[str, Dict[str, Command]]: # karagorizasyon fonksiyonum
+        """Kategorize edilimiş komutları çekmeye yarıyan fonksiyon.
+
+        Returns:
+            Dict[str, Dict[str, Command]]: katagorize edilmiş komutların çıkışı.
+        """
         categorized_commands = {}
         for cmd_name, cmd_obj in self.commands.items():
             category_display_name = cmd_obj.get_category_display_name()
@@ -133,6 +196,14 @@ class CommandManager:
             categorized_commands[category_display_name][cmd_name] = cmd_obj
         return categorized_commands
     def get_command_completer_function(self, command_name: str) -> Optional[Callable]: # komut otomatik tamamlama için işleyici
+        """Komutların otomatik tamamlamasını çekmeye yarıyan fonksiyon.
+
+        Args:
+            command_name (str): komut ismi
+
+        Returns:
+            Optional[Callable]: Komutun otomatik tamamlama fonksiyonu.
+        """
         command_obj = self.commands.get(command_name)
         if command_obj:
             return command_obj.completer_function

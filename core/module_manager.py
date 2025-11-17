@@ -7,9 +7,16 @@ from rich import print
 import os
 class ModuleManager:
     def __init__(self, modules_dir="modules"):
+        """init fonksiyon.
+
+        Args:
+            modules_dir (str, optional): Modüllerin bulunduğu klasör. Defaults to "modules".
+        """
         self.modules_dir = modules_dir # modüllerin bulunduğu dizin
         self.modules: Dict[str, BaseModule] = shared_state.get_modules() # framework içi global modül dcit'i 
     def load_modules(self):# modülleri import edecek ana fonksiyon
+        """Modül yükleyici ana fonksiyon.
+        """
         self.modules.clear() 
         #("Modüller yükleniyor...")
         for root, _, files in os.walk(self.modules_dir): # "modül_katagorisi/falan.py"-"modül_katagorisi/falan/filan.py" şeklinde işlenmesi için
@@ -38,10 +45,28 @@ class ModuleManager:
                         print(f"Modül yüklenirken hata oluştu '{module_path}': {e}")
         #(f"{len(self.modules)} modül yüklendi.")
     def get_module(self, module_path: str) -> Optional[BaseModule]: # modül/modül yolu çağırılması için
+        """Modül çekici fonksiyon.
+
+        Args:
+            module_path (str): Modül yolu.
+
+        Returns:
+            Optional[BaseModule]: Modül objesi.
+        """
         return self.modules.get(module_path)
     def get_all_modules(self) -> Dict[str, BaseModule]: # bütün modülleri çekmek için
+        """Bütün modülleri çekmeye yarıyan fonksiyon.
+
+        Returns:
+            Dict[str, BaseModule]: bütün modüllerin liste ve obje yapısı.
+        """
         return self.modules
     def get_modules_by_category(self) -> Dict[str, Dict[str, BaseModule]]: # listeleme ve kullanmak için katagorize ederek listeleyecek fonksiyon
+        """Kategorize ederek modül çeken fonksiyon
+
+        Returns:
+            Dict[str, Dict[str, BaseModule]]: kategorize edilmiş şekilde çekilmiş modüllerin listesi ve objeleri.
+        """
         categorized_modules = {}
         for module_path, module_obj in self.modules.items():
             category = module_obj.Category.capitalize() 
@@ -50,6 +75,14 @@ class ModuleManager:
             categorized_modules[category][module_path] = module_obj
         return categorized_modules
     def run_module(self, module_path: str) -> bool: # seçilen modülü çekip çalıştıracak fonksiyon
+        """Modül çalıştırmaya yarıyan fonksiyon.
+
+        Args:
+            module_path (str): modül yolu.
+
+        Returns:
+            bool: Modül başarılı olup olmadığının kontrolü.
+        """
         module = self.get_module(module_path)
         if not module:
             print(f"Modül bulunamadı: {module_path}")
@@ -64,6 +97,14 @@ class ModuleManager:
             print(f"Modül çalıştırılırken kritik hata oluştu '{module_path}': {e}")
             return False
     def get_module_info(self, module_path: str) -> Optional[Tuple[str, str, str, str]]: # modül bilgisi çağırmak için, birincil kullanımı search ve show komutu ile kullanılması
+        """modül bilgisi çekmeye yarıyan fonksiyon.
+
+        Args:
+            module_path (str): modül yolu.
+
+        Returns:
+            Optional[Tuple[str, str, str, str]]: Modül bilgisini bulunduğu liste.
+        """
         module = self.get_module(module_path)
         if module:
             return (module.Name, module.Description, module.Author, module.Category)

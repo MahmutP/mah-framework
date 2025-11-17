@@ -12,23 +12,55 @@ import psutil
 import datetime
 
 class systeminfo(BaseModule):
+    """Kategorize edilmemiş sistem bilgisi veren fonksiyon.
+
+    Args:
+        BaseModule (_type_): Ana modül sınıfı.
+
+    Returns:
+        _type_: _description_
+    """
     Name = "systeminfo"
     Description = "Sistemle ilgili temel bilgileri ekrana basan, katagorize edilmemiş modül."
     Author = "Mahmut P."
     Category = "uncategorized"
     def __init__(self):
+        """init fonksiyon.
+        """
         super().__init__()
         self.Options = {
             "message": Option("message", "Selamlar olsun!", False, "Modül çalıştığında ekrana basılacak öylesine bir yazı.")
         }
         for option_name, option_obj in self.Options.items():
             setattr(self, option_name, option_obj.value)# objeye değer atama için kullanıyor.
+
     def run(self, options: Dict[str, Any]):
+        """Modül çalıştırılınca çalışacak fonksiyon.
+
+        Args:
+            options (Dict[str, Any]): Option'lar.
+
+        Returns:
+            _type_: sistem bilgisi basılacak.
+        """
         print(options.get("message"))
         def bytes_to_gb(bytes_val):
+            """byte değerlerini GigaByte'a dönüştürecek fonksiyon.
+
+            Args:
+                bytes_val (_type_): byte değer.
+
+            Returns:
+                _type_: GigaByte değer.
+            """
             return round(bytes_val / (1024 ** 3), 2)
 
         def get_boot_time():
+            """boot zamanı almaya yarıyan fonksiyon..
+
+            Returns:
+                _type_: Boot zamanı çıktısı.
+            """
             boot_time = datetime.datetime.fromtimestamp(psutil.boot_time())
             return boot_time.strftime("%Y-%m-%d %H:%M:%S")
         print("=" * 40)

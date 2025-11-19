@@ -31,5 +31,5 @@ class toplama(BaseModule):
         """
         print(f"Modül: '{self.Name}'")
         print(f"Toplanacak birinci sayı: {options.get("first_number")}")
-        print(f"Toplanacakl ikinci sayı: {options.get("second_number")}")
+        print(f"Toplanacak ikinci sayı: {options.get("second_number")}")
         print(f"{options.get("first_number")} + {options.get("second_number")} = {int(options.get("first_number"))+int(options.get("second_number"))}")

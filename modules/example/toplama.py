@@ -1,7 +1,7 @@
 from typing import Dict, Any
 from core.module import BaseModule
 from core.option import Option
-from rich import print
+from rich import print 
 class toplama(BaseModule):
     """Toplama işlemi yapmaya yarıyan fonksiyon.
 
@@ -9,7 +9,7 @@ class toplama(BaseModule):
         BaseModule (_type_): Ana modül sınıfı.
     """
     Name =  "toplama"
-    Description = "Bu bir deneme modülü."
+    Description = "Toplama işlemi yapan örnek bir modül."
     Author= "Mahmut P."
     Category = "example"
     def __init__(self):

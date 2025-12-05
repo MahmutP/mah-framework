@@ -1,5 +1,4 @@
 {
     "quit": "exit",
-    "?": "help",
-    "options": "show options"
+    "?": "help"
 }

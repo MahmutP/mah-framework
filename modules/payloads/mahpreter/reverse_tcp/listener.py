@@ -139,7 +139,7 @@ class mahpreter_reverse_tcp_listener(BaseModule):
                     'prompt': '#aa5500 bold',
                 })
                 self.prompt = "mahpreter> "
-                self.intro = "Mahpreter listener hazı. Yardım için 'help' yazın enter'a basın. Tab tuşuna otomatik tamamlaa için basın."
+                self.intro = "Mahpreter listener hazır. Yardım için 'help' yazın enter'a basın. Tab tuşuna otomatik tamamlaa için basın."
                 print(self.intro)
 
                 self.active_clients = {}
@@ -207,9 +207,10 @@ class mahpreter_reverse_tcp_listener(BaseModule):
                     sock.send(struct.pack('!I', length) + encoded)
                 except:
                     pass
+
             def accept_connections(self):
                 """
-                Yeni öğrencileri kabul etmek için arka plan döngüsü.
+                Yeni client'ları kabul etmek için arka plan döngüsü.
                 
                 :param self: Açıklama
                 
@@ -234,4 +235,69 @@ class mahpreter_reverse_tcp_listener(BaseModule):
 
                     except OSError:
                         break  # Soket kapatıldı
-                    
+
+            def clean_client(self, addr): 
+                """Bağlantısı kesilen istemciyi listelerden kaldırır.
+
+                Args:
+                    addr (_type_): network adresi.
+                """
+                if addr in self.active_clients:
+                    try:
+                        self.active_clients[addr].close()
+                    except:
+                        pass
+                    del self.active_clients[addr]
+
+                if addr in self.client_info:
+                    del self.client_info[addr]
+
+                if addr in self.client_ids:
+                    self.client_ids.remove(addr)
+
+            def _get_client_choices(self):
+                """Geçerli dizinleri temsil eden dizelerin bir listesini döndürür ['0', '1', '2'...]
+
+                Returns:
+                    _type_: _description_
+                """
+                return [str(i) for i in range(len(self.client_ids))]
+            
+            def do_help(self):
+                """Komutlar için yardım bilgilerini görüntüleme.
+
+                Returns:
+                    _type_: _description_
+                """
+
+                help_text = """
+Kullanılabilir Komutlar:
+help                  - Bu yardım mesajını gösterir
+clients               - Bağlı tüm client'ları Endeks Kimlikleriyle listeler
+connect <id>          - Öğrenci kabuğuna bağlanın. Geri dönmek için 'back' yazın
+disconnect <id>       - Bir client'ı kimliğine göre tekmele
+sendall <command>     - TÜM bağlı istemcilere bir kabuk komutu gönderin
+shutdown_all          - Acil Durum: Tüm client'ların bilgisayarlarını kapatın
+exit                  - Sunucuyu durdurun ve çıkın
+
+Daha fazla ayrıntı için 'help' yazın veya otomatik tamamlama için Tab tuşuna basın.
+                """
+                print(help_text.strip())
+
+            def do_clients(self):
+                """Bağlı tüm istemcileri Endeks Kimlikleriyle birlikte listeler.
+                """
+                if not self.client_ids:
+                    print("[-] Hiç client bağlanmamış.")
+                    return
+
+                # Manual Table Formatting
+                print(f"{'ID':<3} | {'Client':<20} | {'System Info'}")
+                print("-" * 60)
+
+                for idx, addr in enumerate(self.client_ids):
+                    info = self.client_info.get(addr, "Unknown")
+                    client_str = f"{addr[0]}:{addr[1]}"
+                    print(f"{str(idx):<3} | {client_str:<20} | {info}")
+
+            

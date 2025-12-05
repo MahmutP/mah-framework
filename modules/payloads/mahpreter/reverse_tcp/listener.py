@@ -47,6 +47,7 @@ class mahpreter_reverse_tcp_listener(BaseModule):
         }
         for option_name, option_obj in self.Options.items():
             setattr(self, option_name, option_obj.value)
+
     def run(self, options: Dict[str, Any]):
         """Modül çalışınca çalışacak fonksiyon.
         Dinleme yapacak
@@ -300,4 +301,188 @@ Daha fazla ayrıntı için 'help' yazın veya otomatik tamamlama için Tab tuşu
                     client_str = f"{addr[0]}:{addr[1]}"
                     print(f"{str(idx):<3} | {client_str:<20} | {info}")
 
+            def do_connect(self, index_str):
+                """Bir istemci kabuğuna bağlanın. Kullanım: connect <id>
+
+                Args:
+                    index_str (_type_): id index değikeni
+
+                Raises:
+                    ConnectionResetError: Bağlantı kurmayla alakalı sorun olduğunda mesela bağlantı resetleme sorunu için
+                """
+                try:
+                    idx = int(index_str)
+                    if idx < 0 or idx >= len(self.client_ids):
+                        print("[!] Invalid Index.")
+                        return
+                    target_addr = self.client_ids[idx]
+                    sock = self.active_clients[target_addr]
+                    print(f"[*] Connected to {target_addr[0]}:{target_addr[1]}.")
+                    print(f"[*] Bu moddan çıkmak için 'back' komutunu kullanın. Type 'back' to return.")
+                    shell_history = InMemoryHistory()
+                    shell_completer = ShellCompleter()
+                    #shell_prompt = f"Shell@{target_addr[0]}> "
+                    shell_prompt = f"({target_addr[0]})>"
+                    shell_session = PromptSession(
+                        shell_prompt, 
+                        completer=shell_completer, 
+                        history=shell_history,
+                        style=self.shell_style
+                    )
+                    while True:
+                        try:
+                            cmd = shell_session.prompt()
+                            if not cmd.strip():
+                                continue
+
+                            if cmd.strip().lower() == 'back':
+                                print("[*] Ana menüye dönülüyor...")
+                                break
+
+                            # Send full encoded command
+                            self.send_full_data(sock, cmd)
+
+                            # Receive full encoded response
+                            response = self.recv_full_data(sock)
+                            if response is None:
+                                raise ConnectionResetError("No response from client")
+                            print(response)
+                        except (BrokenPipeError, ConnectionResetError):
+                            print(f"[!] Client {target_addr[0]}:{target_addr[1]} disconnected.")
+                            self.clean_client(target_addr)
+                            break
+                        except KeyboardInterrupt:
+                            break
+                
+                except ValueError:
+                    print("[!] ID must be a number.")
+
+            def do_disconnect(self, index_str):
+                """Bir istemcinin bağlantısını kes, sunucudan tekmele. Kullanım: disconnect <id>
+
+                Args:
+                    index_str (_type_): client id
+                """
+                try:
+                    idx = int(index_str)
+                    if idx < 0 or idx >= len(self.client_ids):
+                        print("[!] Invalid Index.")
+                        return
+                    target_addr = self.client_ids[idx]
+                    self.clean_client(target_addr)
+                    print(f"[*] Client {idx} ({target_addr[0]}:{target_addr[1]}) disconnected.")
+                except (ValueError, IndexError):
+                    print("[!] Invalid Index.")
+            
+            def do_sendall(self, command):
+                """Bağlı tüm istemcilere bir kabuk komutu gönderin. Kullanım: sendall <komut>
+
+                Args:
+                    command (_type_): Verilen komut.
+                """
+                if not command:
+                    print("[!] Kullanım: sendall <system_command>")
+                    return
+
+                clients_copy = self.client_ids.copy()  # Copy to avoid issues if one disconnects mid-loop
+
+                print(f"[*] Sending '{command}' to {len(clients_copy)} students...")
+
+                results = []
+                for addr in clients_copy:
+                    if addr in self.active_clients:
+                        sock = self.active_clients[addr]
+                        try:
+                            # Send full encoded command
+                            self.send_full_data(sock, command)
+                            # Receive full encoded output
+                            output = self.recv_full_data(sock)
+                            if output is None:
+                                raise Exception("No response")
+                            results.append(f"\n--- {addr[0]}:{addr[1]} ---\n{output}")
+                        except:
+                            results.append(f"\n--- {addr[0]}:{addr[1]} ---\n[!] Failed (Disconnected)")
+                            self.clean_client(addr)
+
+                for res in results:
+                    print(res)
+
+            def do_shutdown_all(self):
+                """Acil Durum: Tüm öğrenci bilgisayarlarını kapatır (Simülasyonlu).
+                """
+                # 'shutdown /s /t 0' (Windows) or 'shutdown -h now' (Linux)
+
+                confirm = input("Tüm istemcileri KAPATMAK istediğinizden emin misiniz?? (y/n): ")
+                if confirm.lower() == 'y':
+                    self.do_sendall("shutdown /s /t 60")  # 60 second timer
+                    print("[*] Shutdown komutu yollanılıyor.")
+
+            def do_exit(self):
+                """Sunucuyu durdurur ve çıkış yapar.
+
+                Returns:
+                    _type_: _description_
+                """
+                print("[*] Shutdown, sunucu kapatılıyor...")
+                for addr, sock in self.active_clients.items():
+                    sock.close()
+                self.server_socket.close()
+                return True
+            def run(self):
+                """Ana komut döngüsü.
+                """
+                print("Kullanılabilir komutlar için 'help' yazın.")
+                while True:
+                    try:
+                        text = self.session.prompt()
+                        if not text.strip():
+                            continue
+
+                        parts = shlex.split(text)
+                        if not parts:
+                            continue
+
+                        cmd = parts[0].lower()
+                        args = parts[1:]
+
+                        if cmd == 'exit':
+                            if self.do_exit():
+                                break
+                        elif cmd == 'help':
+                            self.do_help()
+                        elif cmd == 'clients':
+                            self.do_clients()
+                        elif cmd == 'connect':
+                            if len(args) != 1:
+                                print("[!] Usage: connect <id>")
+                            else:
+                                self.do_connect(args[0])
+                        elif cmd == 'disconnect':
+                            if len(args) != 1:
+                                print("[!] Usage: disconnect <id>")
+                            else:
+                                self.do_disconnect(args[0])
+                        elif cmd == 'sendall':
+                            command = ' '.join(args)
+                            self.do_sendall(command)
+                        elif cmd == 'shutdown_all':
+                            self.do_shutdown_all()
+                        else:
+                            print(f"[!] Unknown command: {cmd}. Type 'help' for list.")
+
+                    except KeyboardInterrupt:
+                        print("\n[!] Force Exit.")
+                        self.do_exit()
+                        break
+                    except EOFError:
+                        self.do_exit()
+                        break
+
+        try:
+            app = MahpreterServer()
+            app.run()
+        
+        except KeyboardInterrupt:
+            print("\n[!] Zorla çıkış.")
+            sys.exit(0)
             

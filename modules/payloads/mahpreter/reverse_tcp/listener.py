@@ -67,8 +67,8 @@ class mahpreter_reverse_tcp_listener(BaseModule):
         # ne olur ne olmaz int ibaresi koydum.
 
         """
-        HOST = options.get("ip")
-        PORT = int(options.get("port"))        
+        HOST = options.get("ip") # ip
+        PORT = int(options.get("port")) # port        
         class ShellCompleter(Completer):
             """shell oturumu açılınca çalışacak otomatik tamamlama.
 

@@ -31,7 +31,7 @@ class mahpreter_reverse_tcp_listener(BaseModule):
     """mahpreter reverse_tcp dinleyicisi.
 
     Args:
-        BaseModule (_type_): _description_
+        BaseModule (_type_): ana modül sınıfı.
     """
     Name = "mahpreter/reverse_tcp/listener"
     Description = "payloads/mahpreter/reverse_tp için listener."

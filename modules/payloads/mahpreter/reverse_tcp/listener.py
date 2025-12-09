@@ -91,56 +91,53 @@ class mahpreter_reverse_tcp_listener(BaseModule):
                 if not prefix or prefix.startswith('b'):
                     yield Completion('back', start_position=-len(text_before_cursor))
         class ServerCompleter(Completer):
-            """Sunucu için otomatik tamamlayıcı.
-
-            Args:
-                Completer (_type_): 
-            """
+            """Sunucu komutları ve argümanları için otomatik tamamlayıcı."""
             def __init__(self, app):
                 self.app = app
             
             def get_completions(self, document, complete_event):
-                """_summary_
-
-                Args:
-                    document (_type_): Mevcut belgeyi temsil eden obje.
-                    complete_event (_type_): Otomatik tamamlama olayıyla ilgili bilgileri içeren obje.
+                """
+                Kullanıcı yazı yazarken tetiklenen tamamlama fonksiyonu.
                 """
                 text_before_cursor = document.text_before_cursor
                 commands = ['help', 'clients', 'connect', 'disconnect', 'sendall', 'shutdown_all', 'exit']
-                if not text_before_cursor:
-                    # Boşsa: Bütün komutlar getirilir.
+                
+                # 1. Durum: Satır boşsa tüm komutları öner.
+                if not text_before_cursor.strip():
                     for cmd in commands:
-                        yield Completion(cmd)
+                        yield Completion(cmd, start_position=0)
                     return
-                if text_before_cursor[-1] == " ":
-                    # Boşluktan sonraki imleç: Komut için argümanı tamamlıyor.
-                    words = text_before_cursor[-1].split() # Sondaki boşluğu kaldır.
-                    if words:
-                        cmd = words[0].lower()
-                        prefix = "" # Yeni argüman için boş önek.
-                        if cmd in ['connect', 'disconnect']:
-                            choices = self.app._get_client_choices()
-                            for choice in choices:
-                                # Önek boş olduğundan tüm getirileri ver.
-                                yield Completion(choice, start_position=0)
-                    return
-                # Boşluktan sonra değil: bir kelime içinde tamamlama.
-                words = text_before_cursor.split()
-                prefix = words[-1] if words else text_before_cursor
-                if len(words) == 0 or len(words) == 1:
-                    # adları otomatik tamamlama.
+
+                parts = text_before_cursor.split()
+                is_space_last = text_before_cursor.endswith(' ')
+
+                # 2. Durum: Henüz ilk kelimeyi (komutu) yazıyorsa
+                if len(parts) == 1 and not is_space_last:
+                    prefix = parts[0].lower()
                     for cmd in commands:
-                        if cmd.lower().startswith(prefix.lower()):
+                        if cmd.startswith(prefix):
                             yield Completion(cmd, start_position=-len(prefix))
+                
+                # 3. Durum: Komut yazılmış, argüman bekleniyor (connect/disconnect)
                 else:
-                    # komut argümanı otomatik tamamlama.
-                    cmd = words[0].lower()
+                    cmd = parts[0].lower()
                     if cmd in ['connect', 'disconnect']:
+                        # Eğer boşluktaysak prefix boştur, değilse son kelimedir.
+                        prefix = "" if is_space_last else parts[-1]
+                        
+                        # Eğer kullanıcı 2. kelimeden fazlasını yazdıysa (gereksiz argüman) önerme yapma
+                        if len(parts) > 2 and not is_space_last:
+                            return
+                        elif len(parts) == 2 and is_space_last:
+                            # "connect 0 " durumunda 3. argümanı önermemesi için
+                            return 
+
                         choices = self.app._get_client_choices()
                         for choice in choices:
-                            if choice.startwith(prefix):
+                            # HATA DÜZELTİLDİ: startwith -> startswith
+                            if choice.startswith(prefix):
                                 yield Completion(choice, start_position=-len(prefix))
+                                
         class MahpreterServer:
             def __init__(self):
                 self.root_prompt_style = Style.from_dict({

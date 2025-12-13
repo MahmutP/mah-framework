@@ -106,4 +106,4 @@ Bu proje **Apache License 2.0** ile lisanslanmıştır. Daha fazla bilgi için `
 
 -----
 
-*Geliştirici: [MahmutP](https://www.google.com/search?q=https://github.com/MahmutP)*
+*Geliştirici: [MahmutP](https://github.com/MahmutP)*

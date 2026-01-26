@@ -13,3 +13,17 @@ else
     echo "[!] İşlem iptal edildi."
 fi
 
+# Log temizleme bölümü
+echo
+echo "[+] Log dosyaları (.log) aranıyor..."
+find config/logs -type f -name "*.log" -print 2>/dev/null
+
+echo
+read -p "[?] Yukarıdaki log dosyaları silinsin mi? (y/n): " confirm_log
+
+if [[ "$confirm_log" == "y" || "$confirm_log" == "Y" ]]; then
+    find config/logs -type f -name "*.log" -exec rm -f {} +
+    echo "[✓] Log dosyaları silindi."
+else
+    echo "[!] Log silme işlemi iptal edildi."
+fi

@@ -1,109 +1,165 @@
+<div align="center">
+
 # 🚀 Mah Framework
 
-**Mah Framework**, Python ile geliştirilmiş, modüler yapıya sahip, genişletilebilir bir Komut Satırı Arayüzü (CLI) çatısıdır.
+**A Powerful, Modular, and Extensible CLI Framework for Python**
+**Python ile Geliştirilmiş, Modüler ve Genişletilebilir CLI Çatısı**
 
-Modern terminal araçları (`rich`, `prompt_toolkit`) kullanılarak tasarlanan bu framework, **mahpreter** projesinin altyapısını oluşturur ve kendi modüllerinizi/komutlarınızı kolayca ekleyebileceğiniz esnek bir yapı sunar.
+[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue?style=for-the-badge&logo=python)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green?style=for-the-badge)](LICENSE)
+[![Maintenance](https://img.shields.io/badge/maintained-yes-brightgreen?style=for-the-badge)](https://github.com/MahmutP/mah-framework/graphs/commit-activity)
 
-## ✨ Özellikler
+[🇬🇧 English](#-english) | [🇹🇷 Türkçe](#-türkçe)
 
-  * **Modüler Mimari:** `modules/` ve `commands/` klasörleri sayesinde yeni özellikleri tak-çıkar mantığıyla ekleyebilirsiniz.
-  * **Modern Arayüz:** `rich` kütüphanesi ile renklendirilmiş, okunabilir ve şık terminal çıktıları.
-  * **Gelişmiş Etkileşim:** `prompt_toolkit` desteği ile otomatik tamamlama ve geçmiş (history) özellikleri.
-  * **Ağ ve Sistem Araçları:** `telnetlib3` ve `psutil` gibi yerleşik kütüphanelerle ağ/sistem yönetimi için hazır altyapı.
+</div>
 
-## 📂 Proje Yapısı
+---
 
-```
+<a name="-english"></a>
+## 🇬🇧 English
+
+**Mah Framework** is a robust Command Line Interface (CLI) framework developed in Python. Designed with modern terminal tools like `rich` and `prompt_toolkit`, it powers the **mahpreter** project and offers a flexible infrastructure for easily adding your own modules and commands.
+
+### ✨ Key Features
+
+*   **🧩 Modular Architecture**: Easily extend functionality with a plug-and-play approach using `modules/` and `commands/` directories.
+*   **🎨 Modern UI**: Beautiful, readable, and colorful terminal outputs powered by the `rich` library.
+*   **🧠 Intelligent Interaction**: Auto-completion, history navigation, and advanced input handling via `prompt_toolkit`.
+*   **📝 Comprehensive Logging**: Built-in logging system that tracks application events, errors, and command executions in `config/logs/`.
+*   **🛠️ System Utilities**: Includes tools for cache cleaning and log management (`pycache_sil.sh`).
+*   **🌐 Network Ready**: Built-in support for libraries like `telnetlib3` and `psutil` for network and system management tasks.
+
+### 📂 Project Structure
+
+```text
 mah-framework/
-├── core/             # Framework'ün çekirdek dosyaları (Motor)
-├── commands/         # CLI üzerinden çalıştırılan komutlar
-├── modules/          # Harici modüller ve eklentiler
-├── config/           # Ayar dosyaları
-├── main.py           # Uygulamanın giriş noktası (Başlatıcı)
-├── pycache_sil.sh    # Gereksiz önbellek dosyalarını temizleme aracı
-├── requirements.txt  # Gerekli Python kütüphaneleri
-└── README.md         # Dokümantasyon
+├── core/             # Core framework engine (managers, console, logger)
+├── commands/         # Standard CLI commands (e.g., help, exit)
+├── modules/          # External modules and plugins
+├── config/           # Configuration files and logs
+│   └── logs/         # Application log files
+├── main.py           # Application entry point
+├── pycache_sil.sh    # Maintenance script (cache & log cleaner)
+├── requirements.txt  # Python dependencies
+└── README.md         # Documentation
 ```
 
-## 🛠️ Kurulum
+### 🛠️ Installation
 
-Projeyi yerel makinenizde çalıştırmak için aşağıdaki adımları izleyin.
+1.  **Clone the Repository**
+    ```bash
+    git clone https://github.com/MahmutP/mah-framework.git
+    cd mah-framework
+    ```
 
-### Gereksinimler
+2.  **Create a Virtual Environment (Recommended)**
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate  # Windows: venv\Scripts\activate
+    ```
 
-  * Python 3.8 veya daha üzeri
-  * Git
+3.  **Install Dependencies**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-### 1\. Projeyi Klonlayın
+### 💻 Usage
 
-Terminalinizi açın ve projeyi bilgisayarınıza indirin:
-
-```bash
-git clone https://github.com/MahmutP/mah-framework.git
-cd mah-framework
-```
-
-### 2\. Sanal Ortam Oluşturun (Önerilen)
-
-Bağımlılıkların sistem geneline yayılmaması için sanal ortam kullanmanız önerilir:
-
-```bash
-# Linux / MacOS
-python3 -m venv venv
-source venv/bin/activate
-
-# Windows
-python -m venv venv
-venv\Scripts\activate
-```
-
-### 3\. Kütüphaneleri Yükleyin
-
-Gerekli paketleri `requirements.txt` dosyasından yükleyin:
-
-```bash
-pip install -r requirements.txt
-```
-
-*Alternatif olarak manuel yükleme:*
-
-```bash
-pip install rich prompt-toolkit asciistuff telnetlib3 psutil
-```
-
-## 💻 Kullanım
-
-Kurulum tamamlandıktan sonra framework'ü başlatmak için `main.py` dosyasını çalıştırın:
+Start the framework by running the main script:
 
 ```bash
 python main.py
 ```
 
-Uygulama başladığında sizi modern bir komut satırı karşılayacaktır. Burada tanımlı komutları kullanabilir veya `help` yazarak (eğer tanımlıysa) mevcut komutları listeleyebilirsiniz.
+Once inside the interactive shell, you can use built-in commands. Type `help` to see available commands or use `Tab` for auto-completion.
 
-### Bakım
-
-Geliştirme sırasında oluşan `__pycache__` dosyalarını temizlemek için hazır scripti kullanabilirsiniz:
-
+**Maintenance:**
+Use the included script to clean up `__pycache__` directories and old log files:
 ```bash
-chmod +x pycache_sil.sh  # İlk kullanımda çalıştırma izni verin
+chmod +x pycache_sil.sh
 ./pycache_sil.sh
 ```
 
-## 🤝 Katkıda Bulunma
+### 🤝 Contributing
 
-Bu proje açık kaynaklıdır ve katkılara açıktır.
+Contributions are welcome! Please fork the repository, create a feature branch, and submit a Pull Request.
 
-1.  Projeyi Fork'layın.
-2.  Yeni bir özellik dalı (branch) oluşturun (`git checkout -b ozellik/YeniOzellik`).
-3.  Değişikliklerinizi kaydedin (`git commit -m 'Yeni özellik eklendi'`).
-4.  Dalınızı Push edin (`git push origin ozellik/YeniOzellik`).
-5.  Bir Pull Request (PR) oluşturun.
+---
 
-## 📜 Lisans
+<a name="-türkçe"></a>
+## 🇹🇷 Türkçe
 
-Bu proje **Apache License 2.0** ile lisanslanmıştır. Daha fazla bilgi için `LICENSE` dosyasına bakınız.
+**Mah Framework**, Python ile geliştirilmiş, modüler yapıya sahip ve kolayca genişletilebilir bir Komut Satırı Arayüzü (CLI) çatısıdır. `rich` ve `prompt_toolkit` gibi modern araçlarla güçlendirilmiş bu yapı, **mahpreter** projesinin temelini oluşturur.
 
------
+### ✨ Özellikler
 
-*Geliştirici: [MahmutP](https://github.com/MahmutP)*
+*   **🧩 Modüler Mimari**: `modules/` ve `commands/` klasörleri sayesinde yeni özellikleri tak-çıkar mantığıyla kolayca ekleyin.
+*   **🎨 Modern Arayüz**: `rich` kütüphanesi ile renklendirilmiş, okunaklı ve şık terminal çıktıları.
+*   **🧠 Akıllı Etkileşim**: `prompt_toolkit` desteği ile otomatik tamamlama ve komut geçmişi özellikleri.
+*   **📝 Kapsamlı Loglama**: Uygulama olaylarını, hataları ve komutları `config/logs/` altında kayıt altına alan dahili log sistemi.
+*   **🛠️ Sistem Araçları**: Gereksiz önbellek ve eski log dosyalarını temizlemek için hazır bakım aracı (`pycache_sil.sh`).
+*   **🌐 Ağ Hazırlığı**: Ağ ve sistem yönetimi için `telnetlib3` ve `psutil` gibi kütüphane destekleri.
+
+### 📂 Proje Yapısı
+
+```text
+mah-framework/
+├── core/             # Framework çekirdek dosyaları (yöneticiler, konsol, logger)
+├── commands/         # Standart CLI komutları (örn: help, exit)
+├── modules/          # Harici modüller ve eklentiler
+├── config/           # Ayar dosyaları ve loglar
+│   └── logs/         # Uygulama logları
+├── main.py           # Uygulamanın giriş noktası
+├── pycache_sil.sh    # Bakım betiği (önbellek ve log temizleyici)
+├── requirements.txt  # Gerekli Python kütüphaneleri
+└── README.md         # Dokümantasyon
+```
+
+### 🛠️ Kurulum
+
+1.  **Projeyi Klonlayın**
+    ```bash
+    git clone https://github.com/MahmutP/mah-framework.git
+    cd mah-framework
+    ```
+
+2.  **Sanal Ortam Oluşturun (Önerilen)**
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate  # Windows: venv\Scripts\activate
+    ```
+
+3.  **Kütüphaneleri Yükleyin**
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+### 💻 Kullanım
+
+Framework'ü başlatmak için `main.py` dosyasını çalıştırın:
+
+```bash
+python main.py
+```
+
+Uygulama başladığında modern bir komut satırı sizi karşılayacaktır. `help` yazarak mevcut komutları listeleyebilir veya `Tab` tuşu ile otomatik tamamlamayı kullanabilirsiniz.
+
+**Bakım:**
+Geliştirmeartığı `__pycache__` klasörlerini ve eski log dosyalarını temizlemek için:
+```bash
+chmod +x pycache_sil.sh
+./pycache_sil.sh
+```
+
+### 🤝 Katkıda Bulunma
+
+Bu proje açık kaynaklıdır ve katkılara açıktır. Lütfen projeyi fork'layın, yeni bir branch oluşturun ve Pull Request gönderin.
+
+---
+
+<div align="center">
+
+*Geliştirici / Developer: [MahmutP](https://github.com/MahmutP)* 
+*License: Apache 2.0*
+
+</div>

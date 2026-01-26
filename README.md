@@ -2,7 +2,7 @@
 
 # 🚀 Mah Framework
 
-**A Powerful, Modular, and Extensible CLI Framework for Python**
+**A Powerful, Modular, and Extensible CLI Framework for Python.**
 **Python ile Geliştirilmiş, Modüler ve Genişletilebilir CLI Çatısı**
 
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue?style=for-the-badge&logo=python)](https://www.python.org/)

@@ -25,7 +25,7 @@
 *   **🧩 Modular Architecture**: Easily extend functionality with a plug-and-play approach using `modules/` and `commands/` directories.
 *   **🎨 Modern UI**: Beautiful, readable, and colorful terminal outputs powered by the `rich` library.
 *   **🧠 Intelligent Interaction**: Auto-completion, history navigation, and advanced input handling via `prompt_toolkit`.
-*   **📝 Comprehensive Logging**: Built-in logging system that tracks application events, errors, and command executions in `config/logs/`.
+*   **📝 Comprehensive Logging**: Powered by `loguru`, this system tracks application events, errors, and command executions in `config/logs/` with automatic rotation and retention.
 *   **🛠️ System Utilities**: Includes tools for cache cleaning and log management (`pycache_sil.sh`).
 *   **🌐 Network Ready**: Built-in support for libraries like `telnetlib3` and `psutil` for network and system management tasks.
 
@@ -96,7 +96,7 @@ Contributions are welcome! Please fork the repository, create a feature branch, 
 *   **🧩 Modüler Mimari**: `modules/` ve `commands/` klasörleri sayesinde yeni özellikleri tak-çıkar mantığıyla kolayca ekleyin.
 *   **🎨 Modern Arayüz**: `rich` kütüphanesi ile renklendirilmiş, okunaklı ve şık terminal çıktıları.
 *   **🧠 Akıllı Etkileşim**: `prompt_toolkit` desteği ile otomatik tamamlama ve komut geçmişi özellikleri.
-*   **📝 Kapsamlı Loglama**: Uygulama olaylarını, hataları ve komutları `config/logs/` altında kayıt altına alan dahili log sistemi.
+*   **📝 Kapsamlı Loglama**: `loguru` ile güçlendirilmiş bu sistem, uygulama olaylarını, hataları ve komutları `config/logs/` altında kayıt altına alır; otomatik rotasyon ve saklama özelliklerine sahiptir.
 *   **🛠️ Sistem Araçları**: Gereksiz önbellek ve eski log dosyalarını temizlemek için hazır bakım aracı (`pycache_sil.sh`).
 *   **🌐 Ağ Hazırlığı**: Ağ ve sistem yönetimi için `telnetlib3` ve `psutil` gibi kütüphane destekleri.
 

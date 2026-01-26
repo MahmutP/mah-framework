@@ -15,7 +15,8 @@ from core.command_manager import CommandManager # komut yönetimi için
 from core.module_manager import ModuleManager # modül yönetimi için
 from core.completer import CLICompleter # prompt içi komut ve komut içi otomatik tamamlaması
 from core.validator import CLIValidator # validate lokal kütüphanesi
-from core.cont import DEFAULT_TERMINAL_WIDTH 
+from core.cont import DEFAULT_TERMINAL_WIDTH
+from core import logger
 from rich import print
 class Console:
     def __init__(self, command_manager: CommandManager, module_manager: ModuleManager):
@@ -95,15 +96,18 @@ class Console:
                 self.command_manager.execute_command(processed_line)
             except EOFError:
                 print("EOF algılandı, uygulamadan çıkılıyor.")
+                logger.info("EOF algılandı, uygulama kapatılıyor")
                 self.running = False
             except KeyboardInterrupt:
                 print("Klavye kesintisi algılandı (Ctrl+C).")
+                logger.info("Klavye kesintisi (Ctrl+C)")
             except Exception as e:
                 print(f"Beklenmedik bir hata oluştu: {e}")
+                logger.error(f"Beklenmedik hata: {e}")
                 print(f"Hata detayı: {e}", exc_info=True) 
     def shutdown(self):
         """Oturumu kapatıcı
         """
-        #("Konsol kapatılıyor...")
+        logger.info("Konsol kapatılıyor")
         print("Konsol kapatıldı.")
         sys.exit(0) 

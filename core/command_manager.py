@@ -6,6 +6,7 @@ from typing import Dict, Optional, List, Tuple, Callable
 from core.command import Command # komut sınıfı import edildi
 from core.shared_state import shared_state
 from core.cont import ALIASES_FILE, COMMAND_CATEGORIES # alias.json ve aliases.json ve komut katagorisi import edildi
+from core import logger
 from rich import print
 class CommandManager:
     """Komut yönetim sınıfı
@@ -123,7 +124,8 @@ class CommandManager:
                             break 
                 except Exception as e:
                     print(f"Komut yüklenirken hata oluştu '{module_path}': {e}")
-        #(f"{len(self.commands)} komut yüklendi.")
+                    logger.error(f"Komut yüklenirken hata oluştu '{module_path}': {e}")
+        logger.info(f"{len(self.commands)} komut yüklendi")
         self.load_aliases() 
     def resolve_command(self, command_input: str) -> Tuple[Optional[str], bool]: # komut çözücü
         """Komut çözmeye yarıyan fonksiyon.
@@ -165,15 +167,19 @@ class CommandManager:
             command_obj = self.commands.get(resolved_command_name)
             if command_obj:
                 try:
+                    logger.info(f"Komut çalıştırıldı: {resolved_command_name}")
                     return command_obj.execute(*args)
                 except Exception as e:
                     print(f"Komut '{resolved_command_name}' yürütülürken kritik hata oluştu: {e}")
+                    logger.error(f"Komut '{resolved_command_name}' yürütülürken hata: {e}")
                     return False
             else:
                 print(f"'{resolved_command_name}' komutu bulunamadı.")
+                logger.warning(f"Komut bulunamadı: {resolved_command_name}")
                 return False
         else:
             print(f"'{command_name}' bilinmeyen bir komut veya alias.")
+            logger.warning(f"Bilinmeyen komut: {command_name}")
             return False
     def get_all_commands(self) -> Dict[str, Command]: # bütün komutları çekmek için
         """Bütün komutları çekmeye yarıyan fonksiyon.

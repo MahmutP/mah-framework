@@ -6,6 +6,7 @@ from core.command_manager import CommandManager
 from core.module_manager import ModuleManager
 from core.console import Console
 from core.cont import DEFAULT_TERMINAL_WIDTH, LEFT_PADDING, COL_SPACING
+from core import logger
 def print_startup_info(command_manager: CommandManager, module_manager: ModuleManager):
     """Startup bilgisi basmaya yarıyan fonksiyon.
 
@@ -45,6 +46,10 @@ def print_startup_info(command_manager: CommandManager, module_manager: ModuleMa
 def main():
     """Main fonksiyon, objeler tanımlanıyor ve sistem başlatılıyor.
     """
+    # Logger'ı başlat
+    logger.setup_logger()
+    logger.info("Uygulama başlatılıyor...")
+    
     print("Uygulama başlatılıyor...")
     command_manager = CommandManager()
     module_manager = ModuleManager()
@@ -55,11 +60,12 @@ def main():
     console = Console(command_manager, module_manager)
     shared_state.console_instance = console
     print_startup_info(command_manager, module_manager)
+    logger.info("Uygulama başlatıldı")
     try:
         console.start()
     except Exception as e:
         print(f"Ana konsol döngüsünde kritik hata: {e}")
-        #(f"Hata detayı: {e}", exc_info=True)
+        logger.critical(f"Ana konsol döngüsünde kritik hata: {e}")
     finally:
         console.shutdown()
 if __name__ == "__main__":

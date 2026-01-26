@@ -4,6 +4,7 @@ from typing import Dict, Optional, Tuple
 from core.module import BaseModule # temel modül sınıfı
 from core.shared_state import shared_state
 from rich import print
+from core import logger
 import os
 class ModuleManager:
     def __init__(self, modules_dir="modules"):
@@ -43,7 +44,8 @@ class ModuleManager:
                                 break 
                     except Exception as e:
                         print(f"Modül yüklenirken hata oluştu '{module_path}': {e}")
-        #(f"{len(self.modules)} modül yüklendi.")
+                        logger.error(f"Modül yüklenirken hata oluştu '{module_path}': {e}")
+        logger.info(f"{len(self.modules)} modül yüklendi")
     def get_module(self, module_path: str) -> Optional[BaseModule]: # modül/modül yolu çağırılması için
         """Modül çekici fonksiyon.
 
@@ -86,15 +88,19 @@ class ModuleManager:
         module = self.get_module(module_path)
         if not module:
             print(f"Modül bulunamadı: {module_path}")
+            logger.warning(f"Modül bulunamadı: {module_path}")
             return False
         if not module.check_required_options():
+            logger.warning(f"Modül çalıştırılamadı (eksik seçenekler): {module_path}")
             return False
         try:
             current_options = {name: opt.value for name, opt in module.get_options().items()}
+            logger.info(f"Modül çalıştırılıyor: {module_path}")
             module.run(current_options)
             return True
         except Exception as e:
             print(f"Modül çalıştırılırken kritik hata oluştu '{module_path}': {e}")
+            logger.error(f"Modül çalıştırılırken hata '{module_path}': {e}")
             return False
     def get_module_info(self, module_path: str) -> Optional[Tuple[str, str, str, str]]: # modül bilgisi çağırmak için, birincil kullanımı search ve show komutu ile kullanılması
         """modül bilgisi çekmeye yarıyan fonksiyon.

@@ -26,6 +26,10 @@ class ModuleManager:
             # Relative path using pathlib, with forward slashes for consistency
             relative_path = file_path.relative_to(self.modules_dir)
             module_name_for_dict = relative_path.with_suffix('').as_posix()
+            
+            # Kök dizindeki modüller (alt klasörü olmayanlar) uncategorized/ olarak işaretlensin
+            if '/' not in module_name_for_dict:
+                module_name_for_dict = f"uncategorized/{module_name_for_dict}"
             try:
                 spec = importlib.util.spec_from_file_location(module_name_for_dict, str(file_path))
                 if spec is None:

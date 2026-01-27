@@ -101,7 +101,10 @@ class CommandManager:
     def load_commands(self): # komut yüklemek için
         """Komutları yüklemeye yarıyan ana fonksiyon.
         """
-        self.commands.clear() 
+        self.commands.clear()
+        # Önce kullanıcı tanımlı aliasları yükle (böylece overwrite edilmezler)
+        self.load_aliases()
+        
         for file_path in self.commands_dir.glob('*.py'):
             if file_path.name == '__init__.py':
                 continue
@@ -132,8 +135,7 @@ class CommandManager:
             except Exception as e:
                 print(f"[bold red]Beklenmeyen hata:[/bold red] '{file_path.name}' yüklenirken hata oluştu.")
                 logger.exception(f"Komut yüklenirken beklenmeyen hata '{file_path}'")
-        logger.info(f"{len(self.commands)} komut yüklendi")
-        self.load_aliases() 
+        logger.info(f"{len(self.commands)} komut yüklendi") 
     def resolve_command(self, command_input: str) -> Tuple[Optional[str], bool]: # komut çözücü
         """Komut çözmeye yarıyan fonksiyon.
 

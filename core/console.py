@@ -75,8 +75,8 @@ class Console:
         selected_module = shared_state.get_selected_module()
         if selected_module:
             module_path = f"{selected_module.Category}/{selected_module.Name}"
-            return HTML(f'<style fg="white" underline="true">mahmut</style> (<style fg="ansired">{module_path}</style>) >')
-        return HTML('<style fg="white">mahmut</style> <style fg="white">></style> ')
+            return HTML(f'<style underline="true">mahmut</style> (<style fg="ansired">{module_path}</style>) > ')
+        return HTML('mahmut > ')
     def get_terminal_width(self) -> int:
         try:
             return shutil.get_terminal_size().columns

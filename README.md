@@ -82,6 +82,13 @@ chmod +x pycache_sil.sh
 ./pycache_sil.sh -y   # Auto-confirm all prompts (no interaction)
 ```
 
+**Update Check:**
+Regularly check for updates to get the latest features and security fixes:
+```bash
+mahmut > checkupdate
+```
+> ⚠️ **Important:** Run `checkupdate` periodically to ensure you're using the latest version.
+
 ### 🤝 Contributing
 
 Contributions are welcome! Please fork the repository, create a feature branch, and submit a Pull Request.
@@ -154,6 +161,13 @@ chmod +x pycache_sil.sh
 ./pycache_sil.sh      # Etkileşimli mod (onay sorar)
 ./pycache_sil.sh -y   # Tüm onayları otomatik kabul eder (etkileşimsiz)
 ```
+
+**Güncelleme Kontrolü:**
+En son özellikleri ve güvenlik yamalarını almak için düzenli olarak güncelleme kontrolü yapın:
+```bash
+mahmut > checkupdate
+```
+> ⚠️ **Önemli:** En son sürümü kullandığınızdan emin olmak için `checkupdate` komutunu düzenli olarak çalıştırın.
 
 ### 🤝 Katkıda Bulunma
 

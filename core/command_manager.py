@@ -1,5 +1,5 @@
 # komutları yönetmek ve framework için modöler amaçlı komut yazılmasını destekleyecek kütüphane
-import os
+from pathlib import Path
 import importlib.util
 import json # veri tutma, oluşturma ve aliases.json da yazmak için kullanacağım.
 from typing import Dict, Optional, List, Tuple, Callable
@@ -16,16 +16,17 @@ class CommandManager:
         Args:
             commands_dir (str, optional): komutların bulunduğu dizin. Defaults to "commands".
         """
-        self.commands_dir = commands_dir # "commands" klasörünün yolu
+        self.commands_dir = Path(commands_dir) # "commands" klasörünün yolu
         self.commands: Dict[str, Command] = {} 
         self.aliases: Dict[str, str] = {} 
-        self._ensure_aliases_file() # aliases.sjon daki alias'lar 
+        self._ensure_aliases_file() # aliases.json daki alias'lar 
     def _ensure_aliases_file(self): # aliases.json import edilmesi ya da yenisi oluşturulmalı
         """Alias dosyası oluşturucu fonksiyon.
         """
-        if not os.path.exists(ALIASES_FILE):
-            os.makedirs(os.path.dirname(ALIASES_FILE), exist_ok=True)
-            with open(ALIASES_FILE, 'w', encoding='utf-8') as f:
+        aliases_path = Path(ALIASES_FILE)
+        if not aliases_path.exists():
+            aliases_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(aliases_path, 'w', encoding='utf-8') as f:
                 json.dump({}, f, indent=4)
             print(f"Varsayılan alias dosyası oluşturuldu: {ALIASES_FILE}")
     def load_aliases(self): # bütün aliasların bir havuza import edilmesi
@@ -51,8 +52,12 @@ class CommandManager:
             with open(ALIASES_FILE, 'w', encoding='utf-8') as f:
                 json.dump(self.aliases, f, indent=4)
             #print(f"Aliaslar dosyaya kaydedildi: {ALIASES_FILE}")
-        except Exception as e:
-            print(f"Aliaslar kaydedilirken hata oluştu: {e}")
+        except PermissionError:
+            print(f"Aliaslar kaydedilirken izin hatası: {ALIASES_FILE}")
+            logger.exception("Alias dosyası yazma izni hatası")
+        except IOError as e:
+            print(f"Aliaslar kaydedilirken dosya hatası oluştu: {e}")
+            logger.exception("Alias dosyası yazma hatası")
     def add_alias(self, alias_name: str, target_command: str) -> bool: # framework içi ve alias komutu için alias ekleme fonksiyonum
         """Alias eklemeye yarıyan fonksiyon
 
@@ -97,29 +102,36 @@ class CommandManager:
         """Komutları yüklemeye yarıyan ana fonksiyon.
         """
         self.commands.clear() 
-        #("Komutlar yükleniyor...")
-        for file in os.listdir(self.commands_dir):
-            if file.endswith(".py") and file != "__init__.py": # sadece python dilini destekliyor şimdilik
-                command_name = file[:-3] # dosya uzantısı
-                module_path = os.path.join(self.commands_dir, file) # "modules" klasörünün yoluna girmek için
-                try: # obje olarak modül fonksiyonlarını çekmek için
-                    spec = importlib.util.spec_from_file_location(command_name, module_path)
-                    if spec is None:
-                        print(f"Komut spesifikasyonu alınamadı: {module_path}")
-                        continue
-                    command_module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(command_module)
-                    for name, obj in command_module.__dict__.items():
-                        if isinstance(obj, type) and issubclass(obj, Command) and obj is not Command:
-                            command_instance = obj()
-                            self.commands[command_instance.Name] = command_instance 
-                            for alias in command_instance.Aliases:
-                                self.add_alias(alias, command_instance.Name) 
-                            #(f"Komut yüklendi: {command_instance.Name} (Kategori: {command_instance.Category})")
-                            break 
-                except Exception as e:
-                    print(f"Komut yüklenirken hata oluştu '{module_path}': {e}")
-                    logger.error(f"Komut yüklenirken hata oluştu '{module_path}': {e}")
+        for file_path in self.commands_dir.glob('*.py'):
+            if file_path.name == '__init__.py':
+                continue
+            command_name = file_path.stem  # Dosya adını uzantısız alır
+            try: # obje olarak modül fonksiyonlarını çekmek için
+                spec = importlib.util.spec_from_file_location(command_name, str(file_path))
+                if spec is None:
+                    print(f"Komut spesifikasyonu alınamadı: {file_path}")
+                    continue
+                command_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(command_module)
+                for name, obj in command_module.__dict__.items():
+                    if isinstance(obj, type) and issubclass(obj, Command) and obj is not Command:
+                        command_instance = obj()
+                        self.commands[command_instance.Name] = command_instance 
+                        for alias in command_instance.Aliases:
+                            self.add_alias(alias, command_instance.Name) 
+                        break 
+            except SyntaxError as e:
+                print(f"[bold red]Sözdizimi hatası:[/bold red] '{file_path.name}' dosyasında hata var.")
+                logger.exception(f"Komut yüklenirken sözdizimi hatası '{file_path}'")
+            except ImportError as e:
+                print(f"[bold red]İçe aktarma hatası:[/bold red] '{file_path.name}' - {e}")
+                logger.exception(f"Komut yüklenirken import hatası '{file_path}'")
+            except AttributeError as e:
+                print(f"[bold red]Öznitelik hatası:[/bold red] '{file_path.name}' - Komut sınıfı doğru tanımlanmamış.")
+                logger.exception(f"Komut yüklenirken öznitelik hatası '{file_path}'")
+            except Exception as e:
+                print(f"[bold red]Beklenmeyen hata:[/bold red] '{file_path.name}' yüklenirken hata oluştu.")
+                logger.exception(f"Komut yüklenirken beklenmeyen hata '{file_path}'")
         logger.info(f"{len(self.commands)} komut yüklendi")
         self.load_aliases() 
     def resolve_command(self, command_input: str) -> Tuple[Optional[str], bool]: # komut çözücü
@@ -164,9 +176,17 @@ class CommandManager:
                 try:
                     logger.info(f"Komut çalıştırıldı: {resolved_command_name}")
                     return command_obj.execute(*args)
+                except TypeError as e:
+                    print(f"[bold red]Argüman hatası:[/bold red] '{resolved_command_name}' komutuna yanlış argüman verildi.")
+                    logger.exception(f"Komut '{resolved_command_name}' yürütülürken TypeError")
+                    return False
+                except KeyboardInterrupt:
+                    print("\nKomut kullanıcı tarafından kesildi.")
+                    logger.info(f"Komut '{resolved_command_name}' kullanıcı tarafından kesildi")
+                    return False
                 except Exception as e:
-                    print(f"Komut '{resolved_command_name}' yürütülürken kritik hata oluştu: {e}")
-                    logger.error(f"Komut '{resolved_command_name}' yürütülürken hata: {e}")
+                    print(f"[bold red]Kritik hata:[/bold red] '{resolved_command_name}' yürütülürken beklenmeyen hata.")
+                    logger.exception(f"Komut '{resolved_command_name}' yürütülürken beklenmeyen hata")
                     return False
             else:
                 print(f"'{resolved_command_name}' komutu bulunamadı.")

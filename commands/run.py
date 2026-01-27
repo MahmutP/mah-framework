@@ -32,7 +32,13 @@ class Run(Command):
         print(f"[{selected_module.Name}] Modül çalıştırılıyor...")
         try:
             current_options = {name: opt.value for name, opt in selected_module.get_options().items()}
-            selected_module.run(current_options)
+            result = selected_module.run(current_options)
+            
+            # [Fix/Explanation] Modüllerden dönen çıktıların ekrana basılması sağlandı.
+            # Önceden return edilen değerler (örneğin IP bilgisi) ekrana yazdırılmıyordu.
+            if result:
+                print(result)
+                
             print(f"[{selected_module.Name}] Modül başarıyla çalıştırıldı.") 
             return True
         except Exception as e:

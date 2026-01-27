@@ -90,6 +90,43 @@ def print_startup_info(command_manager: CommandManager, module_manager: ModuleMa
     
     console.print()
     console.print("    Yardım için [bold]'help'[/bold] yazın")
+    
+    # 7 günde bir güncelleme hatırlatıcısı
+    _show_update_reminder(console)
+
+
+def _show_update_reminder(console):
+    """7 günde bir güncelleme hatırlatıcısı gösterir.
+    
+    Son hatırlatma tarihini config/last_update_reminder.txt dosyasında saklar.
+    7 gün geçtiyse kullanıcıya checkupdate komutunu hatırlatır.
+    """
+    import json
+    from datetime import datetime, timedelta
+    
+    reminder_file = Path(__file__).parent / "config" / "last_update_reminder.txt"
+    reminder_days = 7  # Kaç günde bir hatırlat
+    
+    try:
+        should_remind = False
+        
+        if reminder_file.exists():
+            last_reminder = datetime.fromisoformat(reminder_file.read_text().strip())
+            if datetime.now() - last_reminder > timedelta(days=reminder_days):
+                should_remind = True
+        else:
+            should_remind = True
+        
+        if should_remind:
+            console.print()
+            console.print("[dim]💡 Tip: Güncellemeleri kontrol etmek için [bold]'checkupdate'[/bold] yazın[/dim]")
+            
+            # Tarihi güncelle
+            reminder_file.parent.mkdir(parents=True, exist_ok=True)
+            reminder_file.write_text(datetime.now().isoformat())
+            
+    except Exception:
+        pass  # Hata olursa sessizce geç
 
 def main():
     """Main fonksiyon, objeler tanımlanıyor ve sistem başlatılıyor.

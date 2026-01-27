@@ -1,4 +1,6 @@
 {
     "quit": "exit",
-    "?": "help"
+    "?": "help",
+    "update": "checkupdate",
+    "check": "checkupdate"
 }

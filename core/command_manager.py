@@ -4,7 +4,6 @@ import importlib.util
 import json # veri tutma, oluşturma ve aliases.json da yazmak için kullanacağım.
 from typing import Dict, Optional, List, Tuple, Callable
 from core.command import Command # komut sınıfı import edildi
-from core.shared_state import shared_state
 from core.cont import ALIASES_FILE, COMMAND_CATEGORIES # alias.json ve aliases.json ve komut katagorisi import edildi
 from core import logger
 from rich import print
@@ -18,8 +17,8 @@ class CommandManager:
             commands_dir (str, optional): komutların bulunduğu dizin. Defaults to "commands".
         """
         self.commands_dir = commands_dir # "commands" klasörünün yolu
-        self.commands: Dict[str, Command] = shared_state.get_commands() # komutları shared_state üzerinden dict olarak tanımlandı. 
-        self.aliases: Dict[str, str] = shared_state.get_aliases() # komutların kendi içinde tanımladığı ve aliases.json daki alias'lar
+        self.commands: Dict[str, Command] = {} 
+        self.aliases: Dict[str, str] = {} 
         self._ensure_aliases_file() # aliases.sjon daki alias'lar 
     def _ensure_aliases_file(self): # aliases.json import edilmesi ya da yenisi oluşturulmalı
         """Alias dosyası oluşturucu fonksiyon.
@@ -37,8 +36,7 @@ class CommandManager:
                 loaded_aliases = json.load(f)
                 self.aliases.clear() 
                 for alias, target in loaded_aliases.items():
-                    self.aliases[alias] = target
-                    shared_state.add_alias(alias, target) 
+                    self.aliases[alias] = target 
             #print(f"{len(self.aliases)} alias yüklendi.")
         except FileNotFoundError:
             print(f"Alias dosyası bulunamadı: {ALIASES_FILE}. Yeni bir dosya oluşturulacak.")
@@ -69,7 +67,6 @@ class CommandManager:
             #print(f"'{alias_name}' zaten bir komut veya alias olarak mevcut.")
             return False
         self.aliases[alias_name] = target_command
-        shared_state.add_alias(alias_name, target_command)
         self.save_aliases()
         #print(f"Alias '{alias_name}' -> '{target_command}' eklendi.")
         return True
@@ -82,9 +79,8 @@ class CommandManager:
         Returns:
             bool: başarılı olup olmadığının kontrolü.
         """
-        if shared_state.remove_alias(alias_name):
-            if alias_name in self.aliases: 
-                del self.aliases[alias_name]
+        if alias_name in self.aliases: # shared_state logic removed
+            del self.aliases[alias_name]
             self.save_aliases()
             #(f"Alias '{alias_name}' kaldırıldı.")
             return True
@@ -116,8 +112,7 @@ class CommandManager:
                     for name, obj in command_module.__dict__.items():
                         if isinstance(obj, type) and issubclass(obj, Command) and obj is not Command:
                             command_instance = obj()
-                            self.commands[command_instance.Name] = command_instance
-                            shared_state.add_command(command_instance.Name, command_instance) 
+                            self.commands[command_instance.Name] = command_instance 
                             for alias in command_instance.Aliases:
                                 self.add_alias(alias, command_instance.Name) 
                             #(f"Komut yüklendi: {command_instance.Name} (Kategori: {command_instance.Category})")

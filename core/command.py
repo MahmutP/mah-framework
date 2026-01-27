@@ -13,6 +13,8 @@ class Command:
     Description: str = "Description for command" # komut açıklaması
     Category: str = "core" # komut açıklaması
     Aliases: List[str] = [] # aliases.json dan bağımsız olarakta alias atama imkanı verildi
+    Usage: str = "" # Kullanım sözdizimi (örn: "set <option> <değer>")
+    Examples: List[str] = [] # Örnek kullanımlar listesi
     completer_function: Optional[Callable] = None  # prompt-toolkit üzerinden otomatik tamamlama için
     def __init__(self):
         self.shared_state = shared_state

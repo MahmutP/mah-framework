@@ -78,7 +78,8 @@ Once inside the interactive shell, you can use built-in commands. Type `help` to
 Use the included script to clean up `__pycache__` directories and old log files:
 ```bash
 chmod +x pycache_sil.sh
-./pycache_sil.sh
+./pycache_sil.sh      # Interactive mode (prompts for confirmation)
+./pycache_sil.sh -y   # Auto-confirm all prompts (no interaction)
 ```
 
 ### 🤝 Contributing
@@ -147,10 +148,11 @@ python main.py
 Uygulama başladığında modern bir komut satırı sizi karşılayacaktır. `help` yazarak mevcut komutları listeleyebilir veya `Tab` tuşu ile otomatik tamamlamayı kullanabilirsiniz.
 
 **Bakım:**
-Geliştirmeartığı `__pycache__` klasörlerini ve eski log dosyalarını temizlemek için:
+Geliştirme artığı `__pycache__` klasörlerini ve eski log dosyalarını temizlemek için:
 ```bash
 chmod +x pycache_sil.sh
-./pycache_sil.sh
+./pycache_sil.sh      # Etkileşimli mod (onay sorar)
+./pycache_sil.sh -y   # Tüm onayları otomatik kabul eder (etkileşimsiz)
 ```
 
 ### 🤝 Katkıda Bulunma

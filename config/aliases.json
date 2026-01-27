@@ -2,5 +2,9 @@
     "quit": "exit",
     "?": "help",
     "update": "checkupdate",
-    "check": "checkupdate"
+    "check": "checkupdate",
+    "exploit": "run",
+    "execute": "run",
+    "cls": "clear",
+    "!": "shell"
 }

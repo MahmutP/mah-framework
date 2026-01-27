@@ -1,9 +1,9 @@
 # temel komut banner, banner ve modül bilgisi basacak.
 # modül bilgisini basacak kısım henüz kodlanmadı
-from asciistuff import Banner, Lolcat
-import random
 from typing import Any
 from core.command import Command
+from core.banner import print_banner
+
 class BannerCommand(Command):
     """Banner basmaya yarıyan komut.
 
@@ -24,12 +24,8 @@ class BannerCommand(Command):
             bool: Başarılı olup olmadığının sonucu
         """
         try:
-            print(Lolcat(Banner("Hello world!"), spread=random.randint(1,11)))
-            #("Banner basıldı.")
+            print_banner()
             return True
-        except ImportError:
-            print("asciistuff veya lolcat kütüphaneleri bulunamadı. Lütfen 'pip install asciistuff lolcat' ile yükleyin.")
-            return False
         except Exception as e:
             print(f"Banner basılırken hata oluştu: {e}")
             return False

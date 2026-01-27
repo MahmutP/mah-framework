@@ -16,8 +16,6 @@ def print_startup_info(command_manager: CommandManager, module_manager: ModuleMa
         module_manager (ModuleManager): Modül yöneticisi.
     """
     from rich.console import Console
-    from rich.panel import Panel
-    from rich.text import Text
     
     console = Console()
     
@@ -32,63 +30,40 @@ def print_startup_info(command_manager: CommandManager, module_manager: ModuleMa
     total_commands = len(command_manager.get_all_commands())
     categorized_modules = module_manager.get_modules_by_category()
     
-    # Kategori sayılarını hesapla
-    exploit_count = 0
-    auxiliary_count = 0
-    payload_count = 0
-    scanner_count = 0
-    other_count = 0
+    # Tüm kategorileri ve sayılarını dinamik olarak al
+    category_counts = {}
     total_modules = 0
     
     for category, modules in categorized_modules.items():
         count = len(modules)
         total_modules += count
-        cat_lower = category.lower()
-        
-        if "exploit" in cat_lower:
-            exploit_count += count
-        elif "auxiliary" in cat_lower or "scanner" in cat_lower:
-            auxiliary_count += count
-            if "scanner" in cat_lower:
-                scanner_count += count
-        elif "payload" in cat_lower:
-            payload_count += count
-        else:
-            other_count += count
+        # Kategori adını düzelt (ilk harfi büyük)
+        display_name = category.replace("/", " / ").title() if "/" in category else category.capitalize()
+        category_counts[display_name] = count
     
     # Metasploit tarzı çıktı
     version_line = "[bold cyan]       =[ Mah Framework v1.0-dev ][/bold cyan]"
     
-    # Satır 1: exploits ve auxiliary
-    line1_parts = []
-    if exploit_count > 0:
-        line1_parts.append(f"[green]{exploit_count}[/green] exploit{'s' if exploit_count != 1 else ''}")
-    if auxiliary_count > 0:
-        line1_parts.append(f"[green]{auxiliary_count}[/green] auxiliary")
-    if total_modules > 0:
-        line1_parts.append(f"[green]{total_modules}[/green] modules")
+    # Satır 1: Toplam modül sayısı
+    line1 = f"[green]{total_modules}[/green] modules - [yellow]{total_commands}[/yellow] commands"
     
-    # Satır 2: payloads ve commands
-    line2_parts = []
-    if payload_count > 0:
-        line2_parts.append(f"[yellow]{payload_count}[/yellow] payloads")
-    line2_parts.append(f"[yellow]{total_commands}[/yellow] commands")
+    # Satır 2+: Her kategori dinamik olarak
+    category_parts = []
+    colors = ["green", "yellow", "magenta", "cyan", "blue", "red"]
     
-    # Satır 3: scanners (varsa)
-    line3_parts = []
-    if scanner_count > 0:
-        line3_parts.append(f"[magenta]{scanner_count}[/magenta] scanner{'s' if scanner_count != 1 else ''}")
+    for idx, (cat_name, count) in enumerate(sorted(category_counts.items())):
+        color = colors[idx % len(colors)]
+        category_parts.append(f"[{color}]{count}[/{color}] {cat_name.lower()}")
     
     # Yazdır
     console.print()
     console.print(version_line)
+    console.print(f"[dim]+ -- --=[[/dim] {line1} [dim]]=--[/dim]")
     
-    if line1_parts:
-        console.print(f"[dim]+ -- --=[[/dim] {' - '.join(line1_parts)} [dim]]=--[/dim]")
-    if line2_parts:
-        console.print(f"[dim]+ -- --=[[/dim] {' - '.join(line2_parts)} [dim]]=--[/dim]")
-    if line3_parts:
-        console.print(f"[dim]+ -- --=[[/dim] {' - '.join(line3_parts)} [dim]]=--[/dim]")
+    # Kategorileri 3'erli grupla (satır başına max 3 kategori)
+    for i in range(0, len(category_parts), 3):
+        chunk = category_parts[i:i+3]
+        console.print(f"[dim]+ -- --=[[/dim] {' - '.join(chunk)} [dim]]=--[/dim]")
     
     console.print()
     console.print("    Yardım için [bold]'help'[/bold] yazın")

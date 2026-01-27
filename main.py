@@ -1,3 +1,7 @@
+import warnings
+# Suppress SyntaxWarning caused by some 3rd party libraries (like cowpy) in Python 3.12+
+warnings.filterwarnings("ignore", category=SyntaxWarning)
+
 import shutil 
 from asciistuff import Banner, Lolcat
 import random

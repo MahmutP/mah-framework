@@ -118,12 +118,13 @@ class hash_generator(BaseModule):
                 description="Hash'lenecek metin"
             ),
             
-            # VARSAYILAN DEĞERLİ OPTION
+            # CHOICES (OTOMATİK TAMAMLAMA) İLE OPTION ÖRNEĞİ
             "ALGORITHM": Option(
                 name="ALGORITHM",
                 value="sha256",                               # Varsayılan değer
                 required=False,                               # Zorunlu değil
-                description="Hash algoritması (md5, sha1, sha256, sha384, sha512)"
+                description="Hash algoritması",
+                choices=['md5', 'sha1', 'sha256', 'sha384', 'sha512']  # TAB ile önerilir
             ),
             
             # BOOLEAN OPTION ÖRNEĞİ

@@ -8,7 +8,9 @@ from rich import print
 class Option:
     """değiştirilebilir opsiyonlar tanımlamak için kullanılan ana sınıf.
     """
-    def __init__(self, name: str, value: Any, required: bool, description: str, regex_check: bool = False, regex: str = DEFAULT_REGEX):
+    def __init__(self, name: str, value: Any, required: bool, description: str, 
+                 regex_check: bool = False, regex: str = DEFAULT_REGEX,
+                 choices: list = None):
         """init fonksiyon.
 
         Args:
@@ -16,8 +18,9 @@ class Option:
             value (Any): option değeri.
             required (bool): zorunlu olup olmadığının belirtilemesi.
             description (str): Açıklaması.
-            regex_check (bool, optional): regex kontrolü yapılsın mı onun belirtilmesi.. Defaults to False.
+            regex_check (bool, optional): regex kontrolü yapılsın mı onun belirtilmesi. Defaults to False.
             regex (str, optional): regex. Defaults to DEFAULT_REGEX.
+            choices (list, optional): Otomatik tamamlama için önceden tanımlı değerler. Defaults to None.
         """
         self.name = name # obje ismi
         self._value = value # option'un değeri, değiştirilecek olan
@@ -25,6 +28,7 @@ class Option:
         self.description = description # o opsiyonun açıklaması
         self.regex_check = regex_check # regex kontrolü yapılacak mı?
         self.regex = regex 
+        self.choices = choices or []  # Otomatik tamamlama seçenekleri 
     @property
     def value(self) -> Any: # değişken, her türlü type sahip değişken tanımlanabilir
         """Değişken. her türlü değişken tipini kabul ediyor.
@@ -67,5 +71,6 @@ class Option:
             "required": self.required,
             "description": self.description,
             "regex_check": self.regex_check,
-            "regex": self.regex
+            "regex": self.regex,
+            "choices": self.choices
         }

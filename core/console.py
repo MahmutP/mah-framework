@@ -135,6 +135,8 @@ class Console:
     def shutdown(self):
         """Konsolu güvenli bir şekilde kapatır.
         """
+        if not self.running:  # Zaten kapatıldıysa tekrar çalıştırma
+            return
         self.running = False
         logger.info("Konsol kapatılıyor")
         print("Konsol kapatıldı.")

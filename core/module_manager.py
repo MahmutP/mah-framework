@@ -2,7 +2,7 @@
 import importlib.util # modülleri işlemek için
 from typing import Dict, Optional, Tuple
 from core.module import BaseModule # temel modül sınıfı
-from core.shared_state import shared_state
+from core.module import BaseModule # temel modül sınıfı
 from rich import print
 from core import logger
 import os
@@ -14,7 +14,7 @@ class ModuleManager:
             modules_dir (str, optional): Modüllerin bulunduğu klasör. Defaults to "modules".
         """
         self.modules_dir = modules_dir # modüllerin bulunduğu dizin
-        self.modules: Dict[str, BaseModule] = shared_state.get_modules() # framework içi global modül dcit'i 
+        self.modules: Dict[str, BaseModule] = {} # framework içi global modül dcit'i 
     def load_modules(self):# modülleri import edecek ana fonksiyon
         """Modül yükleyici ana fonksiyon.
         """
@@ -38,8 +38,7 @@ class ModuleManager:
                                 module_instance = obj()
                                 if not module_instance.Category:
                                     module_instance.Category = "uncategorized"
-                                self.modules[module_name_for_dict] = module_instance
-                                shared_state.add_module(module_name_for_dict, module_instance) 
+                                self.modules[module_name_for_dict] = module_instance 
                                 #(f"Modül yüklendi: {module_name_for_dict} (Kategori: {module_instance.Category})")
                                 break 
                     except Exception as e:

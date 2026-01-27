@@ -44,7 +44,10 @@ class Alias(Command):
             return sorted([cmd for cmd in ["add", "list", "remove"] if cmd.startswith(current_arg)])
         elif len(parts) == 3 and parts[1].lower() == "remove" and not text.endswith(' '): 
             current_alias_part = parts[2]
-            all_aliases = shared_state.get_aliases().keys()
+            if shared_state.command_manager:
+                all_aliases = shared_state.command_manager.get_aliases().keys()
+            else:
+                all_aliases = []
             return sorted([alias for alias in all_aliases if alias.startswith(current_alias_part)])
         return []
     def execute(self, *args: str, **kwargs: Any) -> bool:

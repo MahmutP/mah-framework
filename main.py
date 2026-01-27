@@ -1,16 +1,13 @@
-import warnings
-# Suppress SyntaxWarning caused by some 3rd party libraries (like cowpy) in Python 3.12+
-warnings.filterwarnings("ignore", category=SyntaxWarning)
-
 import shutil 
-from asciistuff import Banner, Lolcat
 import random
 from core.shared_state import shared_state
 from core.command_manager import CommandManager
 from core.module_manager import ModuleManager
-from core.console import Console
+from core.console import Console as AppConsole
 from core.cont import DEFAULT_TERMINAL_WIDTH, LEFT_PADDING, COL_SPACING
 from core import logger
+from core.banner import print_banner
+
 def print_startup_info(command_manager: CommandManager, module_manager: ModuleManager):
     """Startup bilgisi basmaya yarıyan fonksiyon.
 
@@ -19,10 +16,7 @@ def print_startup_info(command_manager: CommandManager, module_manager: ModuleMa
         module_manager (ModuleManager): Modül yöneticisi.
     """
     try:
-        print(Lolcat(Banner("Mah Framework"), spread=random.randint(1,11)))
-    except ImportError:
-        print("asciistuff veya lolcat kütüphaneleri bulunamadı. Lütfen 'pip install asciistuff lolcat' ile yükleyin.")
-        print("CLI Framework") 
+        print_banner()
     except Exception as e:
         print(f"Banner basılırken hata oluştu: {e}")
         print("CLI Framework") 
@@ -47,6 +41,7 @@ def print_startup_info(command_manager: CommandManager, module_manager: ModuleMa
         line_content = f"-=[{category}: {count}]=-"
         print(f"{' ' * LEFT_PADDING}{line_content.ljust(max_line_content_len)}")
     print(f"\n{' ' * LEFT_PADDING}Yardım için 'help' yazın")
+
 def main():
     """Main fonksiyon, objeler tanımlanıyor ve sistem başlatılıyor.
     """
@@ -61,7 +56,7 @@ def main():
     shared_state.module_manager = module_manager
     command_manager.load_commands()
     module_manager.load_modules()
-    console = Console(command_manager, module_manager)
+    console = AppConsole(command_manager, module_manager)
     shared_state.console_instance = console
     print_startup_info(command_manager, module_manager)
     logger.info("Uygulama başlatıldı")

@@ -34,10 +34,10 @@ class Show(Command):
         """
         parts = text.split()
         if len(parts) == 1 and text.endswith(' '): 
-            return sorted(["modules", "options"])
+            return sorted(["info", "modules", "options"])
         elif len(parts) == 2 and not text.endswith(' '): 
             current_arg = parts[1]
-            return sorted([cmd for cmd in ["modules", "options"] if cmd.startswith(current_arg)])
+            return sorted([cmd for cmd in ["info", "modules", "options"] if cmd.startswith(current_arg)])
         return []
     def execute(self, *args: str, **kwargs: Any) -> bool:
         """Komut çalışınca çalışacak fonksiyon.
@@ -46,7 +46,7 @@ class Show(Command):
             bool: başarılı olup olmadığını kontrol çıktısı
         """
         if not args:
-            print("Kullanım: show <modules|options>")
+            print("Kullanım: show <modules|options|info>")
             return False
         subcommand = args[0].lower()
         module_manager: ModuleManager = shared_state.module_manager 
@@ -57,8 +57,10 @@ class Show(Command):
             return self._show_modules(module_manager)
         elif subcommand == "options":
             return self._show_options()
+        elif subcommand == "info":
+            return self._show_info()
         else:
-            print(f"Bilinmeyen 'show' alt komutu: '{subcommand}'. Kullanım: show <modules|options>")
+            print(f"Bilinmeyen 'show' alt komutu: '{subcommand}'. Kullanım: show <modules|options|info>")
             return False
     def _show_modules(self, module_manager: ModuleManager) -> bool:
         """Show modules komutunun çıktısını sağlayan fonksiyon.
@@ -170,3 +172,15 @@ class Show(Command):
         if len(description) > max_len and max_len > 3: 
             return description[:max_len - 3] + "..."
         return description
+    
+    def _show_info(self) -> bool:
+        """show info alt komutu - info komutunu çağırır.
+        
+        Kod tekrarından kaçınmak için Info komutunu import edip çalıştırır.
+        
+        Returns:
+            bool: Başarılı olup olmadığı
+        """
+        from commands.info import Info
+        info_cmd = Info()
+        return info_cmd.execute()

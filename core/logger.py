@@ -33,11 +33,11 @@ def setup_logger():
     # Mevcut handler'ları temizle (Loguru default handler'ı da dahil)
     _logger.remove()
     
-    # Konsol çıktısı (Renkli ve detaylı)
+    # Konsol çıktısı (Sadece hata ve kritik durumlar, minimal format)
     _logger.add(
         sys.stderr,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-        level="DEBUG"
+        format="<level>{level: <8}</level> | <level>{message}</level>",
+        level="ERROR"
     )
     
     # Dosya çıktısı (Rotation ve Retention ile)

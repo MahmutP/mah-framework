@@ -36,13 +36,46 @@ class Set(Command):
         if not selected_module:
             return []
         options = selected_module.get_options()
+        
+        # "set " yazıldığında option isimlerini göster
         if len(parts) == 1 and text.endswith(' '): 
             return sorted(list(options.keys()))
+        
+        # "set TEX" yazıldığında option isimlerini tamamla
         elif len(parts) == 2 and not text.endswith(' '): 
             current_arg = parts[1]
             return sorted([name for name in options.keys() if name.startswith(current_arg)])
-        elif len(parts) >= 2 and text.endswith(' '): 
+        
+        # "set OPTION_NAME " yazıldığında o option'ın choices'larını göster
+        elif len(parts) == 2 and text.endswith(' '): 
+            option_name = parts[1]
+            if option_name in options:
+                opt = options[option_name]
+                # Eğer choices tanımlanmışsa onları döndür
+                if opt.choices:
+                    return list(opt.choices)
+                # Boolean değer gibi görünüyorsa true/false öner
+                current_val = str(opt.value).lower()
+                if current_val in ['true', 'false', '0', '1', 'yes', 'no']:
+                    return ['true', 'false']
             return []
+        
+        # "set OPTION_NAME tr" yazıldığında choices'ları filtrele
+        elif len(parts) >= 3:
+            option_name = parts[1]
+            current_value = parts[2] if len(parts) > 2 else ""
+            if option_name in options:
+                opt = options[option_name]
+                choices = []
+                if opt.choices:
+                    choices = list(opt.choices)
+                else:
+                    current_val = str(opt.value).lower()
+                    if current_val in ['true', 'false', '0', '1', 'yes', 'no']:
+                        choices = ['true', 'false']
+                return sorted([c for c in choices if c.lower().startswith(current_value.lower())])
+            return []
+        
         return []
     def execute(self, *args: str, **kwargs: Any) -> bool:
         """Komut çalıştırılacak çalışacak kod.

@@ -21,6 +21,14 @@ class Alias(Command):
     Description = "Komutlar için kısayollar oluşturur, listeler ve siler."
     Category = "system"
     Aliases = []
+    Usage = "alias [kısayol] [hedef_komut] | alias -d <kısayol> | alias -l"
+    Examples = [
+        "alias                    # Tüm alias'ları listeler",
+        "alias -l                 # Tüm alias'ları listeler",
+        "alias h help             # 'h' yazınca 'help' çalışır",
+        "alias s search           # 's' yazınca 'search' çalışır",
+        "alias -d h               # 'h' alias'ını siler"
+    ]
     def __init__(self):
         """init fonksiyon
         """

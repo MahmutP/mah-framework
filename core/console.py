@@ -78,22 +78,49 @@ class Console:
             return HTML(f'<style underline="true">mahmut</style> (<style fg="ansired">{module_path}</style>) > ')
         return HTML('mahmut > ')
     def get_terminal_width(self) -> int:
+        """Terminal genişliği çekici fonksiyon.
+
+        Returns:
+            int: Terminal genişliği.
+        """
         try:
             return shutil.get_terminal_size().columns
         except OSError:
             print(f"Terminal genişliği alınamadı, varsayılan {DEFAULT_TERMINAL_WIDTH} kullanılıyor.")
             return DEFAULT_TERMINAL_WIDTH
-    def start(self):
-        """Konsol arayüzü başlatıcı.
+
+    def _handle_input(self, user_input: str) -> None:
+        """Kullanıcı girdisini işler ve CommandManager'a delege eder.
+        
+        Bu metod UI ve iş mantığı arasındaki köprüdür.
+        Console sadece 'ne zaman' çalıştırılacağını bilir,
+        CommandManager 'nasıl' çalıştırılacağını bilir.
+
+        Args:
+            user_input (str): Kullanıcının girdiği ham komut satırı.
         """
-        #("Konsol başlatılıyor...")
+        processed_line = user_input.strip()
+        
+        # Boş satırları ve yorumları atla
+        if not processed_line or processed_line.startswith('#'):
+            return
+        
+        # Komut çalıştırma sorumluluğu CommandManager'da
+        self.command_manager.execute_command(processed_line)
+
+    def start(self):
+        """Konsol arayüzü ana döngüsü.
+        
+        Bu metod sadece UI ile ilgilenir:
+        - Prompt gösterme
+        - Kullanıcı girdisi alma
+        - Sistem olaylarını yakalama (EOF, Ctrl+C)
+        """
+        logger.info("Konsol başlatıldı")
         while self.running:
             try:
                 line = self.session.prompt(self._get_prompt_string())
-                processed_line = line.strip()
-                if not processed_line or processed_line.startswith('#'):
-                    continue
-                self.command_manager.execute_command(processed_line)
+                self._handle_input(line)
             except EOFError:
                 print("EOF algılandı, uygulamadan çıkılıyor.")
                 logger.info("EOF algılandı, uygulama kapatılıyor")
@@ -102,12 +129,12 @@ class Console:
                 print("Klavye kesintisi algılandı (Ctrl+C).")
                 logger.info("Klavye kesintisi (Ctrl+C)")
             except Exception as e:
-                print(f"Beklenmedik bir hata oluştu: {e}")
-                logger.error(f"Beklenmedik hata: {e}")
-                print(f"Hata detayı: {e}", exc_info=True) 
+                print(f"[bold red]Beklenmedik hata:[/bold red] Konsol döngüsünde hata oluştu.")
+                logger.exception(f"Konsol döngüsünde beklenmedik hata")
+
     def shutdown(self):
-        """Oturumu kapatıcı
+        """Konsolu güvenli bir şekilde kapatır.
         """
+        self.running = False
         logger.info("Konsol kapatılıyor")
         print("Konsol kapatıldı.")
-        sys.exit(0) 

@@ -15,7 +15,12 @@ class Clear(Command):
     Name = "clear"
     Description = "Ekranı temizler."
     Category = "system"
-    Aliases = [] 
+    Aliases = ["cls"]
+    Usage = "clear"
+    Examples = [
+        "clear                    # Terminal ekranını temizler",
+        "cls                      # 'clear' için alias (Windows stili)"
+    ] 
     def execute(self, *args: str, **kwargs: Any) -> bool:
         """Komut çalıştırılınca çalışacak kod
 

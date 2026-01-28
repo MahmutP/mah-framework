@@ -145,6 +145,8 @@ def main():
                         help="Sessiz mod - banner ve başlangıç bilgisi gösterilmez")
     parser.add_argument("-r", "--resource", type=str, metavar="DOSYA",
                         help="Başlangıçta çalıştırılacak resource (.rc) dosyası")
+    parser.add_argument("-x", "--execute", type=str, metavar="KOMUTLAR",
+                        help="Başlangıçta çalıştırılacak komutlar (noktalı virgül ile ayır)")
     args = parser.parse_args()
     
     # Logger'ı başlat
@@ -180,6 +182,43 @@ def main():
                 print(f"[bold red]Hata:[/bold red] resource komutu bulunamadı")
         else:
             print(f"[bold red]Hata:[/bold red] Resource dosyası bulunamadı: {args.resource}")
+    
+    # -x ile komut belirtildiyse çalıştır
+    if args.execute:
+        print(f"\n[bold cyan]⚡ Komutlar çalıştırılıyor...[/bold cyan]\n")
+        commands = args.execute.split(";")
+        for cmd_line in commands:
+            cmd_line = cmd_line.strip()
+            if not cmd_line:
+                continue
+            
+            print(f"[bold yellow]>[/bold yellow] {cmd_line}")
+            
+            parts = cmd_line.split()
+            if not parts:
+                continue
+            
+            command_name = parts[0].lower()
+            command_args = parts[1:] if len(parts) > 1 else []
+            
+            # Komutu çöz (alias kontrolü dahil)
+            resolved_name, _ = command_manager.resolve_command(command_name)
+            
+            if not resolved_name:
+                print(f"[bold red]  ✗ Bilinmeyen komut: {command_name}[/bold red]")
+                continue
+            
+            # Komutu al ve çalıştır
+            cmd_obj = command_manager.get_all_commands().get(resolved_name)
+            if cmd_obj:
+                try:
+                    cmd_obj.execute(*command_args)
+                except Exception as e:
+                    print(f"[bold red]  ✗ Hata: {e}[/bold red]")
+            else:
+                print(f"[bold red]  ✗ Komut objesi bulunamadı: {resolved_name}[/bold red]")
+        
+        print()
     
     logger.info("Uygulama başlatıldı")
     try:

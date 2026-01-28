@@ -17,6 +17,11 @@ class Exit(Command):
     Description = "Uygulamadan çıkar."
     Category = "core"
     Aliases = ["quit"]
+    Usage = "exit"
+    Examples = [
+        "exit                     # Uygulamayı kapatır",
+        "quit                     # 'exit' için alias"
+    ]
     def execute(self, *args: str, **kwargs: Any) -> bool:
         """Komut çalıştırıldığında çalışacak kod.
 

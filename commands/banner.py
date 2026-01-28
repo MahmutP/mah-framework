@@ -16,7 +16,11 @@ class BannerCommand(Command):
     Name = "banner"
     Description = "Rastgele bir banner basar."
     Category = "system" 
-    Aliases = [] 
+    Aliases = []
+    Usage = "banner"
+    Examples = [
+        "banner                   # Rastgele ASCII art banner gösterir"
+    ] 
     def execute(self, *args: str, **kwargs: Any) -> bool:
         """Komut çalıştırılınca çalışacak kod
 

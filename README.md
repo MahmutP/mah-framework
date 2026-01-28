@@ -72,7 +72,24 @@ Start the framework by running the main script:
 python main.py
 ```
 
+**Startup Options:**
+```bash
+python main.py -q              # Quiet mode (no banner)
+python main.py -r script.rc    # Run resource file at startup
+python main.py -q -r script.rc # Both options combined
+```
+
 Once inside the interactive shell, you can use built-in commands. Type `help` to see available commands or use `Tab` for auto-completion.
+
+**Resource Files (.rc):**
+Automate tasks using resource files, similar to Metasploit:
+```bash
+# From command line:
+python main.py -r attack.rc
+
+# Inside console:
+mahmut > resource attack.rc
+```
 
 **Maintenance:**
 Use the included script to clean up `__pycache__` directories and old log files:
@@ -152,7 +169,24 @@ Framework'ü başlatmak için `main.py` dosyasını çalıştırın:
 python main.py
 ```
 
+**Başlangıç Seçenekleri:**
+```bash
+python main.py -q              # Sessiz mod (banner gösterilmez)
+python main.py -r script.rc    # Başlangıçta resource dosyası çalıştır
+python main.py -q -r script.rc # Her iki seçenek birlikte
+```
+
 Uygulama başladığında modern bir komut satırı sizi karşılayacaktır. `help` yazarak mevcut komutları listeleyebilir veya `Tab` tuşu ile otomatik tamamlamayı kullanabilirsiniz.
+
+**Resource Dosyaları (.rc):**
+Metasploit benzeri resource dosyaları ile görevleri otomatikleştirin:
+```bash
+# Komut satırından:
+python main.py -r saldiri.rc
+
+# Konsol içinden:
+mahmut > resource saldiri.rc
+```
 
 **Bakım:**
 Geliştirme artığı `__pycache__` klasörlerini ve eski log dosyalarını temizlemek için:

@@ -19,6 +19,12 @@ class Show(Command):
     Description = "Çeşitli verileri (modüller, seçenekler) listeler."
     Category = "core" 
     Aliases = []
+    Usage = "show <modules|options|info>"
+    Examples = [
+        "show modules           # Tüm modülleri listeler",
+        "show options           # Seçili modülün seçeneklerini gösterir",
+        "show info              # Seçili modül hakkında detaylı bilgi verir"
+    ]
     def __init__(self):
         super().__init__()
         self.completer_function = self._show_completer 

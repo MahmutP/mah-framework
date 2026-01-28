@@ -16,6 +16,11 @@ class Back(Command):
     Description = "Mevcut modülden çıkarak ana kabuğa döner."
     Category = "module"
     Aliases = []
+    Usage = "back"
+    Examples = [
+        "use example/hash_generator",
+        "back                     # Modülden çıkarak ana prompt'a döner"
+    ]
     def execute(self, *args: str, **kwargs: Any) -> bool:
         """Komut çalıştığında çalışacak komut
 

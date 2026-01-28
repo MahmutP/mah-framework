@@ -16,7 +16,12 @@ class Info(Command):
     Name = "info"
     Description = "Seçili modül bilgilerini gösterir."
     Category = "module"
-    Aliases = [] 
+    Aliases = []
+    Usage = "info"
+    Examples = [
+        "use example/hash_generator",
+        "info                     # Modül detaylarını gösterir"
+    ] 
     def execute(self, *args: str, **kwargs: Any) -> bool:
         """detaylı bilgilendirme komutu
 

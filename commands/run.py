@@ -15,7 +15,13 @@ class Run(Command):
     Name = "run"
     Description = "Seçili modülü çalıştırır."
     Category = "module"
-    Aliases = []
+    Aliases = ["exploit", "execute"]
+    Usage = "run"
+    Examples = [
+        "run                    # Seçili modülü çalıştırır",
+        "exploit                # 'run' için alias",
+        "execute                # 'run' için alias"
+    ]
     def execute(self, *args: str, **kwargs: Any) -> bool:
         """Komut çalışınca çalışacak komut.
 

@@ -15,7 +15,14 @@ class Shell(Command):
     Name = "shell"
     Description = "Sistem kabuğuna düşer."
     Category = "system"
-    Aliases = [] 
+    Aliases = ["!"]
+    Usage = "shell [komut]"
+    Examples = [
+        "shell                    # Interaktif shell oturumu açar",
+        "shell ls -la             # 'ls -la' komutunu çalıştırır",
+        "shell whoami             # Mevcut kullanıcı adını gösterir",
+        "! pwd                    # Mevcut dizini gösterir (alias)"
+    ] 
     def execute(self, *args: str, **kwargs: Any) -> bool:
         """komut çalıştırılınca çalışacak fonksiyon.
 

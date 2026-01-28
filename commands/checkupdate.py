@@ -20,6 +20,12 @@ class CheckUpdateCommand(Command):
     Description = "Yeni güncelleme olup olmadığını kontrol eder."
     Category = "system"
     Aliases = ["update", "check"]
+    Usage = "checkupdate"
+    Examples = [
+        "checkupdate              # Uzak repo ile karşılaştırır",
+        "update                   # 'checkupdate' için alias",
+        "check                    # 'checkupdate' için alias"
+    ]
     
     def _get_commit_count(self, ref: str) -> int | None:
         """Belirtilen referans için commit sayısını döndürür.

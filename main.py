@@ -137,11 +137,21 @@ def _show_update_reminder(console):
 def main():
     """Main fonksiyon, objeler tanımlanıyor ve sistem başlatılıyor.
     """
+    import argparse
+    
+    # Argüman ayrıştırıcı
+    parser = argparse.ArgumentParser(description="Mah Framework - Modüler Güvenlik Aracı")
+    parser.add_argument("-q", "--quiet", action="store_true", 
+                        help="Sessiz mod - banner ve başlangıç bilgisi gösterilmez")
+    args = parser.parse_args()
+    
     # Logger'ı başlat
     logger.setup_logger()
     logger.info("Uygulama başlatılıyor...")
     
-    print("Uygulama başlatılıyor...")
+    if not args.quiet:
+        print("Uygulama başlatılıyor...")
+    
     command_manager = CommandManager()
     module_manager = ModuleManager()
     shared_state.command_manager = command_manager
@@ -150,7 +160,11 @@ def main():
     module_manager.load_modules()
     console = AppConsole(command_manager, module_manager)
     shared_state.console_instance = console
-    print_startup_info(command_manager, module_manager)
+    
+    # Sessiz mod değilse banner ve bilgi göster
+    if not args.quiet:
+        print_startup_info(command_manager, module_manager)
+    
     logger.info("Uygulama başlatıldı")
     try:
         console.start()
@@ -159,5 +173,6 @@ def main():
         logger.critical(f"Ana konsol döngüsünde kritik hata: {e}")
     finally:
         console.shutdown()
+
 if __name__ == "__main__":
     main()

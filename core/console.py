@@ -75,8 +75,8 @@ class Console:
         selected_module = shared_state.get_selected_module()
         if selected_module:
             module_path = f"{selected_module.Category}/{selected_module.Name}"
-            return HTML(f'<style underline="true">mahmut</style> (<style fg="ansired">{module_path}</style>) > ')
-        return HTML('mahmut > ')
+            return HTML(f'<u>mahmut</u> (<style fg="ansired">{module_path}</style>) > ')
+        return HTML('<u>mahmut</u> > ')
     def get_terminal_width(self) -> int:
         """Terminal genişliği çekici fonksiyon.
 

@@ -76,7 +76,15 @@ python main.py
 ```bash
 python main.py -q              # Quiet mode (no banner)
 python main.py -r script.rc    # Run resource file at startup
-python main.py -q -r script.rc # Both options combined
+python main.py -x "cmd1; cmd2"  # Execute commands directly
+python main.py -q -r script.rc # Combine options
+```
+
+**Direct Command Execution (-x):**
+Run commands without creating a file, separate multiple commands with semicolons:
+```bash
+python main.py -x "use example/hash_generator; set TEXT hello; run"
+python main.py -q -x "banner; help"
 ```
 
 Once inside the interactive shell, you can use built-in commands. Type `help` to see available commands or use `Tab` for auto-completion.
@@ -173,7 +181,15 @@ python main.py
 ```bash
 python main.py -q              # Sessiz mod (banner gösterilmez)
 python main.py -r script.rc    # Başlangıçta resource dosyası çalıştır
-python main.py -q -r script.rc # Her iki seçenek birlikte
+python main.py -x "cmd1; cmd2" # Komutları doğrudan çalıştır
+python main.py -q -r script.rc # Seçenekleri birleştir
+```
+
+**Doğrudan Komut Çalıştırma (-x):**
+Dosya oluşturmadan komutları çalıştırın, birden fazla komut için noktalı virgül kullanın:
+```bash
+python main.py -x "use example/hash_generator; set TEXT merhaba; run"
+python main.py -q -x "banner; help"
 ```
 
 Uygulama başladığında modern bir komut satırı sizi karşılayacaktır. `help` yazarak mevcut komutları listeleyebilir veya `Tab` tuşu ile otomatik tamamlamayı kullanabilirsiniz.

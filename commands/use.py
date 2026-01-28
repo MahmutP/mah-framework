@@ -16,6 +16,13 @@ class Use(Command):
     Description = "Bir modülü adına göre seçer."
     Category = "module"
     Aliases = []
+    Usage = "use <kategori/modül_adı>"
+    Examples = [
+        "use exploit/vsftpd_234_backdoor",
+        "use auxiliary/scanner/vsftpd_version",
+        "use example/hash_generator",
+        "use uncategorized/systeminfo_uncategorized"
+    ]
     def __init__(self):
         """init fonksiyonu.
         """

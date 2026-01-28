@@ -143,6 +143,8 @@ def main():
     parser = argparse.ArgumentParser(description="Mah Framework - Modüler Güvenlik Aracı")
     parser.add_argument("-q", "--quiet", action="store_true", 
                         help="Sessiz mod - banner ve başlangıç bilgisi gösterilmez")
+    parser.add_argument("-r", "--resource", type=str, metavar="DOSYA",
+                        help="Başlangıçta çalıştırılacak resource (.rc) dosyası")
     args = parser.parse_args()
     
     # Logger'ı başlat
@@ -164,6 +166,20 @@ def main():
     # Sessiz mod değilse banner ve bilgi göster
     if not args.quiet:
         print_startup_info(command_manager, module_manager)
+    
+    # Resource dosyası belirtildiyse çalıştır
+    if args.resource:
+        from pathlib import Path
+        resource_path = Path(args.resource)
+        if resource_path.exists():
+            # Resource komutunu al ve çalıştır
+            resource_cmd = command_manager.get_all_commands().get("resource")
+            if resource_cmd:
+                resource_cmd.run_resource_file(resource_path)
+            else:
+                print(f"[bold red]Hata:[/bold red] resource komutu bulunamadı")
+        else:
+            print(f"[bold red]Hata:[/bold red] Resource dosyası bulunamadı: {args.resource}")
     
     logger.info("Uygulama başlatıldı")
     try:

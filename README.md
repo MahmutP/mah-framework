@@ -30,6 +30,19 @@
 *   **🛠️ System Utilities**: Includes tools for cache cleaning and log management (`pycache_sil.sh`).
 *   **🌐 Network Ready**: Built-in support for libraries like `telnetlib3` and `psutil` for network and system management tasks.
 
+### 📊 Project Statistics
+*   **16** Commands
+*   **8+** Modules
+*   **150+** Commits
+*   **Advanced Logging** & **Resource Script Support**
+
+### 📦 Available Modules
+Mah Framework comes with built-in modules across various categories:
+*   **Exploit**: `vsftpd_234_backdoor` ...
+*   **Auxiliary**: `scanner/vsftpd_234_scanner`, `ip_info` ...
+*   **Payloads**: `mahpreter/reverse_tcp` ...
+*   **Example**: `hash_generator`, `toplama` ...
+
 ### 📂 Project Structure
 
 ```text
@@ -118,6 +131,13 @@ mahmut > checkupdate
 
 Contributions are welcome! Please fork the repository, create a feature branch, and submit a Pull Request.
 
+### 🧪 Running Tests
+Ensure high code quality by running the test suite:
+```bash
+pip install -r requirements.txt  # Install pytest and other deps
+pytest                           # Run all tests
+```
+
 ---
 
 <a name="-türkçe"></a>
@@ -134,6 +154,19 @@ Contributions are welcome! Please fork the repository, create a feature branch, 
 *   **📝 Kapsamlı Loglama**: `loguru` ile güçlendirilmiş bu sistem, uygulama olaylarını, hataları ve komutları `config/logs/` altında kayıt altına alır; otomatik rotasyon ve saklama özelliklerine sahiptir.
 *   **🛠️ Sistem Araçları**: Gereksiz önbellek ve eski log dosyalarını temizlemek için hazır bakım aracı (`pycache_sil.sh`).
 *   **🌐 Ağ Hazırlığı**: Ağ ve sistem yönetimi için `telnetlib3` ve `psutil` gibi kütüphane destekleri.
+
+### 📊 Proje İstatistikleri
+*   **16** Komut
+*   **8+** Modül
+*   **150+** Commit
+*   **Gelişmiş Loglama** & **Resource Dosya Desteği**
+
+### 📦 Mevcut Modüller
+Mah Framework, çeşitli kategorilerde yerleşik modüllerle gelir:
+*   **Exploit**: `vsftpd_234_backdoor` ...
+*   **Auxiliary**: `scanner/vsftpd_234_scanner`, `ip_info` ...
+*   **Payloads**: `mahpreter/reverse_tcp` ...
+*   **Example**: `hash_generator`, `toplama` ...
 
 ### 📂 Proje Yapısı
 
@@ -222,6 +255,13 @@ mahmut > checkupdate
 ### 🤝 Katkıda Bulunma
 
 Bu proje açık kaynaklıdır ve katkılara açıktır. Lütfen projeyi fork'layın, yeni bir branch oluşturun ve Pull Request gönderin.
+
+### 🧪 Testleri Çalıştırma
+Kod kalitesini korumak için testleri çalıştırın:
+```bash
+pip install -r requirements.txt  # pytest ve diğer bağımlılıkları yükle
+pytest                           # Tüm testleri çalıştır
+```
 
 ---
 

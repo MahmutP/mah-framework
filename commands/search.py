@@ -64,6 +64,13 @@ class Search(Command):
     Description = "Modülleri arar."
     Category = "core"
     Aliases = []
+    Usage = "search <arama_terimi>"
+    Examples = [
+        "search vsftpd            # vsftpd içeren modülleri listeler",
+        "search scanner           # scanner içeren modülleri listeler",
+        "search exploit           # exploit kategorisindeki modülleri bulur",
+        "search Mahmut            # Yazar adına göre arar"
+    ]
     def __init__(self):
         """init fonksiyonu.
         """

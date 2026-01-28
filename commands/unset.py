@@ -16,6 +16,11 @@ class Unset(Command):
     Description = "Ayarlanmış option'u sıfırlamak (default hali) için kullanılan bir komuttur."
     Category = "module"
     Aliases = []
+    Usage = "unset <seçenek_adı>"
+    Examples = [
+        "unset RHOSTS             # RHOSTS değerini sıfırlar",
+        "unset TEXT               # TEXT değerini sıfırlar"
+    ]
     def __init__(self):
         """init fonksiyon
         """

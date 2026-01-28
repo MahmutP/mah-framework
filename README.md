@@ -128,8 +128,9 @@ mahmut > checkupdate
 > ⚠️ **Important:** Run `checkupdate` periodically to ensure you're using the latest version.
 
 ### 🤝 Contributing
-
 Contributions are welcome! Please fork the repository, create a feature branch, and submit a Pull Request.
+
+**Developers**: Check out the **[Developer Guide](docs/DEVELOPER_GUIDE.md)** to learn how to create your own modules!
 
 ### 🧪 Running Tests
 Ensure high code quality by running the test suite:
@@ -253,8 +254,9 @@ mahmut > checkupdate
 > ⚠️ **Önemli:** En son sürümü kullandığınızdan emin olmak için `checkupdate` komutunu düzenli olarak çalıştırın.
 
 ### 🤝 Katkıda Bulunma
-
 Bu proje açık kaynaklıdır ve katkılara açıktır. Lütfen projeyi fork'layın, yeni bir branch oluşturun ve Pull Request gönderin.
+
+**Geliştiriciler**: Kendi modüllerinizi nasıl oluşturacağınızı öğrenmek için **[Geliştirici Rehberi](docs/DEVELOPER_GUIDE.md)** dosyasına göz atın!
 
 ### 🧪 Testleri Çalıştırma
 Kod kalitesini korumak için testleri çalıştırın:

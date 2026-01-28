@@ -16,6 +16,13 @@ class Set(Command):
     Description = "Seçili modülün seçeneklerini ayarlar."
     Category = "module"
     Aliases = []
+    Usage = "set <seçenek_adı> <değer>"
+    Examples = [
+        "set RHOSTS 192.168.1.1",
+        "set RPORT 21",
+        "set TEXT \"test mesajı\"",
+        "set ALGORITHM sha256"
+    ]
     def __init__(self):
         """init fonksiyon
         """

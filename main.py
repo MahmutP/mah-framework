@@ -38,9 +38,15 @@ def print_startup_info(command_manager: CommandManager, module_manager: ModuleMa
     for category, modules in categorized_modules.items():
         count = len(modules)
         total_modules += count
-        # Kategori adını düzelt (ilk harfi büyük)
-        display_name = category.replace("/", " / ").title() if "/" in category else category.capitalize()
-        category_counts[display_name] = count
+        # Kategori adını düzelt - alt kategorileri birleştir (auxiliary/scanner → auxiliary)
+        top_level_category = category.split("/")[0] if "/" in category else category
+        display_name = top_level_category.capitalize()
+        
+        # Aynı üst kategorideki modülleri birleştir
+        if display_name in category_counts:
+            category_counts[display_name] += count
+        else:
+            category_counts[display_name] = count
     
     # Metasploit tarzı çıktı
     # Git commit sayısından otomatik versiyon hesapla

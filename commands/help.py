@@ -18,6 +18,13 @@ class Help(Command):
     Description = "Yardım menüsünü gösterir veya belirli bir komut hakkında bilgi verir."
     Category = "core"
     Aliases = ["?"]
+    Usage = "help [komut_adı]"
+    Examples = [
+        "help                     # Tüm komutları listeler",
+        "help set                 # 'set' komutu hakkında detaylı bilgi",
+        "help use                 # 'use' komutu hakkında detaylı bilgi",
+        "?                        # 'help' için alias"
+    ]
     def __init__(self):
         """İnit fonksiyon
         """
@@ -34,12 +41,15 @@ class Help(Command):
             List[str]: otomatik tamamlama çıktısı.
         """
         parts = text.split()
+        command_manager = self.shared_state.command_manager
+        if not command_manager:
+            return []
         if len(parts) == 1 and text.endswith(' '): 
-            all_commands = list(self.shared_state.get_commands().keys())
+            all_commands = list(command_manager.get_all_commands().keys())
             return sorted(all_commands)
         elif len(parts) == 2 and not text.endswith(' '): 
             current_arg = parts[1]
-            all_commands = list(self.shared_state.get_commands().keys())
+            all_commands = list(command_manager.get_all_commands().keys())
             return sorted([cmd for cmd in all_commands if cmd.startswith(current_arg)])
         return []
     def execute(self, *args: str, **kwargs: Any) -> bool:
@@ -60,12 +70,24 @@ class Help(Command):
                 return False
             cmd_obj: Optional[Command] = command_manager.get_all_commands().get(resolved_command_name)
             if cmd_obj:
-                print(f"\n  Komut: {cmd_obj.Name}")
-                print(f"  Açıklama: {cmd_obj.Description}") 
-                print(f"  Kategori: {cmd_obj.get_category_display_name()}")
+                print(f"\n  [bold cyan]Komut:[/bold cyan] {cmd_obj.Name}")
+                print(f"  [bold]Açıklama:[/bold] {cmd_obj.Description}") 
+                print(f"  [bold]Kategori:[/bold] {cmd_obj.get_category_display_name()}")
                 if cmd_obj.Aliases:
-                    print(f"  Aliaslar: {', '.join(cmd_obj.Aliases)}")
-                print("\n  Kullanım: (Henüz örnek kullanım bilgisi mevcut değil.)") 
+                    print(f"  [bold]Aliaslar:[/bold] {', '.join(cmd_obj.Aliases)}")
+                
+                # Usage bilgisi
+                if cmd_obj.Usage:
+                    print(f"\n  [bold yellow]Kullanım:[/bold yellow]")
+                    print(f"    {cmd_obj.Usage}")
+                
+                # Örnek kullanımlar
+                if cmd_obj.Examples:
+                    print(f"\n  [bold green]Örnekler:[/bold green]")
+                    for example in cmd_obj.Examples:
+                        print(f"    {example}")
+                
+                print()  # Boş satır
             else:
                 print(f"'{resolved_command_name}' komut objesi bulunamadı.")
             return True

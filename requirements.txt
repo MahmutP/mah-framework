@@ -10,3 +10,4 @@ rich==14.2.0
 telnetlib3==2.0.8
 wcwidth==0.2.14
 loguru==0.7.3
+pytest

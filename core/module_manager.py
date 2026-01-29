@@ -7,7 +7,7 @@ from rich import print
 from core import logger
 
 class ModuleManager:
-    def __init__(self, modules_dir="modules"):
+    def __init__(self, modules_dir: str = "modules") -> None:
         """init fonksiyon.
 
         Args:
@@ -16,7 +16,7 @@ class ModuleManager:
         self.modules_dir = Path(modules_dir) # modüllerin bulunduğu dizin
         self.modules: Dict[str, BaseModule] = {} # framework içi global modül dict'i 
 
-    def load_modules(self):# modülleri import edecek ana fonksiyon
+    def load_modules(self) -> None:# modülleri import edecek ana fonksiyon
         """Modül yükleyici ana fonksiyon.
         """
         self.modules.clear() 
@@ -32,7 +32,7 @@ class ModuleManager:
                 module_name_for_dict = f"uncategorized/{module_name_for_dict}"
             try:
                 spec = importlib.util.spec_from_file_location(module_name_for_dict, str(file_path))
-                if spec is None:
+                if spec is None or spec.loader is None:
                     print(f"Modül spesifikasyonu alınamadı: {file_path}")
                     continue
                 module = importlib.util.module_from_spec(spec)
@@ -83,7 +83,7 @@ class ModuleManager:
         Returns:
             Dict[str, Dict[str, BaseModule]]: kategorize edilmiş şekilde çekilmiş modüllerin listesi ve objeleri.
         """
-        categorized_modules = {}
+        categorized_modules: Dict[str, Dict[str, BaseModule]] = {}
         for module_path, module_obj in self.modules.items():
             category = module_obj.Category.capitalize() 
             if category not in categorized_modules:

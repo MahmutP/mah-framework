@@ -49,6 +49,6 @@ class Run(Command):
             return True
         except Exception as e:
             print(f"[{selected_module.Name}] Modül çalıştırılırken beklenmedik bir hata oluştu: {e}")
-            print(f"Hata detayı: {e}", exc_info=True) 
+            print(f"Hata detayı: {e}") 
             print(f"[{selected_module.Name}] Modül çalışması başarısız oldu.") 
             return False

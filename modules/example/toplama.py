@@ -32,4 +32,9 @@ class toplama(BaseModule):
         print(f"Modül: '{self.Name}'")
         print(f"Toplanacak birinci sayı: {options.get("first_number")}")
         print(f"Toplanacak ikinci sayı: {options.get("second_number")}")
-        print(f"{options.get("first_number")} + {options.get("second_number")} = {int(options.get("first_number"))+int(options.get("second_number"))}")
+        val1 = options.get("first_number")
+        val2 = options.get("second_number")
+        if val1 and val2:
+            print(f"{val1} + {val2} = {int(val1)+int(val2)}")
+        else:
+            print("Lütfen tüm sayıları giriniz.")

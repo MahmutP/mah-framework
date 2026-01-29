@@ -46,9 +46,9 @@ class Use(Command):
             return []
         elif len(parts) == 2 and not text.endswith(' '): 
             current_arg = parts[1]
-            module_manager: ModuleManager = shared_state.module_manager
-            if module_manager:
-                all_module_paths = list(module_manager.get_all_modules().keys())
+            manager: ModuleManager = shared_state.module_manager
+            if manager:
+                all_module_paths = list(manager.get_all_modules().keys())
                 return sorted([path for path in all_module_paths if path.startswith(current_arg)])
             return []
         return []

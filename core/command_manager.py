@@ -5,6 +5,8 @@ import json # veri tutma, oluşturma ve aliases.json da yazmak için kullanacağ
 from typing import Dict, Optional, List, Tuple, Callable
 from core.command import Command # komut sınıfı import edildi
 from core.cont import ALIASES_FILE, COMMAND_CATEGORIES # alias.json ve aliases.json ve komut katagorisi import edildi
+from core.hooks import HookType
+from core.shared_state import shared_state
 from core import logger
 from rich import print
 class CommandManager:
@@ -159,6 +161,13 @@ class CommandManager:
         Returns:
             bool: Komutun başarıyla yürütülüp yürütülmediğini (True) veya bir hata oluştuğunu (False) belirten değer.
         """
+        # PRE_COMMAND hook'unu tetikle
+        if shared_state.plugin_manager:
+            shared_state.plugin_manager.trigger_hook(
+                HookType.PRE_COMMAND,
+                command_line=command_line
+            )
+        
         parts = command_line.strip().split(maxsplit=1)
         if not parts:
             return False
@@ -177,18 +186,47 @@ class CommandManager:
             if command_obj:
                 try:
                     logger.info(f"Komut çalıştırıldı: {resolved_command_name}")
-                    return command_obj.execute(*args)
+                    result = command_obj.execute(*args)
+                    # POST_COMMAND hook'unu tetikle (başarılı)
+                    if shared_state.plugin_manager:
+                        shared_state.plugin_manager.trigger_hook(
+                            HookType.POST_COMMAND,
+                            command_line=command_line,
+                            success=result
+                        )
+                    return result
                 except TypeError as e:
                     print(f"[bold red]Argüman hatası:[/bold red] '{resolved_command_name}' komutuna yanlış argüman verildi.")
                     logger.exception(f"Komut '{resolved_command_name}' yürütülürken TypeError")
+                    # POST_COMMAND hook'unu tetikle (hata)
+                    if shared_state.plugin_manager:
+                        shared_state.plugin_manager.trigger_hook(
+                            HookType.POST_COMMAND,
+                            command_line=command_line,
+                            success=False
+                        )
                     return False
                 except KeyboardInterrupt:
                     print("\nKomut kullanıcı tarafından kesildi.")
                     logger.info(f"Komut '{resolved_command_name}' kullanıcı tarafından kesildi")
+                    # POST_COMMAND hook'unu tetikle (kesinti)
+                    if shared_state.plugin_manager:
+                        shared_state.plugin_manager.trigger_hook(
+                            HookType.POST_COMMAND,
+                            command_line=command_line,
+                            success=False
+                        )
                     return False
                 except Exception as e:
                     print(f"[bold red]Kritik hata:[/bold red] '{resolved_command_name}' yürütülürken beklenmeyen hata.")
                     logger.exception(f"Komut '{resolved_command_name}' yürütülürken beklenmeyen hata")
+                    # POST_COMMAND hook'unu tetikle (hata)
+                    if shared_state.plugin_manager:
+                        shared_state.plugin_manager.trigger_hook(
+                            HookType.POST_COMMAND,
+                            command_line=command_line,
+                            success=False
+                        )
                     return False
             else:
                 print(f"'{resolved_command_name}' komutu bulunamadı.")

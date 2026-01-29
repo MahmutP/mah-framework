@@ -47,11 +47,10 @@ class Console:
             Args:
                 event (_type_): mevcut olay.
             """
-            if shared_state.get_selected_module():
-                print("Modül çalışması Ctrl+C ile kesildi (eğer çalışıyorsa).")
-            else:
-                event.app.current_buffer.text = '' 
-                print("Girdi temizlendi.")
+            # Prompt üzerindeyken Ctrl+C sadece girdiyi temizlemelidir.
+            # Modül seçili olsa bile, prompt aktifse modül o an *çalışmıyor* demektir.
+            event.app.current_buffer.text = '' 
+            # print("Girdi temizlendi.") # İsteğe bağlı
         return PromptSession(
             history=self.history,
             auto_suggest=AutoSuggestFromHistory(),

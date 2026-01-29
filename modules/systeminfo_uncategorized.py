@@ -28,7 +28,7 @@ import platform
 import os
 import getpass
 import socket
-import psutil
+import psutil # type: ignore
 import datetime
 from typing import Dict, Any, List
 
@@ -116,11 +116,12 @@ class systeminfo(BaseModule):
         Returns:
             Okunabilir string (örn: "4.5 GB")
         """
+        current_val = float(bytes_val)
         for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-            if bytes_val < 1024.0:
-                return f"{bytes_val:.2f} {unit}"
-            bytes_val /= 1024.0
-        return f"{bytes_val:.2f} PB"
+            if current_val < 1024.0:
+                return f"{current_val:.2f} {unit}"
+            current_val /= 1024.0
+        return f"{current_val:.2f} PB"
     
     def _seconds_to_human(self, seconds: int) -> str:
         """Saniye değerini okunabilir süreye çevirir.

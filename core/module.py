@@ -17,7 +17,7 @@ class BaseModule:
         """
         for option_name, option_obj in self.Options.items():
             setattr(self, option_name, option_obj.value)
-    def run(self, options: Dict[str, Any]) -> Union[str, List[str]]: # modül çalıştırılması için çağrılacak fonksiyon.
+    def run(self, options: Dict[str, Any]) -> Union[str, List[str], bool, None]: # modül çalıştırılması için çağrılacak fonksiyon.
         """Modül çalıştırılınca çalışacak fonksiyon.
 
         Args:

@@ -1,8 +1,135 @@
-# 🛠️ Mah Framework Developer Guide
+# 🛠️ Mah Framework Developer Guide / Geliştirici Rehberi
+
+[English](#-english-developer-guide) | [Türkçe](#-türkçe-geliştirici-rehberi)
+
+---
+
+## 🇺🇸 English Developer Guide
+
+This guide is designed for developers who want to create new modules for **Mah Framework**.
+
+### 📌 Table of Contents
+1. [Module Structure](#module-structure)
+2. [Step-by-Step Module Creation](#step-by-step-module-creation)
+3. [BaseModule API Reference](#basemodule-api-reference)
+4. [Option Class Usage](#option-class-usage)
+
+---
+
+### 🏗️ Module Structure
+
+Mah Framework modules are `.py` files located under the `modules/` directory (or its subdirectories). Every module must inherit from the `core.module.BaseModule` class.
+
+#### Example File Path
+`modules/exploit/my_new_exploit.py`
+
+---
+
+### 🚀 Step-by-Step Module Creation
+
+#### 1. Create a File
+Create a file named `modules/test/hello_world.py`.
+
+#### 2. Import Required Classes
+```python
+from core.module import BaseModule
+from core.option import Option
+from rich import print
+```
+
+#### 3. Define Your Class
+```python
+class HelloWorld(BaseModule):
+    def __init__(self):
+        # 1. Module Metadata
+        self.Name = "test/hello_world"
+        self.Description = "Developer guide example module"
+        self.Author = "Your Name"
+        self.Category = "test"
+        
+        # 2. Define Options
+        self.Options = {
+            "TARGET": Option(
+                name="TARGET",
+                value="127.0.0.1",
+                required=True,
+                description="Target IP address",
+                regex_check=True, # Simple regex check
+                regex=r"^\d{1,3}(\.\d{1,3}){3}$" # IP format
+            ),
+            "MESSAGE": Option(
+                name="MESSAGE",
+                value="Hello World!",
+                required=False,
+                description="Message to display",
+                choices=["Hello", "Hi", "Greetings"] # Optional: Suggestions for tab completion
+            )
+        }
+        
+        # BaseModule init call (Important!)
+        super().__init__()
+
+    def run(self, options):
+        # 3. Business Logic
+        target = options.get("TARGET")
+        message = options.get("MESSAGE")
+        
+        print(f"[bold green][+] Target:[/bold green] {target}")
+        print(f"[bold blue][*] Message:[/bold blue] {message}")
+        
+        # Return True or a string/list log message
+        return True
+```
+
+---
+
+### 📚 BaseModule API Reference
+
+#### Properties
+*   **Name** (`str`): Unique name of the module (e.g., `exploit/linux/ftp/vsftpd_234`).
+*   **Description** (`str`): Description shown in the `info` command.
+*   **Author** (`str`): Name of the author.
+*   **Category** (`str`): Module category (`exploit`, `scanner`, etc.).
+*   **Options** (`Dict[str, Option]`): Parameters accepted by the module.
+
+#### Methods
+*   **run(self, options: Dict[str, Any])**: Main function called when the module is executed (`run` command).
+    *   *Args:* `options`: Dictionary containing values set by the user using `set`.
+    *   *Returns:* `Union[str, List[str]]` or `True/False`.
+*   **check_required_options(self) -> bool**: Checks if required parameters are filled. Called automatically.
+
+---
+
+### 🎛️ Option Class Usage
+
+The `core.option.Option` class is used to receive input from the user.
+
+#### Parameters
+*   **name** (`str`): Parameter name (Uppercase recommended, e.g., `RHOST`).
+*   **value** (`Any`): Default value.
+*   **required** (`bool`): If `True`, the module will not run without a value.
+*   **description** (`str`): Description shown in `show options`.
+*   **regex_check** (`bool`): Enable regex validation?
+*   **regex** (`str`): Validation pattern.
+*   **choices** (`List[Any]`): Optional list of values for auto-completion suggestions.
+
+---
+
+### 💡 Tips
+*   Every key defined in `self.Options` (e.g., `TARGET`) can be retrieved in the `run` method via `options.get("TARGET")`.
+*   Use the `print` function from the `rich` library for colorful output.
+*   You can use `templates/module_template.py` as a starting point for complex operations.
+
+<br><br>
+
+---
+---
+
+## 🇹🇷 Türkçe Geliştirici Rehberi
 
 Bu rehber, **Mah Framework** için yeni modüller geliştirmek isteyenler için hazırlanmıştır.
 
-## 📌 İçindekiler
+### 📌 İçindekiler
 1. [Modül Yapısı](#modül-yapısı)
 2. [Adım Adım Modül Oluşturma](#adım-adım-modül-oluşturma)
 3. [BaseModule API Referansı](#basemodule-api-referansı)
@@ -10,28 +137,28 @@ Bu rehber, **Mah Framework** için yeni modüller geliştirmek isteyenler için 
 
 ---
 
-## 🏗️ Modül Yapısı
+### 🏗️ Modül Yapısı
 
 Mah Framework modülleri, `modules/` dizini (veya alt dizinleri) altında bulunan `.py` dosyalarıdır. Her modül, `core.module.BaseModule` sınıfından miras almalıdır.
 
-### Örnek Dosya Yolu
+#### Örnek Dosya Yolu
 `modules/exploit/my_new_exploit.py`
 
 ---
 
-## 🚀 Adım Adım Modül Oluşturma
+### 🚀 Adım Adım Modül Oluşturma
 
-### 1. Dosya Oluşturun
+#### 1. Dosya Oluşturun
 `modules/test/hello_world.py` adında bir dosya oluşturun.
 
-### 2. Gerekli Importları Yapın
+#### 2. Gerekli Importları Yapın
 ```python
 from core.module import BaseModule
 from core.option import Option
 from rich import print
 ```
 
-### 3. Sınıfınızı Tanımlayın
+#### 3. Sınıfınızı Tanımlayın
 ```python
 class HelloWorld(BaseModule):
     def __init__(self):
@@ -55,7 +182,8 @@ class HelloWorld(BaseModule):
                 name="MESSAGE",
                 value="Merhaba Dünya!",
                 required=False,
-                description="Ekrana yazılacak mesaj"
+                description="Ekrana yazılacak mesaj",
+                choices=["Merhaba", "Selam", "Naber"] # Opsiyonel: Tamamlama önerileri
             )
         }
         
@@ -70,42 +198,45 @@ class HelloWorld(BaseModule):
         print(f"[bold green][+] Hedef:[/bold green] {target}")
         print(f"[bold blue][*] Mesaj:[/bold blue] {message}")
         
+        # True veya işlem sonucu log mesajı döndürün
         return True
 ```
 
 ---
 
-## 📚 BaseModule API Referansı
+### 📚 BaseModule API Referansı
 
-### Özellikler (Properties)
+#### Özellikler (Properties)
 *   **Name** (`str`): Modülün benzersiz adı (örn: `exploit/linux/ftp/vsftpd_234`).
 *   **Description** (`str`): `info` komutunda görünen açıklama.
 *   **Author** (`str`): Yazar adı.
 *   **Category** (`str`): Modül kategorisi (`exploit`, `scanner`, vb.).
 *   **Options** (`Dict[str, Option]`): Modülün kabul ettiği parametreler.
 
-### Metotlar
+#### Metotlar (Methods)
 *   **run(self, options: Dict[str, Any])**: Modül çalıştırıldığında (`run` komutu) çağrılan ana fonksiyon.
-    *   *Args:* `options`: Kullanıcının `set` komutuyla belirlediği değerleri içeren sözlük.
+    *   *Argümanlar:* `options`: Kullanıcının `set` komutuyla belirlediği değerleri içeren sözlük.
+    *   *Dönüş:* `Union[str, List[str]]` veya `True/False`.
 *   **check_required_options(self) -> bool**: Zorunlu parametrelerin doluluğunu kontrol eder. Otomatik çağrılır.
 
 ---
 
-## 🎛️ Option Sınıfı ve Kullanımı
+### 🎛️ Option Sınıfı ve Kullanımı
 
 Kullanıcıdan veri almak için `core.option.Option` sınıfı kullanılır.
 
-### Parametreler
+#### Parametreler
 *   **name** (`str`): Parametre adı (Büyük harf önerilir, örn: `RHOST`).
 *   **value** (`Any`): Varsayılan değer.
 *   **required** (`bool`): `True` ise kullanıcı değer girmeden modül çalışmaz.
 *   **description** (`str`): `show options` çıktısında görünen açıklama.
 *   **regex_check** (`bool`): Regex doğrulaması yapılsın mı?
 *   **regex** (`str`): Doğrulama paterni.
+*   **choices** (`List[Any]`): Otomatik tamamlama önerileri için opsiyonel liste.
 
 ---
 
-## 💡 İpuçları
+### 💡 İpuçları
 *   `self.Options` içinde tanımladığınız her anahtar (örn: `TARGET`), `run` metodunda `options.get("TARGET")` ile alınabilir.
 *   Çıktı vermek için `rich` kütüphanesinin `print` fonksiyonunu kullanın (renkli çıktılar için).
 *   Karmaşık işlemler için `templates/module_template.py` şablonunu kullanabilirsiniz.

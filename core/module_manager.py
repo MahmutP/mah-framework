@@ -3,6 +3,8 @@ from pathlib import Path
 import importlib.util # modülleri işlemek için
 from typing import Dict, Optional, Tuple
 from core.module import BaseModule # temel modül sınıfı
+from core.hooks import HookType
+from core.shared_state import shared_state
 from rich import print
 from core import logger
 
@@ -108,22 +110,64 @@ class ModuleManager:
         if not module.check_required_options():
             logger.warning(f"Modül çalıştırılamadı (eksik seçenekler): {module_path}")
             return False
+        
+        # PRE_MODULE_RUN hook'unu tetikle
+        if shared_state.plugin_manager:
+            shared_state.plugin_manager.trigger_hook(
+                HookType.PRE_MODULE_RUN,
+                module_path=module_path,
+                module=module
+            )
+        
         try:
             current_options = {name: opt.value for name, opt in module.get_options().items()}
             logger.info(f"Modül çalıştırılıyor: {module_path}")
             module.run(current_options)
+            
+            # POST_MODULE_RUN hook'unu tetikle (başarılı)
+            if shared_state.plugin_manager:
+                shared_state.plugin_manager.trigger_hook(
+                    HookType.POST_MODULE_RUN,
+                    module_path=module_path,
+                    module=module,
+                    success=True
+                )
             return True
         except TypeError as e:
             print(f"[bold red]Argüman hatası:[/bold red] Modüle yanlış seçenek değeri verildi.")
             logger.exception(f"Modül '{module_path}' çalıştırılırken TypeError")
+            # POST_MODULE_RUN hook'unu tetikle (hata)
+            if shared_state.plugin_manager:
+                shared_state.plugin_manager.trigger_hook(
+                    HookType.POST_MODULE_RUN,
+                    module_path=module_path,
+                    module=module,
+                    success=False
+                )
             return False
         except KeyboardInterrupt:
             print("\nModül çalışması kullanıcı tarafından kesildi.")
             logger.info(f"Modül '{module_path}' kullanıcı tarafından kesildi")
+            # POST_MODULE_RUN hook'unu tetikle (kesinti)
+            if shared_state.plugin_manager:
+                shared_state.plugin_manager.trigger_hook(
+                    HookType.POST_MODULE_RUN,
+                    module_path=module_path,
+                    module=module,
+                    success=False
+                )
             return False
         except Exception as e:
             print(f"[bold red]Kritik hata:[/bold red] '{module_path}' çalıştırılırken beklenmeyen hata.")
             logger.exception(f"Modül '{module_path}' çalıştırılırken beklenmeyen hata")
+            # POST_MODULE_RUN hook'unu tetikle (hata)
+            if shared_state.plugin_manager:
+                shared_state.plugin_manager.trigger_hook(
+                    HookType.POST_MODULE_RUN,
+                    module_path=module_path,
+                    module=module,
+                    success=False
+                )
             return False
 
     def get_module_info(self, module_path: str) -> Optional[Tuple[str, str, str, str]]: # modül bilgisi çağırmak için, birincil kullanımı search ve show komutu ile kullanılması

@@ -114,3 +114,9 @@ def critical(message):
     initialize_logging_if_needed()
     _logger.critical(message)
 
+
+def exception(message):
+    """Exception log yaz."""
+    initialize_logging_if_needed()
+    _logger.exception(message)
+

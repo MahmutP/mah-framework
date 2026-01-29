@@ -44,9 +44,9 @@ class Unset(Command):
             return []
         elif len(parts) == 2 and not text.endswith(' '): 
             current_arg = parts[1]
-            selected_module: BaseModule = shared_state.get_selected_module()
-            if selected_module:
-                all_option_names = list(selected_module.get_options().keys())
+            target_module: BaseModule = shared_state.get_selected_module()
+            if target_module:
+                all_option_names = list(target_module.get_options().keys())
                 return sorted([name for name in all_option_names if name.startswith(current_arg)])
             return []
         return []

@@ -36,7 +36,10 @@
 *   **150+** Commits
 *   **Advanced Logging** & **Resource Script Support**
 
-### 📦 Available Modules
+### � Development Note
+The initial version of this project was developed entirely without AI assistance. The current version has been evolved using the **Antigravity IDE**, where AI enhanced the project based on the original codebase I wrote.
+
+### �📦 Available Modules
 Mah Framework comes with built-in modules across various categories:
 *   **Exploit**: `vsftpd_234_backdoor` ...
 *   **Auxiliary**: `scanner/vsftpd_234_scanner`, `ip_info` ...
@@ -161,6 +164,9 @@ pytest                           # Run all tests
 *   **8+** Modül
 *   **150+** Commit
 *   **Gelişmiş Loglama** & **Resource Dosya Desteği**
+
+### 💡 Geliştirme Notu
+Bu projenin ilk hali tamamen yapay zeka desteği olmaksızın geliştirilmiştir. Şimdiki hali ise **Antigravity IDE** kullanılarak, benim yazdığım orijinal kodlar temel alınarak yapay zeka desteği ile geliştirilmiştir.
 
 ### 📦 Mevcut Modüller
 Mah Framework, çeşitli kategorilerde yerleşik modüllerle gelir:

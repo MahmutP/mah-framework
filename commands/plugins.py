@@ -66,7 +66,7 @@ class Plugins(Command):
             return
 
         print("\nPlugins")
-        print("=======")
+        print("-------")
         print()
         # Başlık satırları (veri satırlarıyla aynı genişlikte)
         print(f"   {'İsim':<24} {'Versiyon':<10} {'Durum':<8} Açıklama")

@@ -10,7 +10,7 @@ from rich import print
 class CommandManager:
     """Komut yönetim sınıfı
     """
-    def __init__(self, commands_dir="commands"):
+    def __init__(self, commands_dir: str = "commands") -> None:
         """init fonksiyon.
 
         Args:
@@ -20,7 +20,7 @@ class CommandManager:
         self.commands: Dict[str, Command] = {} 
         self.aliases: Dict[str, str] = {} 
         self._ensure_aliases_file() # aliases.json daki alias'lar 
-    def _ensure_aliases_file(self): # aliases.json import edilmesi ya da yenisi oluşturulmalı
+    def _ensure_aliases_file(self) -> None: # aliases.json import edilmesi ya da yenisi oluşturulmalı
         """Alias dosyası oluşturucu fonksiyon.
         """
         aliases_path = Path(ALIASES_FILE)
@@ -29,7 +29,7 @@ class CommandManager:
             with open(aliases_path, 'w', encoding='utf-8') as f:
                 json.dump({}, f, indent=4)
             print(f"Varsayılan alias dosyası oluşturuldu: {ALIASES_FILE}")
-    def load_aliases(self): # bütün aliasların bir havuza import edilmesi
+    def load_aliases(self) -> None: # bütün aliasların bir havuza import edilmesi
         """alias'ları yükleyen fonksiyon.
         """
         try:
@@ -45,7 +45,7 @@ class CommandManager:
         except json.JSONDecodeError as e:
             print(f"Alias dosyası okunurken hata oluştu '{ALIASES_FILE}': {e}. Dosya bozuk olabilir.")
             self.aliases.clear() 
-    def save_aliases(self):# alias kaydedece fonksiyon
+    def save_aliases(self) -> None:# alias kaydedece fonksiyon
         """aliasları kaydeden fonksiyon.
         """
         try:
@@ -98,7 +98,7 @@ class CommandManager:
             Dict[str, str]: alias'ların olduğu liste çıktısı.
         """
         return self.aliases
-    def load_commands(self): # komut yüklemek için
+    def load_commands(self) -> None: # komut yüklemek için
         """Komutları yüklemeye yarıyan ana fonksiyon.
         """
         self.commands.clear()
@@ -111,7 +111,7 @@ class CommandManager:
             command_name = file_path.stem  # Dosya adını uzantısız alır
             try: # obje olarak modül fonksiyonlarını çekmek için
                 spec = importlib.util.spec_from_file_location(command_name, str(file_path))
-                if spec is None:
+                if spec is None or spec.loader is None:
                     print(f"Komut spesifikasyonu alınamadı: {file_path}")
                     continue
                 command_module = importlib.util.module_from_spec(spec)
@@ -211,7 +211,7 @@ class CommandManager:
         Returns:
             Dict[str, Dict[str, Command]]: katagorize edilmiş komutların çıkışı.
         """
-        categorized_commands = {}
+        categorized_commands: Dict[str, Dict[str, Command]] = {}
         for cmd_name, cmd_obj in self.commands.items():
             category_display_name = cmd_obj.get_category_display_name()
             if category_display_name not in categorized_commands:

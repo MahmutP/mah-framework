@@ -224,6 +224,6 @@ import base64, binascii, zlib, gzip, io, sys, os; ENCODED_PAYLOAD='{encoded_data
                 return ""
 
         sifrelenmis = multi_encode(kodum)
-        full_path = create_single_line_decoder_file(sifrelenmis, options.get("file-name"))
+        full_path = create_single_line_decoder_file(sifrelenmis, str(options.get("file-name")))
         print("Payload bu dizine kaydedildi:")
         print(full_path)

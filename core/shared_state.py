@@ -23,6 +23,7 @@ class SharedState:
         self.command_manager = None
         self.module_manager = None
         self.console_instance = None
+        self.plugin_manager = None
 
     def get_selected_module(self):
         """Seçili modülü çağırmaya yarıyan fonksiyon

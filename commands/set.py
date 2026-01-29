@@ -3,6 +3,8 @@ from core.command import Command
 from core.shared_state import shared_state
 from core.module import BaseModule 
 from rich import  print
+import os
+
 class Set(Command):
     """option'ları değiştirmeye yarıyan komut.
 
@@ -28,6 +30,38 @@ class Set(Command):
         """
         super().__init__()
         self.completer_function = self._set_completer 
+    
+    def _get_path_completions(self, current_input: str, default_dir: str = ".") -> List[str]:
+        """Dosya yolu tamamlama mantığı."""
+        # Eğer input boşsa varsayılan dizini kullan
+        if not current_input:
+            path = default_dir
+        else:
+            path = current_input
+        
+        dirname, basename = os.path.split(path)
+        if not dirname: 
+            dirname = "."
+            
+        suggestions = []
+        try:
+            if os.path.isdir(dirname):
+                for name in os.listdir(dirname):
+                    if name.startswith(basename):
+                        full_path = os.path.join(dirname, name)
+                        # Eğer varsayılan dizin "." ise ve input boşsa "./" ekleme
+                        if dirname == ".": 
+                            full_path = name
+                        
+                        if os.path.isdir(os.path.join(dirname, name)):
+                            suggestions.append(full_path + "/")
+                        else:
+                            suggestions.append(full_path)
+        except Exception:
+            pass
+            
+        return sorted(suggestions)
+
     def _set_completer(self, text: str, word_before_cursor: str) -> List[str]:
         """set komutunun otomatik tamamlaması.
 
@@ -53,26 +87,44 @@ class Set(Command):
             current_arg = parts[1]
             return sorted([name for name in options.keys() if name.startswith(current_arg)])
         
-        # "set OPTION_NAME " yazıldığında o option'ın choices'larını göster
+        # "set OPTION_NAME " yazıldığında değeri tamamla
         elif len(parts) == 2 and text.endswith(' '): 
             option_name = parts[1]
             if option_name in options:
                 opt = options[option_name]
-                # Eğer choices tanımlanmışsa onları döndür
+                
+                # 1. Dosya yolu tamamlama kontrolü (WORDLIST, FILE, PATH içerenler)
+                if 'WORDLIST' in option_name.upper():
+                    return self._get_path_completions("", default_dir="config/wordlists/")
+                elif any(x in option_name.upper() for x in ['FILE', 'PATH']):
+                    return self._get_path_completions("")
+
+                # 2. Choices varsa
                 if opt.choices:
                     return list(opt.choices)
-                # Boolean değer gibi görünüyorsa true/false öner
+                    
+                # 3. Boolean tahmin
                 current_val = str(opt.value).lower()
                 if current_val in ['true', 'false', '0', '1', 'yes', 'no']:
                     return ['true', 'false']
             return []
         
-        # "set OPTION_NAME tr" yazıldığında choices'ları filtrele
+        # "set OPTION_NAME deger" yazıldığında
         elif len(parts) >= 3:
             option_name = parts[1]
             current_value = parts[2] if len(parts) > 2 else ""
+            
             if option_name in options:
                 opt = options[option_name]
+                
+                # 1. Dosya yolu tamamlama
+                if 'WORDLIST' in option_name.upper():
+                     # Eğer kullanıcı zaten bir yol yazmaya başladıysa (örn: conf...) normal tamamla
+                     # Ama henüz başlamadıysa default dizini kullan
+                     return self._get_path_completions(current_value, default_dir="config/wordlists/")
+                elif any(x in option_name.upper() for x in ['FILE', 'PATH']):
+                     return self._get_path_completions(current_value)
+
                 choices = []
                 if opt.choices:
                     choices = list(opt.choices)
@@ -102,6 +154,7 @@ class Set(Command):
         options = selected_module.get_options()
         if option_name in options:
             if selected_module.set_option_value(option_name, option_value):
+                # Çıktı formatı ve rengi düzeltildi
                 print(f"{option_name} => {option_value}")
                 return True
             else:

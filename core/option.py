@@ -2,7 +2,7 @@
 # framework içindeki yapılar için kullanacak bir kütüphane
 # asıl hedefi modüllere(modules dizinindeki) değiştirilebilir option eklemek birincil hedefi
 import re # doğrulama ve tanımlama için regex
-from typing import Any
+from typing import Any, Optional, List
 from core.cont import DEFAULT_REGEX # ön tanımlı regex
 from rich import print
 class Option:
@@ -10,7 +10,7 @@ class Option:
     """
     def __init__(self, name: str, value: Any, required: bool, description: str, 
                  regex_check: bool = False, regex: str = DEFAULT_REGEX,
-                 choices: list = None):
+                 choices: Optional[List[Any]] = None):
         """init fonksiyon.
 
         Args:

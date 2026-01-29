@@ -125,7 +125,7 @@ def _show_update_reminder(console):
         
         if should_remind:
             console.print()
-            console.print("[dim]💡 Tip: Güncellemeleri kontrol etmek için [bold]'checkupdate'[/bold] yazın[/dim]")
+            console.print("💡 Tip: Güncellemeleri kontrol etmek için [bold green]'checkupdate'[/bold green] yazın")
             
             # Tarihi güncelle
             reminder_file.parent.mkdir(parents=True, exist_ok=True)

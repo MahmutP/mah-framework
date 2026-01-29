@@ -19,7 +19,7 @@ from core.cont import DEFAULT_TERMINAL_WIDTH
 from core import logger
 from rich import print
 class Console:
-    def __init__(self, command_manager: CommandManager, module_manager: ModuleManager):
+    def __init__(self, command_manager: CommandManager, module_manager: ModuleManager) -> None:
         """init fonksiyon.
 
         Args:
@@ -108,7 +108,7 @@ class Console:
         # Komut çalıştırma sorumluluğu CommandManager'da
         self.command_manager.execute_command(processed_line)
 
-    def start(self):
+    def start(self) -> None:
         """Konsol arayüzü ana döngüsü.
         
         Bu metod sadece UI ile ilgilenir:
@@ -132,7 +132,7 @@ class Console:
                 print(f"[bold red]Beklenmedik hata:[/bold red] Konsol döngüsünde hata oluştu.")
                 logger.exception(f"Konsol döngüsünde beklenmedik hata")
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         """Konsolu güvenli bir şekilde kapatır.
         """
         if not self.running:  # Zaten kapatıldıysa tekrar çalıştırma

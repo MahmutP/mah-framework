@@ -34,8 +34,8 @@
 ### 📊 Project Statistics
 *   **16** Commands
 *   **11+** Modules
-*   **100%** Test Coverage (`14/14 passed`)
-*   **Advanced Logging** & **Resource Script Support**
+*   **100%** Test Coverage (`20/20 passed`)
+*   **Plugins System**, **Advanced Logging** & **Resource Script Support**
 
 ### � Development Note
 The initial version of this project was developed entirely without AI assistance. The current version has been evolved using the **Antigravity IDE**, where AI enhanced the project based on the original codebase I wrote.
@@ -46,6 +46,7 @@ Mah Framework comes with built-in modules across various categories:
 *   **Auxiliary**: `scanner/port_scanner`, `scanner/http_dir_buster`, `scanner/vsftpd_234_scanner` ...
 *   **Payloads**: `mahpreter/reverse_tcp` ...
 *   **Example**: `hash_generator`, `toplama` ...
+*   **Plugins**: `Audit Logger` (System Activity Monitoring) ...
 
 ### 📂 Project Structure
 
@@ -53,7 +54,8 @@ Mah Framework comes with built-in modules across various categories:
 mah-framework/
 ├── core/             # Core framework engine (managers, console, logger)
 ├── commands/         # Standard CLI commands (e.g., help, exit)
-├── modules/          # External modules and plugins
+├── modules/          # External modules
+├── plugins/          # 🔌 System plugins (NEW)
 ├── config/           # Configuration files and logs
 │   └── logs/         # Application log files
 ├── main.py           # Application entry point
@@ -147,6 +149,13 @@ mahmut > checkupdate
 ```
 > ⚠️ **Important:** Run `checkupdate` periodically to ensure you're using the latest version.
 
+### 🔌 Plugin System
+Mah Framework supports plugins to extend functionality.
+```bash
+mahmut > plugins list
+mahmut > plugins enable "Audit Logger"
+```
+
 ### 🤝 Contributing
 Contributions are welcome! Please fork the repository, create a feature branch, and submit a Pull Request.
 
@@ -180,8 +189,8 @@ pytest                           # Run all tests
 ### 📊 Proje İstatistikleri
 *   **16** Komut
 *   **11+** Modül
-*   **%100** Test Kapsamı (`14/14 passed`)
-*   **Gelişmiş Loglama** & **Resource Dosya Desteği**
+*   **%100** Test Kapsamı (`20/20 passed`)
+*   **Plugin Sistemi**, **Gelişmiş Loglama** & **Resource Dosya Desteği**
 
 ### 💡 Geliştirme Notu
 Bu projenin ilk hali tamamen yapay zeka desteği olmaksızın geliştirilmiştir. Şimdiki hali ise **Antigravity IDE** kullanılarak, benim yazdığım orijinal kodlar temel alınarak yapay zeka desteği ile geliştirilmiştir.
@@ -192,6 +201,7 @@ Mah Framework, çeşitli kategorilerde yerleşik modüllerle gelir:
 *   **Auxiliary**: `scanner/port_scanner`, `scanner/http_dir_buster`, `scanner/vsftpd_234_scanner` ...
 *   **Payloads**: `mahpreter/reverse_tcp` ...
 *   **Example**: `hash_generator`, `toplama` ...
+*   **Plugins**: `Audit Logger` (Sistem Aktivite İzleme) ...
 
 ### 📂 Proje Yapısı
 
@@ -199,7 +209,8 @@ Mah Framework, çeşitli kategorilerde yerleşik modüllerle gelir:
 mah-framework/
 ├── core/             # Framework çekirdek dosyaları (yöneticiler, konsol, logger)
 ├── commands/         # Standart CLI komutları (örn: help, exit)
-├── modules/          # Harici modüller ve eklentiler
+├── modules/          # Harici modüller
+├── plugins/          # 🔌 Sistem pluginleri (YENİ)
 ├── config/           # Ayar dosyaları ve loglar
 │   └── logs/         # Uygulama logları
 ├── main.py           # Uygulamanın giriş noktası
@@ -292,6 +303,13 @@ En son özellikleri ve güvenlik yamalarını almak için düzenli olarak günce
 mahmut > checkupdate
 ```
 > ⚠️ **Önemli:** En son sürümü kullandığınızdan emin olmak için `checkupdate` komutunu düzenli olarak çalıştırın.
+
+### 🔌 Plugin Sistemi
+Mah Framework, işlevselliği artırmak için plugin desteği sunar.
+```bash
+mahmut > plugins list
+mahmut > plugins enable "Audit Logger"
+```
 
 ### 🤝 Katkıda Bulunma
 Bu proje açık kaynaklıdır ve katkılara açıktır. Lütfen projeyi fork'layın, yeni bir branch oluşturun ve Pull Request gönderin.

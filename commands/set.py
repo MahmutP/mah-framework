@@ -95,7 +95,11 @@ class Set(Command):
                 
                 # 1. Dosya yolu tamamlama kontrolü (WORDLIST, FILE, PATH içerenler)
                 if 'WORDLIST' in option_name.upper():
-                    return self._get_path_completions("", default_dir="config/wordlists/")
+                    # Modüle göre varsayılan dizin belirleme
+                    default_wordlist_dir = "config/wordlists/"
+                    if selected_module and "subdomain" in selected_module.Name.lower():
+                         default_wordlist_dir = "config/wordlists/subdomains/"
+                    return self._get_path_completions("", default_dir=default_wordlist_dir)
                 elif any(x in option_name.upper() for x in ['FILE', 'PATH']):
                     return self._get_path_completions("")
 
@@ -119,9 +123,14 @@ class Set(Command):
                 
                 # 1. Dosya yolu tamamlama
                 if 'WORDLIST' in option_name.upper():
-                     # Eğer kullanıcı zaten bir yol yazmaya başladıysa (örn: conf...) normal tamamla
+                     # Modüle göre varsayılan dizin belirleme
+                     default_wordlist_dir = "config/wordlists/"
+                     if selected_module and "subdomain" in selected_module.Name.lower():
+                         default_wordlist_dir = "config/wordlists/subdomains/"
+                         
+                     # Eğer kullanıcı zaten bir yol yazmaya başladıysa normal tamamla
                      # Ama henüz başlamadıysa default dizini kullan
-                     return self._get_path_completions(current_value, default_dir="config/wordlists/")
+                     return self._get_path_completions(current_value, default_dir=default_wordlist_dir)
                 elif any(x in option_name.upper() for x in ['FILE', 'PATH']):
                      return self._get_path_completions(current_value)
 

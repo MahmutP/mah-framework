@@ -93,13 +93,13 @@ class Set(Command):
             if option_name in options:
                 opt = options[option_name]
                 
-                # 1. Dosya yolu tamamlama kontrolü (WORDLIST, FILE, PATH içerenler)
+                # 1. Dosya yolu tamamlama önceliği: Option içinde tanımlı dizin
+                if hasattr(opt, "completion_dir") and opt.completion_dir:
+                    return self._get_path_completions("", default_dir=opt.completion_dir)
+
+                # 2. İsim bazlı tahmin (Fallback)
                 if 'WORDLIST' in option_name.upper():
-                    # Modüle göre varsayılan dizin belirleme
-                    default_wordlist_dir = "config/wordlists/"
-                    if selected_module and "subdomain" in selected_module.Name.lower():
-                         default_wordlist_dir = "config/wordlists/subdomains/"
-                    return self._get_path_completions("", default_dir=default_wordlist_dir)
+                    return self._get_path_completions("", default_dir="config/wordlists/")
                 elif any(x in option_name.upper() for x in ['FILE', 'PATH']):
                     return self._get_path_completions("")
 
@@ -122,15 +122,12 @@ class Set(Command):
                 opt = options[option_name]
                 
                 # 1. Dosya yolu tamamlama
+                # 1. Dosya yolu tamamlama
+                if hasattr(opt, "completion_dir") and opt.completion_dir:
+                    return self._get_path_completions(current_value, default_dir=opt.completion_dir)
+                
                 if 'WORDLIST' in option_name.upper():
-                     # Modüle göre varsayılan dizin belirleme
-                     default_wordlist_dir = "config/wordlists/"
-                     if selected_module and "subdomain" in selected_module.Name.lower():
-                         default_wordlist_dir = "config/wordlists/subdomains/"
-                         
-                     # Eğer kullanıcı zaten bir yol yazmaya başladıysa normal tamamla
-                     # Ama henüz başlamadıysa default dizini kullan
-                     return self._get_path_completions(current_value, default_dir=default_wordlist_dir)
+                     return self._get_path_completions(current_value, default_dir="config/wordlists/")
                 elif any(x in option_name.upper() for x in ['FILE', 'PATH']):
                      return self._get_path_completions(current_value)
 

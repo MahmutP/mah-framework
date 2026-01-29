@@ -6,13 +6,15 @@
 
 ## 🇺🇸 English Developer Guide
 
-This guide is designed for developers who want to create new modules for **Mah Framework**.
+This guide is designed for developers who want to create new modules and plugins for **Mah Framework**.
 
 ### 📌 Table of Contents
+
 1. [Module Structure](#module-structure)
 2. [Step-by-Step Module Creation](#step-by-step-module-creation)
 3. [BaseModule API Reference](#basemodule-api-reference)
 4. [Option Class Usage](#option-class-usage)
+5. [Plugin Development](#plugin-development)
 
 ---
 
@@ -115,10 +117,57 @@ The `core.option.Option` class is used to receive input from the user.
 
 ---
 
-### 💡 Tips
-*   Every key defined in `self.Options` (e.g., `TARGET`) can be retrieved in the `run` method via `options.get("TARGET")`.
-*   Use the `print` function from the `rich` library for colorful output.
-*   You can use `templates/module_template.py` as a starting point for complex operations.
+### 🧩 Plugin Development
+
+Plugins extend the framework with persistent functionality that reacts to events, unlike modules which perform a single task.
+
+#### What is a Plugin?
+
+*   **Difference from Modules**: Modules are "tools" (like a hammer), Plugins are "extensions" (like a surveillance camera).
+*   **Hook/Event System**: Plugins register "hooks" (listeners). When an event occurs (e.g., startup, command execution), the framework notifies all registered plugins.
+
+#### Creating a New Plugin
+
+1.  **Copy Template**: Copy `templates/plugin_template.py` to `plugins/my_plugin.py`.
+2.  **Define Class**: Inherit from `BasePlugin` and set properties (Name, Version, Enabled).
+3.  **Implement Hooks**: Return dictionary map in `get_hooks()` and write your handler methods.
+4.  **Save**: Save effectively in `plugins/` directory.
+
+#### Available Hooks
+
+| Hook Name          | Triggered When...                 | Scenario Example                             |
+| :----------------- | :-------------------------------- | :------------------------------------------- |
+| `ON_STARTUP`       | Framework starts                  | Database connection, Welcome message         |
+| `ON_SHUTDOWN`      | Framework exits                   | Cleanup, Save state, Bye message             |
+| `PRE_COMMAND`      | Before executing a command        | Command filtering, Auditing, Modification    |
+| `POST_COMMAND`     | After executing a command         | Logging result, Notification                 |
+| `PRE_MODULE_RUN`   | Before running a module           | Permission check, Resource allocation        |
+| `POST_MODULE_RUN`  | After running a module            | Report generation, Success notification      |
+| `ON_MODULE_SELECT` | When a module is selected (`use`) | specific setup for a module type             |
+| `ON_OPTION_SET`    | When an option is changed (`set`) | Validation, Auto-configure dependent options |
+
+#### Example Plugin (Simple Logger)
+
+```python
+from core.plugin import BasePlugin
+from core.hooks import HookType
+from datetime import datetime
+
+class SimpleLogger(BasePlugin):
+    Name = "Simple Logger"
+    Description = "Logs module execution times"
+    Version = "1.0"
+    
+    def get_hooks(self):
+        return {
+            # Listen for module run completion
+            HookType.POST_MODULE_RUN: self.on_module_finish
+        }
+    
+    def on_module_finish(self, module_path, success, **kwargs):
+        status = "SUCCESS" if success else "FAILED"
+        print(f"[{datetime.now()}] Module {module_path} finished with status: {status}")
+```
 
 <br><br>
 
@@ -127,13 +176,15 @@ The `core.option.Option` class is used to receive input from the user.
 
 ## 🇹🇷 Türkçe Geliştirici Rehberi
 
-Bu rehber, **Mah Framework** için yeni modüller geliştirmek isteyenler için hazırlanmıştır.
+Bu rehber, **Mah Framework** için yeni modüller ve pluginler geliştirmek isteyenler için hazırlanmıştır.
 
 ### 📌 İçindekiler
+
 1. [Modül Yapısı](#modül-yapısı)
 2. [Adım Adım Modül Oluşturma](#adım-adım-modül-oluşturma)
 3. [BaseModule API Referansı](#basemodule-api-referansı)
 4. [Option Sınıfı ve Kullanımı](#option-sınıfı-ve-kullanımı)
+5. [Plugin Geliştirme](#plugin-geliştirme)
 
 ---
 
@@ -222,7 +273,6 @@ class HelloWorld(BaseModule):
 ---
 
 ### 🎛️ Option Sınıfı ve Kullanımı
-
 Kullanıcıdan veri almak için `core.option.Option` sınıfı kullanılır.
 
 #### Parametreler
@@ -236,7 +286,59 @@ Kullanıcıdan veri almak için `core.option.Option` sınıfı kullanılır.
 
 ---
 
-### 💡 İpuçları
-*   `self.Options` içinde tanımladığınız her anahtar (örn: `TARGET`), `run` metodunda `options.get("TARGET")` ile alınabilir.
-*   Çıktı vermek için `rich` kütüphanesinin `print` fonksiyonunu kullanın (renkli çıktılar için).
-*   Karmaşık işlemler için `templates/module_template.py` şablonunu kullanabilirsiniz.
+### 🧩 Plugin Geliştirme
+
+Pluginler, olay tabanlı çalışarak framework'ün yeteneklerini genişletir. Modüllerden farklı olarak süreklidir ve belirli bir göreve değil, genel sisteme odaklanır.
+
+#### 1. Plugin Nedir?
+
+*   **Modül vs Plugin Farkı**: Modüller bir kez çalıştırılıp biten "araçlardır" (tarama, saldırı vb.). Pluginler ise arka planda çalışan ve sistemi dinleyen "uzantılardır" (loglama, bildirim vb.).
+*   **Hook/Event Sistemi**: Pluginler "kanca" (hook) yöntemiyle sisteme tutunur. Belirli bir olay gerçekleştiğinde (örn: komut girildiğinde), framework bu olayı dinleyen tüm pluginlere haber verir.
+
+#### 2. Yeni Plugin Oluşturma
+
+1.  **Şablonu Kopyalayın**: `templates/plugin_template.py` dosyasını `plugins/` klasörüne (örn: `plugins/takip_eklentisi.py`) kopyalayın.
+2.  **Sınıfı Düzenleyin**: Sınıf adını değiştirin ve özelliklerini (Name, Description vb.) doldurun.
+3.  **Handler Yazın**: Dinlemek istediğiniz olaylar için metodlar (handler) yazın.
+4.  **Kaydedin**: Dosyayı kaydedip framework'ü yeniden başlatın.
+
+#### 3. Kullanılabilir Hook'lar
+
+| Hook Türü          | Tetiklenme Zamanı             | Örnek Senaryo                                 |
+| :----------------- | :---------------------------- | :-------------------------------------------- |
+| `ON_STARTUP`       | Framework açıldığında         | Veritabanı bağlantısı kurma, Karşılama mesajı |
+| `ON_SHUTDOWN`      | Framework kapanırken          | Geçici dosyaları temizleme, Oturumu kaydetme  |
+| `PRE_COMMAND`      | Komut çalışmadan hemen önce   | Komut filtreleme, Yasaklı komut kontrolü      |
+| `POST_COMMAND`     | Komut çalıştıktan hemen sonra | Komut sonucunu loglama, Bildirim gönderme     |
+| `PRE_MODULE_RUN`   | Modül çalışmadan hemen önce   | Yetki kontrolü, Hedef doğrulama               |
+| `POST_MODULE_RUN`  | Modül çalıştıktan sonra       | Rapor oluşturma, Sonucu veritabanına yazma    |
+| `ON_MODULE_SELECT` | Modül seçildiğinde (`use`)    | Modüle özel ayarları yükleme                  |
+| `ON_OPTION_SET`    | Seçenek değiştiğinde (`set`)  | Girilen değerin gelişmiş doğrulaması          |
+
+#### 4. Örnek Plugin (Basit Loglayıcı)
+
+Aşağıda, her modül çalıştırıldığında bunu ekrana yazan basit bir plugin örneği verilmiştir.
+
+```python
+from core.plugin import BasePlugin
+from core.hooks import HookType
+from datetime import datetime
+
+class BasitLoglayici(BasePlugin):
+    Name = "Basit Loglayıcı"
+    Description = "Modül çalışma zamanlarını ekrana basar"
+    Version = "1.0"
+    Enabled = True  # Varsayılan olarak aktif
+    
+    def get_hooks(self):
+        # Hangi olayları dinleyeceğimizi belirtiyoruz
+        return {
+            HookType.POST_MODULE_RUN: self.modul_tamamlandi
+        }
+    
+    def modul_tamamlandi(self, module_path, success, **kwargs):
+        # Bu metod, modül çalışması bitince otomatik çağrılır
+        durum = "BAŞARILI" if success else "BAŞARISIZ"
+        zamani = datetime.now().strftime("%H:%M:%S")
+        print(f"[{zamani}] Modül {module_path} durumu: {durum}")
+```

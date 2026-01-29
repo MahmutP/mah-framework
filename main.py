@@ -4,17 +4,21 @@ from pathlib import Path
 from core.shared_state import shared_state
 from core.command_manager import CommandManager
 from core.module_manager import ModuleManager
+from core.plugin_manager import PluginManager
+from core.hooks import HookType
 from core.console import Console as AppConsole
 from core.cont import DEFAULT_TERMINAL_WIDTH, LEFT_PADDING, COL_SPACING
 from core import logger
 from core.banner import print_banner
+from rich import print as rprint
 
-def print_startup_info(command_manager: CommandManager, module_manager: ModuleManager):
+def print_startup_info(command_manager: CommandManager, module_manager: ModuleManager, plugin_count: int = 0):
     """Startup bilgisi basmaya yarıyan fonksiyon (Metasploit tarzı).
 
     Args:
         command_manager (CommandManager): Komut yöneticisi
         module_manager (ModuleManager): Modül yöneticisi.
+        plugin_count (int): Yüklü plugin sayısı.
     """
     from rich.console import Console
     
@@ -73,8 +77,10 @@ def print_startup_info(command_manager: CommandManager, module_manager: ModuleMa
     except Exception:
         version_line = "[bold cyan]       =[ Mah Framework ][/bold cyan]"
     
-    # Satır 1: Toplam modül sayısı
+    # Satır 1: Toplam modül, komut ve plugin sayısı
     line1 = f"[green]{total_modules}[/green] modules - [yellow]{total_commands}[/yellow] commands"
+    if plugin_count > 0:
+        line1 += f" - [magenta]{plugin_count}[/magenta] plugins"
     
     # Satır 2+: Her kategori dinamik olarak
     category_parts = []
@@ -162,12 +168,22 @@ def main():
     shared_state.module_manager = module_manager
     command_manager.load_commands()
     module_manager.load_modules()
+    
+    # Plugin Manager başlat
+    plugin_manager = PluginManager()
+    plugin_manager.load_plugins()
+    shared_state.plugin_manager = plugin_manager
+    
     console = AppConsole(command_manager, module_manager)
     shared_state.console_instance = console
     
     # Sessiz mod değilse banner ve bilgi göster
     if not args.quiet:
-        print_startup_info(command_manager, module_manager)
+        plugin_count = len(plugin_manager.get_enabled_plugins())
+        print_startup_info(command_manager, module_manager, plugin_count)
+    
+    # ON_STARTUP hook'unu tetikle
+    plugin_manager.trigger_hook(HookType.ON_STARTUP)
     
     # Resource dosyası belirtildiyse çalıştır
     if args.resource:
@@ -185,14 +201,14 @@ def main():
     
     # -x ile komut belirtildiyse çalıştır
     if args.execute:
-        print(f"\n[bold cyan]⚡ Komutlar çalıştırılıyor...[/bold cyan]\n")
+        rprint(f"\n[bold cyan]⚡ Komutlar çalıştırılıyor...[/bold cyan]\n")
         commands = args.execute.split(";")
         for cmd_line in commands:
             cmd_line = cmd_line.strip()
             if not cmd_line:
                 continue
             
-            print(f"[bold yellow]>[/bold yellow] {cmd_line}")
+            rprint(f"[bold yellow]>[/bold yellow] {cmd_line}")
             
             parts = cmd_line.split()
             if not parts:
@@ -205,7 +221,7 @@ def main():
             resolved_name, _ = command_manager.resolve_command(command_name)
             
             if not resolved_name:
-                print(f"[bold red]  ✗ Bilinmeyen komut: {command_name}[/bold red]")
+                rprint(f"[bold red]  ✗ Bilinmeyen komut: {command_name}[/bold red]")
                 continue
             
             # Komutu al ve çalıştır
@@ -214,9 +230,9 @@ def main():
                 try:
                     cmd_obj.execute(*command_args)
                 except Exception as e:
-                    print(f"[bold red]  ✗ Hata: {e}[/bold red]")
+                    rprint(f"[bold red]  ✗ Hata: {e}[/bold red]")
             else:
-                print(f"[bold red]  ✗ Komut objesi bulunamadı: {resolved_name}[/bold red]")
+                rprint(f"[bold red]  ✗ Komut objesi bulunamadı: {resolved_name}[/bold red]")
         
         print()
     

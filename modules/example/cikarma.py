@@ -36,6 +36,6 @@ class cikarma(BaseModule):
         val1 = options.get("first_number")
         val2 = options.get("second_number")
         if val1 and val2:
-             print(f"{val1} - {val2} = {int(val1)-int(val2)}")
+            print(f"{val1} - {val2} = {int(val1)-int(val2)}")
         else:
-             print("Lütfen tüm sayıları giriniz.")
+            print("Lütfen tüm sayıları giriniz.")

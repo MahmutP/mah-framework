@@ -16,6 +16,7 @@ from core.module_manager import ModuleManager # modül yönetimi için
 from core.completer import CLICompleter # prompt içi komut ve komut içi otomatik tamamlaması
 from core.validator import CLIValidator # validate lokal kütüphanesi
 from core.cont import DEFAULT_TERMINAL_WIDTH
+from core.hooks import HookType
 from core import logger
 from rich import print
 class Console:
@@ -137,5 +138,10 @@ class Console:
         if not self.running:  # Zaten kapatıldıysa tekrar çalıştırma
             return
         self.running = False
+        
+        # ON_SHUTDOWN hook'unu tetikle
+        if shared_state.plugin_manager:
+            shared_state.plugin_manager.trigger_hook(HookType.ON_SHUTDOWN)
+        
         logger.info("Konsol kapatılıyor")
         print("Konsol kapatıldı.")

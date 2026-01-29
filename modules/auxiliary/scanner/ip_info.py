@@ -10,7 +10,7 @@ class IPInfoModule(BaseModule):
     
     Name: str = "IP Address Info"
     Description: str = "Displays local (LAN) and public (WAN) IP addresses."
-    Author: str = "Antigravity"
+    Author: str = "Mahmut P."
     Category: str = "auxiliary/scanner"
     
     def __init__(self):

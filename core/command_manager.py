@@ -175,6 +175,8 @@ class CommandManager:
         args = parts[1].split() if len(parts) > 1 else []
         resolved_command_name, is_alias = self.resolve_command(command_name)
         if resolved_command_name:
+            if shared_state.is_recording and not resolved_command_name.strip().lower().startswith("record"):
+                shared_state.recorded_commands.append(command_line)
             if is_alias:# alias mı kontrol edilecek
                 full_target_command_line = self.aliases[command_name]
                 if len(parts) > 1:

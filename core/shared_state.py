@@ -24,6 +24,8 @@ class SharedState:
         self.module_manager = None
         self.console_instance = None
         self.plugin_manager = None
+        self.is_recording = False
+        self.recorded_commands = []
 
     def get_selected_module(self):
         """Seçili modülü çağırmaya yarıyan fonksiyon

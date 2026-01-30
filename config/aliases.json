@@ -6,5 +6,6 @@
     "exploit": "run",
     "execute": "run",
     "cls": "clear",
-    "!": "shell"
+    "!": "shell",
+    "makro": "record"
 }

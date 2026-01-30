@@ -11,7 +11,9 @@ class Plugins(Command):
     Description = "Plugin yönetim komutu"
     Category = "core"
     Usage = "plugins [list|enable|disable|info] [plugin_adı]"
-    completer_function = True  # Otomatik tamamlama aktif
+    def __init__(self):
+        super().__init__()
+        self.completer_function = self.get_completions # Otomatik tamamlama aktif
     Examples = [
         "plugins list",
         "plugins info 'Audit Logger'",

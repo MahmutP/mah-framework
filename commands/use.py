@@ -3,6 +3,8 @@ from core.command import Command
 from rich import  print
 from core.shared_state import shared_state
 from core.module_manager import ModuleManager 
+from prompt_toolkit.completion import Completion
+
 class Use(Command):
     """Modül seçmeye yarıyan komut.
 
@@ -28,7 +30,7 @@ class Use(Command):
         """
         super().__init__()
         self.completer_function = self._use_completer 
-    def _use_completer(self, text: str, word_before_cursor: str) -> List[str]:
+    def _use_completer(self, text: str, word_before_cursor: str) -> List[Any]:
         """use komutu otomatik tamamlaması.
 
         Args:
@@ -49,7 +51,10 @@ class Use(Command):
             manager: ModuleManager = shared_state.module_manager
             if manager:
                 all_module_paths = list(manager.get_all_modules().keys())
-                return sorted([path for path in all_module_paths if path.startswith(current_arg)])
+                matches = sorted([path for path in all_module_paths if path.startswith(current_arg)])
+                # Completion objesi döndürerek start_position'ı manuel ayarlıyoruz.
+                # Böylece "payloads/py" yazınca sadece "py" değil "payloads/py" tamamlanıyor.
+                return [Completion(path, start_position=-len(current_arg)) for path in matches]
             return []
         return []
     def execute(self, *args: str, **kwargs: Any) -> bool:

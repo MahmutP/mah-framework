@@ -116,7 +116,9 @@ def _show_update_reminder(console):
     import json
     from datetime import datetime, timedelta
     
-    reminder_file = Path(__file__).parent / "config" / "last_update_reminder.txt"
+    # Use absolute path based on this file's location
+    base_dir = Path(__file__).parent.resolve()
+    reminder_file = base_dir / "config" / "last_update_reminder.txt"
     reminder_days = 7  # Kaç günde bir hatırlat
     
     try:
@@ -155,6 +157,9 @@ def main():
                         help="Başlangıçta çalıştırılacak komutlar (noktalı virgül ile ayır)")
     args = parser.parse_args()
     
+    # Base directory determination for absolute paths
+    base_dir = Path(__file__).parent.resolve()
+    
     # Logger'ı başlat
     logger.setup_logger()
     logger.info("Uygulama başlatılıyor...")
@@ -162,15 +167,17 @@ def main():
     if not args.quiet:
         print("Uygulama başlatılıyor...")
     
-    command_manager = CommandManager()
-    module_manager = ModuleManager()
+    # Initialize managers with absolute paths
+    command_manager = CommandManager(commands_dir=str(base_dir / "commands"))
+    module_manager = ModuleManager(modules_dir=str(base_dir / "modules"))
+    
     shared_state.command_manager = command_manager
     shared_state.module_manager = module_manager
     command_manager.load_commands()
     module_manager.load_modules()
     
     # Plugin Manager başlat
-    plugin_manager = PluginManager()
+    plugin_manager = PluginManager(plugins_dir=str(base_dir / "plugins"))
     plugin_manager.load_plugins()
     shared_state.plugin_manager = plugin_manager
     
@@ -187,7 +194,6 @@ def main():
     
     # Resource dosyası belirtildiyse çalıştır
     if args.resource:
-        from pathlib import Path
         resource_path = Path(args.resource)
         if resource_path.exists():
             # Resource komutunu al ve çalıştır

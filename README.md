@@ -134,6 +134,14 @@ python main.py -r attack.rc
 mahmut > resource attack.rc
 ```
 
+**Macro Recording:**
+Record your commands to create a resource file automatically:
+```bash
+mahmut > record start           # Start recording
+mahmut > show options           # Run commands...
+mahmut > record stop my_macro   # Stop and save to my_macro.rc
+```
+
 **Maintenance:**
 Use the included script to clean up `__pycache__` directories and old log files:
 ```bash
@@ -153,7 +161,7 @@ mahmut > checkupdate
 Mah Framework supports plugins to extend functionality.
 ```bash
 mahmut > plugins list
-mahmut > plugins enable "Audit Logger"
+mahmut > plugins enable audit_logger
 ```
 
 ### 🤝 Contributing
@@ -289,6 +297,14 @@ python main.py -r saldiri.rc
 mahmut > resource saldiri.rc
 ```
 
+**Makro Kayıt (Macro Recording):**
+Yaptığınız işlemleri kaydedip otomatik olarak `.rc` dosyasına dönüştürün:
+```bash
+mahmut > record start           # Kaydı başlat
+mahmut > show options           # Komutları çalıştır...
+mahmut > record stop makrom     # Durdur ve makrom.rc olarak kaydet
+```
+
 **Bakım:**
 Geliştirme artığı `__pycache__` klasörlerini ve eski log dosyalarını temizlemek için:
 ```bash
@@ -308,7 +324,7 @@ mahmut > checkupdate
 Mah Framework, işlevselliği artırmak için plugin desteği sunar.
 ```bash
 mahmut > plugins list
-mahmut > plugins enable "Audit Logger"
+mahmut > plugins enable audit_logger
 ```
 
 ### 🤝 Katkıda Bulunma

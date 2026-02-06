@@ -125,7 +125,9 @@ class CheckUpdateCommand(Command):
             diff = remote_commits - local_commits
             print(f"[bold yellow]⚠ Güncelleme mevcut![/bold yellow]")
             print(f"    {diff} yeni commit var.")
-            print(f"    Güncellemek için: [bold]git pull[/bold]")
+            print(f"    Güncellemek için:")
+            print(f"    1. [bold]git pull[/bold]")
+            print(f"    2. [bold]pip3 install -r requirements.txt[/bold]")
             logger.info(f"Güncelleme mevcut: {local_version} → {remote_version}")
         elif remote_commits < local_commits:
             diff = local_commits - remote_commits

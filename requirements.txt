@@ -13,3 +13,4 @@ loguru==0.7.3
 pytest
 mypy
 requests
+beautifulsoup4

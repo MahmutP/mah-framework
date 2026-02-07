@@ -89,9 +89,9 @@ class GitHubTracker(BaseModule):
             else:
                 info['email'] = None
 
-            # Creation Date & Last Activity (Harder to scrape reliably without auth, skipping for basic implementation or using simple heuristics if possible)
-            # For now, let's stick to visible profile fields.
-
+            # Creation Date & Last Activity (Harder to scrape reliably without auth/JS, skipping for basic implementation)
+            # These will be implemented in Phase 7 with API integration.
+            
             return info
 
         except Exception as e:

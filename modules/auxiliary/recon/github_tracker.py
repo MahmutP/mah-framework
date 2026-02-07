@@ -9,7 +9,7 @@ import time
 class GitHubTracker(BaseModule):
     def __init__(self):
         self.Name = "auxiliary/recon/github_tracker"
-        self.Description = "GitHub kullanıcısının takipçi ve takip edilenlerini çeker."
+        self.Description = "GitHub kullanıcısının profil, takipçi ve takip edilenlerini çeker."
         self.Author = "Mahmut P."
         self.Category = "auxiliary/recon"
         
@@ -25,7 +25,15 @@ class GitHubTracker(BaseModule):
                 name="OUTPUT",
                 value="",
                 required=False,
-                description="Sonuçların kaydedileceği dosya yolu (örn: sonuclar.txt)"
+                description="Sonuçların kaydedileceği dosya yolu (örn: sonuclar.txt)",
+                completion_dir="."
+            ),
+            "PROFILE_INFO": Option(
+                name="PROFILE_INFO",
+                value="True",
+                required=False,
+                description="Profil bilgilerini göster/gizle (True/False)",
+                choices=["True", "False"]
             )
         }
         super().__init__()
@@ -33,7 +41,62 @@ class GitHubTracker(BaseModule):
     def get_username(self, input_str):
         if "github.com/" in input_str:
             return input_str.split("github.com/")[-1].strip("/")
-        return input_str
+        return input_str.strip()
+
+    def fetch_profile_info(self, username):
+        url = f"https://github.com/{username}"
+        try:
+            response = requests.get(url)
+            if response.status_code != 200:
+                return None
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            info = {}
+            
+            # Bio
+            bio_div = soup.select_one('div.p-note.user-profile-bio > div')
+            info['bio'] = bio_div.get_text(strip=True) if bio_div else None
+            
+            # Location
+            location_li = soup.select_one('li[itemprop="homeLocation"]')
+            info['location'] = location_li.select_one('span.p-label').get_text(strip=True) if location_li else None
+            
+            # Company
+            company_li = soup.select_one('li[itemprop="worksFor"]')
+            info['company'] = company_li.select_one('span.p-org').get_text(strip=True) if company_li else None
+            
+            # Website
+            website_li = soup.select_one('li[itemprop="url"]')
+            if website_li:
+                link = website_li.select_one('a')
+                info['website'] = link.get('href') if link else None
+            else:
+                info['website'] = None
+
+            # Twitter
+            twitter_li = soup.select_one('li[itemprop="social"]')
+            if twitter_li:
+                link = twitter_li.select_one('a[href*="twitter.com"]')
+                info['twitter'] = link.get_text(strip=True) if link else None
+            else:
+                info['twitter'] = None
+            
+            # Email (public)
+            email_li = soup.select_one('li[itemprop="email"]')
+            if email_li:
+                link = email_li.select_one('a')
+                info['email'] = link.get_text(strip=True) if link else None
+            else:
+                info['email'] = None
+
+            # Creation Date & Last Activity (Harder to scrape reliably without auth, skipping for basic implementation or using simple heuristics if possible)
+            # For now, let's stick to visible profile fields.
+
+            return info
+
+        except Exception as e:
+            print(f"Hata: {e}")
+            return None
 
     def fetch_users(self, username, relation_type):
         users = []
@@ -90,10 +153,16 @@ class GitHubTracker(BaseModule):
         console = Console()
         username_input = options.get("USERNAME")
         output_file = options.get("OUTPUT")
+        show_profile = options.get("PROFILE_INFO")
         
         target_user = self.get_username(username_input)
         
         console.print(f"[bold green][+] Hedef Kullanıcı:[/bold green] {target_user}")
+        
+        if show_profile == "True":
+            profile_info = self.fetch_profile_info(target_user)
+            if profile_info:
+                self.print_profile_info(target_user, profile_info, console)
         
         following = self.fetch_users(target_user, "following")
         followers = self.fetch_users(target_user, "followers")
@@ -104,9 +173,24 @@ class GitHubTracker(BaseModule):
         
         # Dosyaya Kaydet
         if output_file:
-            self.save_to_file(target_user, following, followers, output_file, console)
+            self.save_to_file(target_user, following, followers, output_file, console, profile_info if show_profile == "True" else None)
 
         return True
+
+    def print_profile_info(self, username, info, console):
+        table = Table(title=f"Profil Bilgileri: {username}")
+        table.add_column("Özellik", style="cyan")
+        table.add_column("Değer", style="white")
+        
+        if info.get('bio'): table.add_row("Bio", info['bio'])
+        if info.get('location'): table.add_row("Konum", info['location'])
+        if info.get('company'): table.add_row("Şirket", info['company'])
+        if info.get('website'): table.add_row("Web Sitesi", info['website'])
+        if info.get('twitter'): table.add_row("Twitter", info['twitter'])
+        if info.get('email'): table.add_row("E-posta", info['email'])
+        
+        console.print(table)
+        console.print("\n")
 
     def print_table(self, title, data, console):
         table = Table(title=f"{title} ({len(data)})")
@@ -119,12 +203,22 @@ class GitHubTracker(BaseModule):
         console.print(table)
         console.print("\n")
 
-    def save_to_file(self, target_user, following, followers, filename, console):
+    def save_to_file(self, target_user, following, followers, filename, console, profile_info=None):
         try:
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(f"GitHub Raporu: {target_user}\n")
                 f.write("="*40 + "\n\n")
                 
+                if profile_info:
+                    f.write("PROFIL BILGILERI:\n")
+                    if profile_info.get('bio'): f.write(f"- Bio: {profile_info['bio']}\n")
+                    if profile_info.get('location'): f.write(f"- Konum: {profile_info['location']}\n")
+                    if profile_info.get('company'): f.write(f"- Şirket: {profile_info['company']}\n")
+                    if profile_info.get('website'): f.write(f"- Web: {profile_info['website']}\n")
+                    if profile_info.get('twitter'): f.write(f"- Twitter: {profile_info['twitter']}\n")
+                    if profile_info.get('email'): f.write(f"- Email: {profile_info['email']}\n")
+                    f.write("\n" + "-"*40 + "\n\n")
+
                 f.write(f"FOLLOWING ({len(following)}):\n")
                 for u in following:
                     f.write(f"- {u['username']} ({u['link']})\n")

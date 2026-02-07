@@ -97,15 +97,15 @@ class Set(Command):
                 if hasattr(opt, "completion_dir") and opt.completion_dir:
                     return self._get_path_completions("", default_dir=opt.completion_dir)
 
-                # 2. İsim bazlı tahmin (Fallback)
+                # 2. Choices varsa (Öncelikli)
+                if opt.choices:
+                    return list(opt.choices)
+
+                # 3. İsim bazlı tahmin (Fallback)
                 if 'WORDLIST' in option_name.upper():
                     return self._get_path_completions("", default_dir="config/wordlists/")
                 elif any(x in option_name.upper() for x in ['FILE', 'PATH']):
                     return self._get_path_completions("")
-
-                # 2. Choices varsa
-                if opt.choices:
-                    return list(opt.choices)
                     
                 # 3. Boolean tahmin
                 current_val = str(opt.value).lower()
@@ -126,15 +126,16 @@ class Set(Command):
                 if hasattr(opt, "completion_dir") and opt.completion_dir:
                     return self._get_path_completions(current_value, default_dir=opt.completion_dir)
                 
-                if 'WORDLIST' in option_name.upper():
-                     return self._get_path_completions(current_value, default_dir="config/wordlists/")
-                elif any(x in option_name.upper() for x in ['FILE', 'PATH']):
-                     return self._get_path_completions(current_value)
-
                 choices = []
                 if opt.choices:
                     choices = list(opt.choices)
-                else:
+                else: 
+                     # İsim bazlı tahmin (Fallback) - Sadece choices yoksa bak
+                    if 'WORDLIST' in option_name.upper():
+                         return self._get_path_completions(current_value, default_dir="config/wordlists/")
+                    elif any(x in option_name.upper() for x in ['FILE', 'PATH']):
+                         return self._get_path_completions(current_value)
+
                     current_val = str(opt.value).lower()
                     if current_val in ['true', 'false', '0', '1', 'yes', 'no']:
                         choices = ['true', 'false']

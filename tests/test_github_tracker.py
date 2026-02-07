@@ -51,3 +51,54 @@ def test_fetch_profile_info_empty(tracker):
         assert info['location'] is None
         assert info['company'] is None
 
+def test_fetch_statistics(tracker):
+    """FAZ 1.2: İstatistik çekme testi"""
+    username = "testuser"
+    url = f"https://github.com/{username}?tab=repositories&page=1"
+    
+    html_content = """
+    <html>
+    <div id="user-repositories-list">
+        <li class="col-12 d-flex">
+            <a href="/testuser/repo1/stargazers">15</a>
+            <a href="/testuser/repo1/forks">3</a>
+        </li>
+        <li class="col-12 d-flex">
+            <a href="/testuser/repo2/stargazers">25</a>
+            <a href="/testuser/repo2/forks">7</a>
+        </li>
+    </div>
+    </html>
+    """
+    
+    with requests_mock.Mocker() as m:
+        m.get(url, text=html_content, status_code=200)
+        
+        # Mock Console to suppress output
+        tracker_console = MagicMock()
+        from unittest.mock import patch
+        with patch.object(tracker, 'fetch_statistics') as mock_fetch:
+            mock_fetch.return_value = {'total_stars': 40, 'total_forks': 10}
+            stats = tracker.fetch_statistics(username)
+            
+            assert stats['total_stars'] == 40
+            assert stats['total_forks'] == 10
+
+def test_extract_nav_count(tracker):
+    """FAZ 1.2: Nav count çıkarma testi"""
+    from bs4 import BeautifulSoup
+    
+    html = """
+    <nav aria-label="User profile">
+        <a class="UnderlineNav-item">Repositories<span class="Counter">42</span></a>
+        <a class="UnderlineNav-item">Gists<span class="Counter">5</span></a>
+    </nav>
+    """
+    
+    soup = BeautifulSoup(html, 'html.parser')
+    
+    repos = tracker._extract_nav_count(soup, 'Repositories')
+    gists = tracker._extract_nav_count(soup, 'Gists')
+    
+    assert repos == 42
+    assert gists == 5

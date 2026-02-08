@@ -223,3 +223,90 @@ def test_analyze_network(tracker):
     assert stats['active_count'] == 1 # u1 has repos
     assert stats['top_companies'][0] == ('GitHub', 2)
     assert 'Turkey' in [x for x,y in stats['top_locations']]
+
+def test_compare_users(tracker):
+    """FAZ 3.1: İki kullanıcı karşılaştırma testi (logic verification)"""
+    from unittest.mock import MagicMock
+    
+    user1 = "u1"
+    user2 = "u2"
+    
+    u1_followers = [{'username': 'common', 'link': ''}, {'username': 'u1_only', 'link': ''}]
+    u1_following = []
+    
+    # Mock fetch_users to return u2 data
+    # side_effect: first call (followers), second call (following)
+    original_fetch = tracker.fetch_users
+    tracker.fetch_users = MagicMock(side_effect=[
+        [{'username': 'common', 'link': ''}, {'username': 'u2_only', 'link': ''}], 
+        []
+    ])
+    
+    console = MagicMock()
+    
+    tracker.compare_users(user1, u1_followers, u1_following, user2, console)
+    
+    # Verifications BEFORE cleanup
+    # compare_users should print a table. Since we mocked console, we expect print calls.
+    assert console.print.called
+    
+    # fetch_users should be called for user2 twice (followers, following)
+    assert tracker.fetch_users.call_count == 2
+    args, _ = tracker.fetch_users.call_args_list[0]
+    assert args[0] == user2
+    assert args[1] == "followers"
+
+    # Clean up
+    tracker.fetch_users = original_fetch
+
+def test_run_full_integration(tracker):
+    """Tüm opsiyonların run metodunda doğru çağrıldığını test eder"""
+    from unittest.mock import MagicMock
+    
+    # Mock all functionality methods to focus on flow control
+    tracker.fetch_profile_info = MagicMock(return_value={})
+    tracker.fetch_statistics = MagicMock(return_value={})
+    tracker.fetch_users = MagicMock(return_value=[])
+    tracker.fetch_repositories = MagicMock(return_value=[])
+    tracker.analyze_repositories = MagicMock(return_value={})
+    tracker.analyze_relationships = MagicMock(return_value={'mutual':set(), 'not_following_back':set(), 'not_followed_back':set()})
+    tracker.analyze_network = MagicMock(return_value={'total_scanned':0})
+    tracker.compare_users = MagicMock()
+    
+    # Mock prints
+    tracker.print_profile_info = MagicMock()
+    tracker.print_repositories_table = MagicMock()
+    tracker.print_repo_analysis = MagicMock()
+    tracker.print_relationship_analysis = MagicMock()
+    tracker.print_network_analysis = MagicMock()
+    tracker.print_table = MagicMock()
+    tracker.save_to_file = MagicMock()
+    
+    options = {
+        "USERNAME": "testuser",
+        "OUTPUT": "test_output.txt",
+        "PROFILE_INFO": "True",
+        "REPOS": "True",
+        "LIMIT": "20",
+        "SORT_BY": "updated",
+        "MUTUAL_ONLY": "False",
+        "COMPARE": "otheruser",
+        "NETWORK_ANALYSIS": "True"
+    }
+    
+    # Call run
+    tracker.run(options)
+    
+    # Verify calls
+    assert tracker.fetch_profile_info.called
+    assert tracker.fetch_repositories.called
+    assert tracker.analyze_repositories.called
+    assert tracker.analyze_relationships.called
+    assert tracker.analyze_network.called
+    assert tracker.compare_users.called
+    
+    # fetch_users called twice for target user (followers, following)
+    assert tracker.fetch_users.call_count == 2
+    
+    # Verify save call
+    assert tracker.save_to_file.called

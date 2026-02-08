@@ -150,3 +150,30 @@ def test_fetch_repositories(tracker):
         assert repos[1]['name'] == "repo2"
         assert repos[1]['language'] == "Go"
         assert repos[1]['description'] == "-"
+
+def test_analyze_repositories(tracker):
+    """FAZ 2.2: Repository analiz testi"""
+    repos = [
+        {'name': 'repo1', 'language': 'Python', 'stars': '10', 'forks': '5', 'updated': 'yesterday'},
+        {'name': 'repo2', 'language': 'Python', 'stars': '20', 'forks': '2', 'updated': 'today'},
+        {'name': 'repo3', 'language': 'Go', 'stars': '100', 'forks': '50', 'updated': 'last week'},
+        {'name': 'repo4', 'language': 'Java', 'stars': '5', 'forks': '1', 'updated': 'last month'},
+        {'name': 'repo5', 'language': 'Python', 'stars': '1.5k', 'forks': '200', 'updated': 'year ago'},
+    ]
+    
+    # helper test
+    assert tracker._parse_number('1.5k') == 1500
+    assert tracker._parse_number('1.2M') == 1200000
+    assert tracker._parse_number('10') == 10
+    
+    analysis = tracker.analyze_repositories(repos)
+    
+    # Top languages
+    assert analysis['top_languages'][0] == ('Python', 3)
+    
+    # Most starred
+    assert analysis['most_starred'][0]['name'] == 'repo5' # 1500
+    assert analysis['most_starred'][1]['name'] == 'repo3' # 100
+    
+    # Most forked
+    assert analysis['most_forked'][0]['name'] == 'repo5' # 200

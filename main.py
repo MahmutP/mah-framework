@@ -69,13 +69,14 @@ def print_startup_info(command_manager: CommandManager, module_manager: ModuleMa
         patch = commit_count % 10
         version = f"v{major}.{minor}.{patch}"
         
-        version_line = f"[bold cyan]       =[ Mah Framework {version} ]=[/bold cyan]"
+        # Adaptable renk (Tema uyumlu: Koyu temada beyaz, açık temada siyah)
+        version_line = f"[dim]       =[[/dim] [bold cyan]Mah Framework[/bold cyan] [bold]{version}[/bold] [dim]]=[/dim]"
         
         # Eski format (commits gösterimi):
         # version_line = f"[bold cyan]       =[ Mah Framework - {commit_count} commits ][/bold cyan]"
         
     except Exception:
-        version_line = "[bold cyan]       =[ Mah Framework ]=[/bold cyan]"
+        version_line = "[dim]       =[[/dim] [bold cyan]Mah Framework[/bold cyan] [dim]]=[/dim]"
     
     # Satır 1: Toplam modül, komut ve plugin sayısı
     line1 = f"[green]{total_modules}[/green] modules - [yellow]{total_commands}[/yellow] commands"

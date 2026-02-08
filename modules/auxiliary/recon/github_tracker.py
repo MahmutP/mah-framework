@@ -34,6 +34,28 @@ class GitHubTracker(BaseModule):
                 required=False,
                 description="Profil bilgilerini göster/gizle (True/False)",
                 choices=["True", "False"]
+            ),
+            "REPOS": Option(
+                name="REPOS",
+                value="False",
+                required=False,
+                description="Repository bilgilerini çek (True/False)",
+                choices=["True", "False"]
+            ),
+            "LIMIT": Option(
+                name="LIMIT",
+                value="50",
+                required=False,
+                description="Maksimum repo sayısı",
+                regex_check=True,
+                regex="^[0-9]+$"
+            ),
+            "SORT_BY": Option(
+                name="SORT_BY",
+                value="updated",
+                required=False,
+                description="Sıralama ölçütü (stars, updated, created, name)",
+                choices=["stars", "updated", "created", "name"]
             )
         }
         super().__init__()
@@ -177,6 +199,88 @@ class GitHubTracker(BaseModule):
         
         return stats
 
+    def fetch_repositories(self, username, limit=50, sort_by="updated"):
+        """FAZ 2.1: Kullanıcının repository listesini ve detaylarını çeker."""
+        console = Console()
+        repos = []
+        page = 1
+        count = 0
+        
+        # Sort parametresi URL için mapping
+        sort_map = {
+            "stars": "stargazers",
+            "updated": "updated",
+            "created": "created",
+            "name": "name"
+        }
+        sort_param = sort_map.get(sort_by, "updated")
+        
+        console.print(f"[yellow][*] {username} için repository listesi çekiliyor (Limit: {limit}, Sort: {sort_by})...[/yellow]")
+        
+        while count < limit:
+            url = f"https://github.com/{username}?tab=repositories&page={page}&sort={sort_param}"
+            try:
+                response = requests.get(url)
+                if response.status_code != 200:
+                    break
+                
+                soup = BeautifulSoup(response.text, 'html.parser')
+                repo_list = soup.select('div[id="user-repositories-list"] li, li.col-12.d-flex')
+                
+                if not repo_list:
+                    break
+                
+                for item in repo_list:
+                    if count >= limit:
+                        break
+                        
+                    repo_data = {}
+                    
+                    # İsim ve Link
+                    name_tag = item.select_one('h3 a')
+                    if name_tag:
+                        repo_data['name'] = name_tag.get_text(strip=True)
+                        repo_data['link'] = f"https://github.com{name_tag.get('href')}"
+                    else:
+                        continue
+                        
+                    # Açıklama
+                    desc_tag = item.select_one('p[itemprop="description"]')
+                    repo_data['description'] = desc_tag.get_text(strip=True) if desc_tag else "-"
+                    
+                    # Dil
+                    lang_tag = item.select_one('span[itemprop="programmingLanguage"]')
+                    repo_data['language'] = lang_tag.get_text(strip=True) if lang_tag else "-"
+                    
+                    # Star
+                    star_link = item.select_one('a[href*="/stargazers"]')
+                    repo_data['stars'] = star_link.get_text(strip=True).strip() if star_link else "0"
+                    
+                    # Fork
+                    fork_link = item.select_one('a[href*="/forks"]')
+                    repo_data['forks'] = fork_link.get_text(strip=True).strip() if fork_link else "0"
+                    
+                    # Son Güncelleme
+                    time_tag = item.select_one('relative-time')
+                    repo_data['updated'] = time_tag.get_text(strip=True) if time_tag else "-"
+                    
+                    repos.append(repo_data)
+                    count += 1
+                
+                # Pagination kontrolü
+                next_button = soup.select_one('a[rel="next"]')
+                if not next_button:
+                    break
+                    
+                page += 1
+                time.sleep(0.5)
+                
+            except Exception as e:
+                console.print(f"[red][!] Repo çekme hatası: {e}[/red]")
+                break
+                
+        return repos
+
     def fetch_users(self, username, relation_type):
         users = []
         page = 1
@@ -233,6 +337,9 @@ class GitHubTracker(BaseModule):
         username_input = options.get("USERNAME")
         output_file = options.get("OUTPUT")
         show_profile = options.get("PROFILE_INFO")
+        show_repos = options.get("REPOS")
+        limit = int(options.get("LIMIT"))
+        sort_by = options.get("SORT_BY")
         
         target_user = self.get_username(username_input)
         
@@ -240,12 +347,17 @@ class GitHubTracker(BaseModule):
         
         profile_info = None
         stats = None
+        repos = []
         
         if show_profile == "True":
             profile_info = self.fetch_profile_info(target_user)
             stats = self.fetch_statistics(target_user)
             if profile_info:
                 self.print_profile_info(target_user, profile_info, console, stats)
+        
+        if show_repos == "True":
+            repos = self.fetch_repositories(target_user, limit, sort_by)
+            self.print_repositories_table(repos, console)
         
         following = self.fetch_users(target_user, "following")
         followers = self.fetch_users(target_user, "followers")
@@ -256,7 +368,7 @@ class GitHubTracker(BaseModule):
         
         # Dosyaya Kaydet
         if output_file:
-            self.save_to_file(target_user, following, followers, output_file, console, profile_info if show_profile == "True" else None, stats)
+            self.save_to_file(target_user, following, followers, output_file, console, profile_info if show_profile == "True" else None, stats, repos)
 
         return True
 
@@ -286,6 +398,31 @@ class GitHubTracker(BaseModule):
         console.print(table)
         console.print("\n")
 
+    def print_repositories_table(self, repos, console):
+        if not repos:
+            console.print("[yellow][!] Gösterilecek repository yok.[/yellow]")
+            return
+
+        table = Table(title=f"Repositories ({len(repos)})")
+        table.add_column("İsim", style="bold green")
+        table.add_column("Dil", style="cyan")
+        table.add_column("⭐", style="yellow")
+        table.add_column("🍴", style="white")
+        table.add_column("Güncelleme", style="blue")
+        # table.add_column("Açıklama", style="dim white") # Çok yer kapladığı için opsiyonel yapılabilir
+
+        for repo in repos:
+            table.add_row(
+                repo['name'],
+                repo['language'],
+                repo['stars'],
+                repo['forks'],
+                repo['updated']
+            )
+        
+        console.print(table)
+        console.print("\n")
+
     def print_table(self, title, data, console):
         table = Table(title=f"{title} ({len(data)})")
         table.add_column("Kullanıcı Adı", style="cyan")
@@ -297,7 +434,7 @@ class GitHubTracker(BaseModule):
         console.print(table)
         console.print("\n")
 
-    def save_to_file(self, target_user, following, followers, filename, console, profile_info=None, stats=None):
+    def save_to_file(self, target_user, following, followers, filename, console, profile_info=None, stats=None, repos=None):
         try:
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(f"GitHub Raporu: {target_user}\n")
@@ -323,6 +460,16 @@ class GitHubTracker(BaseModule):
                         f.write(f"- Toplam Fork: {stats.get('total_forks', 0)}\n")
                     
                     f.write("\n" + "-"*40 + "\n\n")
+
+                if repos:
+                    f.write(f"REPOSITORIES ({len(repos)}):\n")
+                    for r in repos:
+                        f.write(f"- [{r['name']}] ({r['link']})\n")
+                        f.write(f"  Dil: {r['language']} | Star: {r['stars']} | Fork: {r['forks']}\n")
+                        f.write(f"  Güncelleme: {r['updated']}\n")
+                        f.write(f"  Açıklama: {r['description']}\n")
+                        f.write("  ---\n")
+                    f.write("\n" + "="*40 + "\n\n")
 
                 f.write(f"FOLLOWING ({len(following)}):\n")
                 for u in following:

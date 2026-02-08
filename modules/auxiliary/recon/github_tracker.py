@@ -56,6 +56,13 @@ class GitHubTracker(BaseModule):
                 required=False,
                 description="Sıralama ölçütü (stars, updated, created, name)",
                 choices=["stars", "updated", "created", "name"]
+            ),
+            "MUTUAL_ONLY": Option(
+                name="MUTUAL_ONLY",
+                value="False",
+                required=False,
+                description="Sadece karşılıklı takipleşenleri göster (True/False)",
+                choices=["True", "False"]
             )
         }
         super().__init__()
@@ -398,6 +405,50 @@ class GitHubTracker(BaseModule):
                 
         return users
 
+    def analyze_relationships(self, following, followers):
+        """FAZ 3.1: Takipçi ilişkilerini analiz eder."""
+        if not following or not followers:
+            return None
+            
+        following_usernames = {u['username'] for u in following}
+        follower_usernames = {u['username'] for u in followers}
+        
+        mutual = following_usernames.intersection(follower_usernames)
+        not_following_back = following_usernames - follower_usernames # Sen ediyorsun, o etmiyor
+        not_followed_back = follower_usernames - following_usernames # O ediyor, sen etmiyorsun
+        
+        return {
+            'mutual': mutual,
+            'not_following_back': not_following_back,
+            'not_followed_back': not_followed_back
+        }
+
+    def print_relationship_analysis(self, analysis, console, mutual_only="False"):
+        if not analysis: return
+        
+        table = Table(title="🔗 İlişki Analizi", style="bold blue")
+        table.add_column("Durum", style="cyan")
+        table.add_column("Kişi Sayısı", style="yellow")
+        
+        table.add_row("Karşılıklı Takip (Mutual)", str(len(analysis['mutual'])))
+        if mutual_only != "True":
+            table.add_row("Takip Edip Geri Dönmeyenler", str(len(analysis['not_following_back'])))
+            table.add_row("Sizi Takip Edip Sizin Etmediğiniz", str(len(analysis['not_followed_back'])))
+            
+        console.print(table)
+        console.print()
+        
+        if analysis['mutual']:
+            console.print(f"[bold green]🤝 Karşılıklı Takipleşenler ({len(analysis['mutual'])}):[/bold green]")
+            console.print(", ".join(list(analysis['mutual'])[:50]) + ("..." if len(analysis['mutual']) > 50 else ""))
+            console.print()
+
+        if mutual_only != "True":
+            if analysis['not_following_back']:
+                 console.print(f"[bold red]❌ Takip Edip Geri Dönmeyenler (İlk 20):[/bold red]")
+                 console.print(", ".join(list(analysis['not_following_back'])[:20]) + "...")
+                 console.print()
+
     def run(self, options):
         console = Console()
         username_input = options.get("USERNAME")
@@ -406,6 +457,7 @@ class GitHubTracker(BaseModule):
         show_repos = options.get("REPOS")
         limit = int(options.get("LIMIT"))
         sort_by = options.get("SORT_BY")
+        mutual_only = options.get("MUTUAL_ONLY")
         
         target_user = self.get_username(username_input)
         
@@ -431,13 +483,21 @@ class GitHubTracker(BaseModule):
         following = self.fetch_users(target_user, "following")
         followers = self.fetch_users(target_user, "followers")
         
-        # Ekrana Yazdır
-        self.print_table("FOLLOWING", following, console)
-        self.print_table("FOLLOWERS", followers, console)
+        rel_analysis = self.analyze_relationships(following, followers)
+        self.print_relationship_analysis(rel_analysis, console, mutual_only)
+        
+        # Ekrana Yazdır (Eğer Mutual Only ise sadece mutual basılabilir ama tablo zaten var)
+        # Burada full listeleri basmak yerine analiz sonucunu basmak daha temiz.
+        # Kullanıcı detay isterse zaten table basılıyor.
+        
+        # Sadece mutual_only=False ise listeleri bas
+        if mutual_only != "True":
+            self.print_table("FOLLOWING", following, console)
+            self.print_table("FOLLOWERS", followers, console)
         
         # Dosyaya Kaydet
         if output_file:
-            self.save_to_file(target_user, following, followers, output_file, console, profile_info if show_profile == "True" else None, stats, repos, repo_analysis)
+            self.save_to_file(target_user, following, followers, output_file, console, profile_info if show_profile == "True" else None, stats, repos, repo_analysis, rel_analysis)
 
         return True
 
@@ -503,11 +563,22 @@ class GitHubTracker(BaseModule):
         console.print(table)
         console.print("\n")
 
-    def save_to_file(self, target_user, following, followers, filename, console, profile_info=None, stats=None, repos=None, repo_analysis=None):
+    def save_to_file(self, target_user, following, followers, filename, console, profile_info=None, stats=None, repos=None, repo_analysis=None, rel_analysis=None):
         try:
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(f"GitHub Raporu: {target_user}\n")
                 f.write("="*40 + "\n\n")
+                
+                if rel_analysis:
+                     f.write("ILISKI ANALIZI (FAZ 3.1):\n")
+                     f.write(f"- Karsilikli Takip: {len(rel_analysis['mutual'])}\n")
+                     f.write(f"- Takip Edip Donmeyenler: {len(rel_analysis['not_following_back'])}\n")
+                     f.write(f"- Seni Takip Edip Etmediklerin: {len(rel_analysis['not_followed_back'])}\n")
+                     
+                     if rel_analysis['mutual']:
+                         f.write("\nmutual_users:\n" + ", ".join(rel_analysis['mutual']) + "\n")
+                     
+                     f.write("\n" + "-"*40 + "\n\n")
                 
                 if profile_info:
                     f.write("PROFIL BILGILERI:\n")

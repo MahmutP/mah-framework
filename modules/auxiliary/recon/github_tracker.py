@@ -70,6 +70,13 @@ class GitHubTracker(BaseModule):
                 required=False,
                 description="Karşılaştırılacak ikinci kullanıcı (Ortak takipçi analizi için)",
                 choices=[]
+            ),
+            "NETWORK_ANALYSIS": Option(
+                name="NETWORK_ANALYSIS",
+                value="False",
+                required=False,
+                description="Ağ Analizi Yap (Takipçilerin lokasyon/şirket analizi - YAVAŞ)",
+                choices=["True", "False"]
             )
         }
         super().__init__()
@@ -497,6 +504,71 @@ class GitHubTracker(BaseModule):
              except Exception as e:
                  console.print(f"[red][!] Dosya yazma hatası: {e}[/red]")
 
+    def analyze_network(self, users, limit=20):
+        """FAZ 3.2: Ağ Analizi (Lokasyon, Şirket, Aktiflik)."""
+        from collections import Counter
+        from rich.progress import track
+        
+        if not users: return None
+        
+        target_users = users[:limit]
+        stats = {
+            'locations': [], 
+            'companies': [], 
+            'active_count': 0, 
+            'total_scanned': 0
+        }
+        
+        # Progress bar ile göster
+        for u in track(target_users, description="[green]Ağ analizi yapılıyor (Profil Taraması)...[/green]"):
+            username = u['username']
+            info = self.fetch_profile_info(username)
+            if info:
+                stats['total_scanned'] += 1
+                
+                # Lokasyon Analizi
+                if info.get('location'):
+                    stats['locations'].append(info['location'])
+                    
+                # Şirket Analizi
+                if info.get('company'):
+                    stats['companies'].append(info['company'])
+                    
+                # Aktiflik Analizi (Repo sayısı > 0 ise aktif kabul edelim)
+                if info.get('public_repos', 0) > 0:
+                    stats['active_count'] += 1
+            
+            time.sleep(0.5) # Rate limit koruması
+            
+        # Counter ile en sık geçenleri bul
+        stats['top_locations'] = Counter(stats['locations']).most_common(5)
+        stats['top_companies'] = Counter(stats['companies']).most_common(5)
+        
+        return stats
+
+    def print_network_analysis(self, stats, console):
+        if not stats or stats['total_scanned'] == 0: return
+        
+        table = Table(title=f"🕸️ Ağ Analizi (Taranan: {stats['total_scanned']})", style="bold magenta")
+        table.add_column("Kategori", style="cyan")
+        table.add_column("En Yaygın", style="yellow")
+        table.add_column("Detay", style="white")
+        
+        # Lokasyon
+        top_loc = ", ".join([f"{k} ({v})" for k,v in stats['top_locations']])
+        table.add_row("📍 Lokasyonlar", top_loc if top_loc else "-", str(len(stats['locations'])) + " kişi belirtti")
+        
+        # Şirket
+        top_comp = ", ".join([f"{k} ({v})" for k,v in stats['top_companies']])
+        table.add_row("🏢 Şirketler", top_comp if top_comp else "-", str(len(stats['companies'])) + " kişi belirtti")
+        
+        # Aktiflik
+        active_ratio = (stats['active_count'] / stats['total_scanned']) * 100
+        table.add_row("⚡ Aktiflik (Repo > 0)", f"%{active_ratio:.1f}", f"{stats['active_count']}/{stats['total_scanned']}")
+        
+        console.print(table)
+        console.print()
+
     def run(self, options):
         console = Console()
         username_input = options.get("USERNAME")
@@ -507,6 +579,7 @@ class GitHubTracker(BaseModule):
         sort_by = options.get("SORT_BY")
         mutual_only = options.get("MUTUAL_ONLY")
         compare_user = options.get("COMPARE")
+        network_analysis_opt = options.get("NETWORK_ANALYSIS")
         
         target_user = self.get_username(username_input)
         
@@ -544,9 +617,19 @@ class GitHubTracker(BaseModule):
             self.print_table("FOLLOWING", following, console)
             self.print_table("FOLLOWERS", followers, console)
             
+        # Ağ Analizi (FAZ 3.2) - Followers üzerinde
+        network_stats = None
+        if network_analysis_opt == "True":
+            # Limit parametresini kullanalım ama çok yüksekse uyaralım veya max 50 ile sınırlayalım
+            analysis_limit = limit if limit < 50 else 20 
+            if limit > 50:
+                 console.print(f"[yellow][!] Ağ analizi için limit otomatik olarak {analysis_limit} ile sınırlandırıldı (Hız limiti nedeniyle).[/yellow]")
+            network_stats = self.analyze_network(followers, limit=analysis_limit)
+            self.print_network_analysis(network_stats, console)
+
         # Dosyaya Kaydet
         if output_file:
-            self.save_to_file(target_user, following, followers, output_file, console, profile_info if show_profile == "True" else None, stats, repos, repo_analysis, rel_analysis)
+            self.save_to_file(target_user, following, followers, output_file, console, profile_info if show_profile == "True" else None, stats, repos, repo_analysis, rel_analysis, network_stats)
 
         # Karşılaştırma Analizi (Varsa) - Dosyaya append yaptığı için save_to_file'dan sonra çağrılmalı
         if compare_user:
@@ -620,7 +703,7 @@ class GitHubTracker(BaseModule):
         console.print(table)
         console.print("\n")
 
-    def save_to_file(self, target_user, following, followers, filename, console, profile_info=None, stats=None, repos=None, repo_analysis=None, rel_analysis=None):
+    def save_to_file(self, target_user, following, followers, filename, console, profile_info=None, stats=None, repos=None, repo_analysis=None, rel_analysis=None, network_stats=None):
         try:
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(f"GitHub Raporu: {target_user}\n")
@@ -636,7 +719,19 @@ class GitHubTracker(BaseModule):
                          f.write("\nmutual_users:\n" + ", ".join(rel_analysis['mutual']) + "\n")
                      
                      f.write("\n" + "-"*40 + "\n\n")
-                
+
+                if network_stats:
+                     f.write("AG ANALIZI (FAZ 3.2):\n")
+                     f.write(f"- Taranan Kisi: {network_stats['total_scanned']}\n")
+                     f.write(f"- Aktif Kullanici Orani: {network_stats['active_count']}/{network_stats['total_scanned']}\n")
+                     f.write("En Yaygin Lokasyonlar:\n")
+                     for k,v in network_stats['top_locations']:
+                         f.write(f"  - {k}: {v}\n")
+                     f.write("En Yaygin Sirketler:\n")
+                     for k,v in network_stats['top_companies']:
+                         f.write(f"  - {k}: {v}\n")
+                     f.write("\n" + "-"*40 + "\n\n")
+
                 if profile_info:
                     f.write("PROFIL BILGILERI:\n")
                     if profile_info.get('bio'): f.write(f"- Bio: {profile_info['bio']}\n")

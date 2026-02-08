@@ -93,12 +93,38 @@ def print_startup_info(command_manager: CommandManager, module_manager: ModuleMa
     # Yazdır
     console.print()
     console.print(version_line)
-    console.print(f"[dim]+ -- --=[[/dim] {line1} [dim]]=--[/dim]")
+    # Satır listesi oluştur ve görünür uzunluklarını hesapla
+    lines_to_print = []
     
-    # Kategorileri 3'erli grupla (satır başına max 3 kategori)
+    # Line 1
+    lines_to_print.append(line1)
+    
+    # Kategoriler
     for i in range(0, len(category_parts), 3):
         chunk = category_parts[i:i+3]
-        console.print(f"[dim]+ -- --=[[/dim] {' - '.join(chunk)} [dim]]=--[/dim]")
+        lines_to_print.append(' - '.join(chunk))
+        
+    # En uzun satırı bul (markup temizlenmiş haliyle)
+    from rich.text import Text
+    max_len = 0
+    line_lengths = []
+    
+    for line in lines_to_print:
+        # Markup'ı temizle ve uzunluğu al
+        text_obj = Text.from_markup(line)
+        visible_len = len(text_obj)
+        line_lengths.append(visible_len)
+        if visible_len > max_len:
+            max_len = visible_len
+            
+    # Yazdır
+    console.print()
+    console.print(version_line)
+    
+    for i, line in enumerate(lines_to_print):
+        # Padding ekle
+        padding = " " * (max_len - line_lengths[i])
+        console.print(f"[dim]+ -- --=[[/dim] {line}{padding} [dim]]=--[/dim]")
     
     console.print()
     console.print("    Yardım için [bold]'help'[/bold] yazın")

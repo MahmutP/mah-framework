@@ -177,3 +177,25 @@ def test_analyze_repositories(tracker):
     
     # Most forked
     assert analysis['most_forked'][0]['name'] == 'repo5' # 200
+
+def test_analyze_relationships(tracker):
+    """FAZ 3.1: İlişki analizi testi"""
+    following = [
+        {'username': 'mutual_user', 'link': '...'},
+        {'username': 'not_following_back_user', 'link': '...'},
+    ]
+    followers = [
+        {'username': 'mutual_user', 'link': '...'},
+        {'username': 'not_followed_back_user', 'link': '...'},
+    ]
+    
+    analysis = tracker.analyze_relationships(following, followers)
+    
+    assert 'mutual_user' in analysis['mutual']
+    assert len(analysis['mutual']) == 1
+    
+    assert 'not_following_back_user' in analysis['not_following_back']
+    assert len(analysis['not_following_back']) == 1
+    
+    assert 'not_followed_back_user' in analysis['not_followed_back']
+    assert len(analysis['not_followed_back']) == 1

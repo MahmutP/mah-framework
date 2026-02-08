@@ -102,3 +102,51 @@ def test_extract_nav_count(tracker):
     
     assert repos == 42
     assert gists == 5
+
+def test_fetch_repositories(tracker):
+    """FAZ 2.1: Repository çekme testi"""
+    username = "testuser"
+    url = f"https://github.com/{username}?tab=repositories&page=1&sort=updated"
+    
+    html_content = """
+    <html>
+    <div id="user-repositories-list">
+        <li class="col-12 d-flex">
+            <h3><a href="/testuser/repo1">repo1</a></h3>
+            <p itemprop="description">Test Repo 1</p>
+            <span itemprop="programmingLanguage">Python</span>
+            <a href="/testuser/repo1/stargazers">10</a>
+            <a href="/testuser/repo1/forks">5</a>
+            <relative-time>2 days ago</relative-time>
+        </li>
+        <li class="col-12 d-flex">
+            <h3><a href="/testuser/repo2">repo2</a></h3>
+            <span itemprop="programmingLanguage">Go</span>
+            <a href="/testuser/repo2/stargazers">100</a>
+            <a href="/testuser/repo2/forks">20</a>
+            <relative-time>1 week ago</relative-time>
+        </li>
+    </div>
+    </html>
+    """
+    
+    with requests_mock.Mocker() as m:
+        m.get(url, text=html_content, status_code=200)
+        
+        # Mock Console
+        tracker_console = MagicMock()
+        
+        repos = tracker.fetch_repositories(username, limit=10, sort_by="updated")
+        
+        assert len(repos) == 2
+        
+        assert repos[0]['name'] == "repo1"
+        assert repos[0]['language'] == "Python"
+        assert repos[0]['stars'] == "10"
+        assert repos[0]['forks'] == "5"
+        assert repos[0]['description'] == "Test Repo 1"
+        assert repos[0]['updated'] == "2 days ago"
+        
+        assert repos[1]['name'] == "repo2"
+        assert repos[1]['language'] == "Go"
+        assert repos[1]['description'] == "-"

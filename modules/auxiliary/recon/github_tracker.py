@@ -281,6 +281,72 @@ class GitHubTracker(BaseModule):
                 
         return repos
 
+    def _parse_number(self, num_str):
+        """1.2k gibi sayıları int'e çevirir."""
+        if not num_str: return 0
+        ns = num_str.lower().strip()
+        if ns == "-" or not ns: return 0
+        
+        mult = 1
+        if ns.endswith('k'):
+            mult = 1000
+            ns = ns[:-1]
+        elif ns.endswith('m'):
+            mult = 1000000
+            ns = ns[:-1]
+            
+        try:
+            return int(float(ns) * mult)
+        except:
+            return 0
+
+    def analyze_repositories(self, repos):
+        """FAZ 2.2: Repository listesini analiz eder."""
+        from collections import Counter
+        
+        if not repos:
+            return None
+        
+        analysis = {}
+        
+        # 1. En çok kullanılan diller
+        languages = [r['language'] for r in repos if r['language'] and r['language'] != "-"]
+        lang_counts = Counter(languages)
+        analysis['top_languages'] = lang_counts.most_common(5)
+        
+        # 2. En popüler repo (Star sayısına göre)
+        sorted_by_stars = sorted(repos, key=lambda x: self._parse_number(x['stars']), reverse=True)
+        analysis['most_starred'] = sorted_by_stars[:3]
+        
+        # 3. En çok fork alan
+        sorted_by_forks = sorted(repos, key=lambda x: self._parse_number(x['forks']), reverse=True)
+        analysis['most_forked'] = sorted_by_forks[:3]
+        
+        return analysis
+
+    def print_repo_analysis(self, analysis, console):
+        if not analysis: return
+        
+        # Diller Tablosu
+        table_lang = Table(title="🔥 En Çok Kullanılan Diller", style="magenta", show_header=True, header_style="bold magenta")
+        table_lang.add_column("Dil", style="cyan")
+        table_lang.add_column("Kullanım Sayısı", style="yellow")
+        for lang, count in analysis['top_languages']:
+            table_lang.add_row(lang, str(count))
+        
+        # En Popülerler
+        table_pop = Table(title="🌟 En Popüler Repolar (Star)", style="yellow", show_header=True, header_style="bold yellow")
+        table_pop.add_column("Repo", style="bold white")
+        table_pop.add_column("Star", style="yellow")
+        table_pop.add_column("Fork", style="white")
+        table_pop.add_column("Dil", style="cyan")
+        for r in analysis['most_starred']:
+            table_pop.add_row(r['name'], str(r['stars']), str(r['forks']), r['language'])
+            
+        console.print(table_lang)
+        console.print(table_pop)
+        console.print("\n")
+
     def fetch_users(self, username, relation_type):
         users = []
         page = 1
@@ -355,9 +421,12 @@ class GitHubTracker(BaseModule):
             if profile_info:
                 self.print_profile_info(target_user, profile_info, console, stats)
         
+        repo_analysis = None
         if show_repos == "True":
             repos = self.fetch_repositories(target_user, limit, sort_by)
+            repo_analysis = self.analyze_repositories(repos)
             self.print_repositories_table(repos, console)
+            self.print_repo_analysis(repo_analysis, console)
         
         following = self.fetch_users(target_user, "following")
         followers = self.fetch_users(target_user, "followers")
@@ -368,7 +437,7 @@ class GitHubTracker(BaseModule):
         
         # Dosyaya Kaydet
         if output_file:
-            self.save_to_file(target_user, following, followers, output_file, console, profile_info if show_profile == "True" else None, stats, repos)
+            self.save_to_file(target_user, following, followers, output_file, console, profile_info if show_profile == "True" else None, stats, repos, repo_analysis)
 
         return True
 
@@ -434,7 +503,7 @@ class GitHubTracker(BaseModule):
         console.print(table)
         console.print("\n")
 
-    def save_to_file(self, target_user, following, followers, filename, console, profile_info=None, stats=None, repos=None):
+    def save_to_file(self, target_user, following, followers, filename, console, profile_info=None, stats=None, repos=None, repo_analysis=None):
         try:
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(f"GitHub Raporu: {target_user}\n")
@@ -459,6 +528,16 @@ class GitHubTracker(BaseModule):
                         f.write(f"- Toplam Star: {stats.get('total_stars', 0)}\n")
                         f.write(f"- Toplam Fork: {stats.get('total_forks', 0)}\n")
                     
+                    f.write("\n" + "-"*40 + "\n\n")
+
+                if repo_analysis:
+                    f.write("REPO ANALIZI ve ISTATISTIKLERI (FAZ 2.2):\n")
+                    f.write("En Cok Kullanilan Diller:\n")
+                    for lang, count in repo_analysis['top_languages']:
+                        f.write(f"- {lang}: {count}\n")
+                    f.write("\nEn Populer Repolar:\n")
+                    for r in repo_analysis['most_starred']:
+                        f.write(f"- {r['name']} (Star: {r['stars']}, Fork: {r['forks']}, Dil: {r['language']})\n")
                     f.write("\n" + "-"*40 + "\n\n")
 
                 if repos:

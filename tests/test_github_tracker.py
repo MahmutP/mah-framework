@@ -199,3 +199,27 @@ def test_analyze_relationships(tracker):
     
     assert 'not_followed_back_user' in analysis['not_followed_back']
     assert len(analysis['not_followed_back']) == 1
+
+def test_analyze_network(tracker):
+    """FAZ 3.2: Ağ analizi testi"""
+    from unittest.mock import MagicMock
+    
+    users = [{'username': 'u1'}, {'username': 'u2'}]
+    
+    # Mock profile info
+    # tracker fixture'ı zaten var. metodunu mockluyoruz
+    original_fetch = tracker.fetch_profile_info
+    tracker.fetch_profile_info = MagicMock(side_effect=[
+        {'location': 'Turkey', 'company': 'GitHub', 'public_repos': 5},
+        {'location': 'USA', 'company': 'GitHub', 'public_repos': 0}
+    ])
+    
+    stats = tracker.analyze_network(users, limit=2)
+    
+    # Clean up mock
+    tracker.fetch_profile_info = original_fetch
+    
+    assert stats['total_scanned'] == 2
+    assert stats['active_count'] == 1 # u1 has repos
+    assert stats['top_companies'][0] == ('GitHub', 2)
+    assert 'Turkey' in [x for x,y in stats['top_locations']]

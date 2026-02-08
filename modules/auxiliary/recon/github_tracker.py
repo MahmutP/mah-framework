@@ -63,6 +63,13 @@ class GitHubTracker(BaseModule):
                 required=False,
                 description="Sadece karşılıklı takipleşenleri göster (True/False)",
                 choices=["True", "False"]
+            ),
+            "COMPARE": Option(
+                name="COMPARE",
+                value="",
+                required=False,
+                description="Karşılaştırılacak ikinci kullanıcı (Ortak takipçi analizi için)",
+                choices=[]
             )
         }
         super().__init__()
@@ -449,6 +456,47 @@ class GitHubTracker(BaseModule):
                  console.print(", ".join(list(analysis['not_following_back'])[:20]) + "...")
                  console.print()
 
+    def compare_users(self, user1, user1_followers, user1_following, user2, console, output_file=None):
+        """FAZ 3.1: İki kullanıcıyı karşılaştırır (Ortak takipçi/takip edilen)."""
+        console.print(f"\n[bold blue]🔄 {user1} ve {user2} Karşılaştırılıyor...[/bold blue]")
+        
+        # User 2 verilerini çek
+        u2_followers = self.fetch_users(user2, "followers")
+        u2_following = self.fetch_users(user2, "following")
+        
+        # Analiz
+        u1_followers_set = {u['username'] for u in user1_followers}
+        u2_followers_set = {u['username'] for u in u2_followers}
+        common_followers = u1_followers_set.intersection(u2_followers_set)
+        
+        u1_following_set = {u['username'] for u in user1_following}
+        u2_following_set = {u['username'] for u in u2_following}
+        common_following = u1_following_set.intersection(u2_following_set)
+        
+        # Ekrana bas
+        table = Table(title=f"Ortak Analiz: {user1} & {user2}", style="bold green")
+        table.add_column("Metrik", style="cyan")
+        table.add_column("Sayı", style="yellow")
+        table.add_column("Detay (İlk 5)", style="white")
+        
+        table.add_row("Ortak Takipçiler", str(len(common_followers)), ", ".join(list(common_followers)[:5]) + ("..." if len(common_followers)>5 else ""))
+        table.add_row("Ortak Takip Edilenler", str(len(common_following)), ", ".join(list(common_following)[:5]) + ("..." if len(common_following)>5 else ""))
+        
+        console.print(table)
+        console.print()
+        
+        # Dosyaya ekleme
+        if output_file:
+             try:
+                 with open(output_file, 'a', encoding='utf-8') as f:
+                     f.write(f"\nKARSILASTIRMA (COMPARE): {user1} vs {user2}\n")
+                     f.write(f"- Ortak Takipciler ({len(common_followers)}): {', '.join(common_followers)}\n")
+                     f.write(f"- Ortak Takip Edilenler ({len(common_following)}): {', '.join(common_following)}\n")
+                     f.write("-" * 40 + "\n\n")
+                 console.print(f"[bold green][+] Karşılaştırma sonuçları dosyaya eklendi.[/bold green]")
+             except Exception as e:
+                 console.print(f"[red][!] Dosya yazma hatası: {e}[/red]")
+
     def run(self, options):
         console = Console()
         username_input = options.get("USERNAME")
@@ -458,6 +506,7 @@ class GitHubTracker(BaseModule):
         limit = int(options.get("LIMIT"))
         sort_by = options.get("SORT_BY")
         mutual_only = options.get("MUTUAL_ONLY")
+        compare_user = options.get("COMPARE")
         
         target_user = self.get_username(username_input)
         
@@ -494,10 +543,18 @@ class GitHubTracker(BaseModule):
         if mutual_only != "True":
             self.print_table("FOLLOWING", following, console)
             self.print_table("FOLLOWERS", followers, console)
-        
+            
         # Dosyaya Kaydet
         if output_file:
             self.save_to_file(target_user, following, followers, output_file, console, profile_info if show_profile == "True" else None, stats, repos, repo_analysis, rel_analysis)
+
+        # Karşılaştırma Analizi (Varsa) - Dosyaya append yaptığı için save_to_file'dan sonra çağrılmalı
+        if compare_user:
+            compare_user_target = self.get_username(compare_user)
+            if compare_user_target.lower() != target_user.lower():
+                self.compare_users(target_user, followers, following, compare_user_target, console, output_file)
+            else:
+                 console.print("[red][!] Karşılaştırılacak kullanıcı hedef kullanıcı ile aynı olamaz.[/red]")
 
         return True
 

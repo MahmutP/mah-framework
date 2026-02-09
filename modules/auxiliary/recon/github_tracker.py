@@ -99,6 +99,13 @@ class GitHubTracker(BaseModule):
                 required=False,
                 description="Contribution analizi çek (Yıllık katkı, aktif repolar, PR/Issue istatistikleri)",
                 choices=["True", "False"]
+            ),
+            "ORGS": Option(
+                name="ORGS",
+                value="False",
+                required=False,
+                description="Organizasyon bilgilerini ve üyelerini çek",
+                choices=["True", "False"]
             )
         }
         super().__init__()
@@ -998,7 +1005,138 @@ class GitHubTracker(BaseModule):
             
             console.print(repo_table)
             console.print()
+            console.print(repo_table)
+            console.print()
 
+    # ==================== FAZ 5.1: ORGANIZASYON DESTEĞİ ====================
+
+    def fetch_organizations(self, username):
+        """FAZ 5.1: Kullanıcının üye olduğu organizasyonları çeker."""
+        url = f"https://github.com/{username}"
+        headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'}
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                return []
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            orgs = []
+            
+            # Organizasyonlar genellikle sol sidebar'da
+            org_links = soup.select('a.avatar-group-item')
+            if not org_links:
+                org_links = soup.select('a[data-hovercard-type="organization"]')
+            
+            for link in org_links:
+                org_name = link.get('aria-label')
+                href = link.get('href')
+                if not href: continue
+                
+                org_url = "https://github.com" + href
+                
+                # İsim boşsa href'ten çıkar
+                if not org_name:
+                    org_name = href.strip("/")
+                
+                orgs.append({
+                    'name': org_name,
+                    'url': org_url,
+                    'username': org_name.replace(" ", "-").lower() # URL friendly name approx
+                })
+            return orgs
+        except Exception as e:
+            return []
+
+    def fetch_org_details(self, org_name):
+        """FAZ 5.1: Organizasyon detaylarını çeker."""
+        url = f"https://github.com/{org_name}"
+        info = {}
+        headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'}
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                return None
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # İsim (genellikle h1 içinde)
+            name_tag = soup.select_one('h1')
+            info['title'] = name_tag.get_text(strip=True) if name_tag else org_name
+            
+            # Açıklama
+            desc_tag = soup.select_one('div.org-description')
+            if not desc_tag:
+                 # Bazen meta tag'de olabilir
+                 desc_tag = soup.select_one('meta[name="description"]')
+                 info['description'] = desc_tag.get('content') if desc_tag else "-"
+            else:
+                 info['description'] = desc_tag.get_text(strip=True)
+
+            return info
+        except:
+            return None
+
+    def fetch_org_members(self, org_name, limit=10):
+        """FAZ 5.1: Organizasyonun public üyelerini çeker."""
+        url = f"https://github.com/orgs/{org_name}/people"
+        members = []
+        headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'}
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                return []
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+            # Üye listesi
+            # Eski selector: li.table-list-item.member-list-item
+            # Yeni/Alternatif: div.d-table > div.d-table-row
+            
+            member_links = soup.select('li.table-list-item.member-list-item a.d-inline-block')
+            if not member_links:
+                 # Genel bir arama yap (Layout-main içinde)
+                 main_layout = soup.select_one('div.Layout-main')
+                 if main_layout:
+                     member_links = main_layout.select('a[data-hovercard-type="user"]')
+            
+            for link in member_links:
+                if len(members) >= limit: break
+                
+                href = link.get('href')
+                if href:
+                    m_name = href.strip("/")
+                    if m_name not in members: # Tekrarı önle
+                        members.append(m_name)
+            
+            return members
+        except:
+            return []
+
+    def print_organizations(self, orgs, console):
+        """Organizasyonları listeler."""
+        if not orgs:
+            console.print("[yellow]⚠ Kullanıcının public organizasyonu bulunamadı.[/yellow]")
+            return
+
+        table = Table(title=f"🏢 Organizasyonlar ({len(orgs)})", style="bold cyan")
+        table.add_column("Organizasyon", style="white")
+        table.add_column("Detaylar", style="green")
+        table.add_column("Üyeler (İlk 10)", style="yellow")
+        
+        for org in orgs:
+            desc = org.get('details', {}).get('description', '-')
+            if len(desc) > 50: desc = desc[:47] + "..."
+            
+            members = org.get('members', [])
+            members_str = ", ".join(members) if members else "-"
+            
+            table.add_row(
+                org['name'],
+                desc,
+                members_str
+            )
+            
+        console.print(table)
+        console.print()
     def run(self, options):
         console = Console()
         username_input = options.get("USERNAME")
@@ -1012,7 +1150,8 @@ class GitHubTracker(BaseModule):
         network_analysis_opt = options.get("NETWORK_ANALYSIS")
         activity_opt = options.get("ACTIVITY")
         activity_days = int(options.get("DAYS"))
-        contributions_opt = options.get("CONTRIBUTIONS")  # FAZ 4.2
+        contributions_opt = options.get("CONTRIBUTIONS")
+        orgs_opt = options.get("ORGS")  # FAZ 5.1
         
         target_user = self.get_username(username_input)
         
@@ -1077,9 +1216,30 @@ class GitHubTracker(BaseModule):
             contribution_analysis = self.analyze_contributions(target_user, activity_events)
             self.print_contributions(contribution_analysis, console)
 
+        # Organizasyon Analizi (FAZ 5.1)
+        orgs_data = []
+        if orgs_opt == "True":
+            orgs_data = self.fetch_organizations(target_user)
+            if orgs_data:
+                console.print(f"[yellow][*] {len(orgs_data)} organizasyon bulundu. Detaylar çekiliyor...[/yellow]")
+                with console.status("[bold green]Organizasyon detayları taranıyor...") as status:
+                    for org in orgs_data:
+                        # İsimden username'i tahmin etmeye çalış (URL için)
+                        # Genellikle url'in son kısmı
+                        org_slug = org['url'].split('/')[-1]
+                        
+                        details = self.fetch_org_details(org_slug)
+                        org['details'] = details
+                        
+                        members = self.fetch_org_members(org_slug)
+                        org['members'] = members
+                        time.sleep(0.5) 
+                
+                self.print_organizations(orgs_data, console)
+
         # Dosyaya Kaydet
         if output_file:
-            self.save_to_file(target_user, following, followers, output_file, console, profile_info if show_profile == "True" else None, stats, repos, repo_analysis, rel_analysis, network_stats, activity_analysis, contribution_analysis)
+            self.save_to_file(target_user, following, followers, output_file, console, profile_info if show_profile == "True" else None, stats, repos, repo_analysis, rel_analysis, network_stats, activity_analysis, contribution_analysis, orgs_data)
 
         # Karşılaştırma Analizi (Varsa) - Dosyaya append yaptığı için save_to_file'dan sonra çağrılmalı
         if compare_user:
@@ -1153,7 +1313,7 @@ class GitHubTracker(BaseModule):
         console.print(table)
         console.print("\n")
 
-    def save_to_file(self, target_user, following, followers, filename, console, profile_info=None, stats=None, repos=None, repo_analysis=None, rel_analysis=None, network_stats=None, activity_analysis=None, contribution_analysis=None):
+    def save_to_file(self, target_user, following, followers, filename, console, profile_info=None, stats=None, repos=None, repo_analysis=None, rel_analysis=None, network_stats=None, activity_analysis=None, contribution_analysis=None, orgs_data=None):
         try:
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(f"GitHub Raporu: {target_user}\n")
@@ -1225,6 +1385,19 @@ class GitHubTracker(BaseModule):
                              f.write(f"  {idx}. {repo}: {count} push\n")
                      
                      f.write("\n" + "-"*40 + "\n\n")
+
+                     f.write("\n" + "-"*40 + "\n\n")
+
+                if orgs_data:
+                    f.write("ORGANIZASYONLAR (FAZ 5.1):\n")
+                    for org in orgs_data:
+                        f.write(f"- {org['name']} ({org['url']})\n")
+                        desc = org.get('details', {}).get('description', '-')
+                        f.write(f"  Aciklama: {desc}\n")
+                        members = org.get('members', [])
+                        f.write(f"  Uyeler ({len(members)}): {', '.join(members)}\n")
+                        f.write("  ---\n")
+                    f.write("\n" + "-"*40 + "\n\n")
 
                 if profile_info:
                     f.write("PROFIL BILGILERI:\n")

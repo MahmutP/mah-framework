@@ -5,6 +5,7 @@ from core.shared_state import shared_state
 from core.command_manager import CommandManager
 from core.module_manager import ModuleManager
 from core.plugin_manager import PluginManager
+from core.session_manager import SessionManager
 from core.hooks import HookType
 from core.console import Console as AppConsole
 from core.cont import DEFAULT_TERMINAL_WIDTH, LEFT_PADDING, COL_SPACING
@@ -200,6 +201,11 @@ def main():
     
     shared_state.command_manager = command_manager
     shared_state.module_manager = module_manager
+
+    # Session Manager'ı başlat
+    session_manager = SessionManager()
+    shared_state.session_manager = session_manager
+    
     command_manager.load_commands()
     module_manager.load_modules()
     

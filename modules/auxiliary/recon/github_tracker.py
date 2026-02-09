@@ -77,6 +77,21 @@ class GitHubTracker(BaseModule):
                 required=False,
                 description="Ağ Analizi Yap (Takipçilerin lokasyon/şirket analizi - YAVAŞ)",
                 choices=["True", "False"]
+            ),
+            "ACTIVITY": Option(
+                name="ACTIVITY",
+                value="False",
+                required=False,
+                description="Son aktiviteleri çek (Push, Star, Fork, Issue, PR)",
+                choices=["True", "False"]
+            ),
+            "DAYS": Option(
+                name="DAYS",
+                value="30",
+                required=False,
+                description="Son kaç günlük aktivite (varsayılan: 30)",
+                regex_check=True,
+                regex="^[0-9]+$"
             )
         }
         super().__init__()
@@ -569,6 +584,164 @@ class GitHubTracker(BaseModule):
         console.print(table)
         console.print()
 
+    def fetch_activity(self, username, days=30):
+        """FAZ 4.1: Kullanıcının son aktivitelerini çeker (Atom feed kullanarak)."""
+        import xml.etree.ElementTree as ET
+        from datetime import datetime, timedelta
+        
+        url = f"https://github.com/{username}.atom"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code != 200:
+                return None
+                
+            # Parse XML
+            root = ET.fromstring(response.content)
+            ns = {'atom': 'http://www.w3.org/2005/Atom'}
+            
+            entries = []
+            cutoff_date = datetime.now() - timedelta(days=days)
+            
+            for entry in root.findall('atom:entry', ns):
+                title_elem = entry.find('atom:title', ns)
+                published_elem = entry.find('atom:published', ns)
+                link_elem = entry.find('atom:link', ns)
+                
+                if title_elem is None or published_elem is None:
+                    continue
+                    
+                title = title_elem.text
+                published_str = published_elem.text
+                link = link_elem.get('href') if link_elem is not None else ""
+                
+                # Parse date
+                try:
+                    # GitHub uses "YYYY-MM-DD HH:MM:SS UTC" format
+                    from datetime import datetime
+                    published = datetime.strptime(published_str, '%Y-%m-%d %H:%M:%S %Z')
+                except:
+                    try:
+                        # Fallback to ISO format
+                        published = datetime.fromisoformat(published_str.replace('Z', '+00:00'))  
+                        published_local = published.replace(tzinfo=None)
+                    except:
+                        continue
+                else:
+                    published_local = published
+                    
+                if published_local < cutoff_date:
+                    continue
+                    
+                # Classify event type (based on actual GitHub feed titles)
+                event_type = "other"
+                title_lower = title.lower()
+                if "starred" in title_lower:
+                    event_type = "star"
+                elif "pushed" in title_lower:  # GitHub uses "pushed", not "pushed to"
+                    event_type = "push"
+                elif "forked" in title_lower:
+                    event_type = "fork"
+                elif "opened an issue" in title_lower or "issue" in title_lower:
+                    event_type = "issue"
+                elif "pull request" in title_lower or "merged" in title_lower or "pr" in title_lower:
+                    event_type = "pull_request"
+                elif "created" in title_lower:
+                    event_type = "created_repo"
+                    
+                entries.append({
+                    'type': event_type,
+                    'title': title,
+                    'date': published_local,
+                    'link': link
+                })
+                
+            return entries
+            
+        except Exception as e:
+            return None
+
+    def analyze_activity(self, events):
+        """Aktivite verilerini analiz eder."""
+        from collections import Counter
+        
+        if not events:
+            return None
+            
+        analysis = {
+            'total_events': len(events),
+            'by_type': Counter([e['type'] for e in events]),
+            'by_day': Counter([e['date'].strftime('%Y-%m-%d') for e in events]),
+            'by_hour': Counter([e['date'].hour for e in events]),
+            'first_event': min(events, key=lambda x: x['date'])['date'] if events else None,
+            'last_event': max(events, key=lambda x: x['date'])['date'] if events else None,
+        }
+        
+        # Most active day
+        if analysis['by_day']:
+            analysis['most_active_day'] = analysis['by_day'].most_common(1)[0]
+        else:
+            analysis['most_active_day'] = None
+            
+        # Most active hour
+        if analysis['by_hour']:
+            analysis['most_active_hour'] = analysis['by_hour'].most_common(1)[0]
+        else:
+            analysis['most_active_hour'] = None
+            
+        return analysis
+
+    def print_activity(self, events, analysis, console):
+        """Aktivite verilerini tablo ile gösterir."""
+        if not events or not analysis:
+            console.print("[yellow]⚠ Aktivite verisi bulunamadı veya son {days} günde aktivite yok.[/yellow]")
+            return
+            
+        # Ana tablo - Aktivite türlerine göre
+        activity_table = Table(title=f"📈 Son Aktiviteler (Toplam: {analysis['total_events']})", 
+                              style="bold cyan", expand=True)
+        activity_table.add_column("Aktivite Türü", style="cyan")
+        activity_table.add_column("Adet", justify="right", style="yellow")
+        
+        event_emoji = {
+            'star': '⭐',
+            'push': '🚀',
+            'fork': '🍴',
+            'issue': '🐛',
+            'pull_request': '🔀',
+            'created_repo': '📦',
+            'other': '📝'
+        }
+        
+        for event_type, count in analysis['by_type'].most_common():
+            emoji = event_emoji.get(event_type, '❓')
+            activity_table.add_row(f"{emoji} {event_type.replace('_', ' ').title()}", str(count))
+            
+        console.print(activity_table)
+        console.print()
+        
+        # İstatistikler tablosu
+        stats_table = Table(title="📊 Aktivite İstatistikleri", style="bold magenta", 
+                           show_header=False, expand=True)
+        stats_table.add_column("Metrik", style="cyan")
+        stats_table.add_column("Değer", style="white")
+        
+        if analysis['first_event']:
+            stats_table.add_row("🕒 İlk Aktivite", analysis['first_event'].strftime('%Y-%m-%d %H:%M'))
+        if analysis['last_event']:
+            stats_table.add_row("🕐 Son Aktivite", analysis['last_event'].strftime('%Y-%m-%d %H:%M'))
+        if analysis['most_active_day']:
+            day, count = analysis['most_active_day']
+            stats_table.add_row("📅 En Aktif Gün", f"{day} ({count} aktivite)")
+        if analysis['most_active_hour']:
+            hour, count = analysis['most_active_hour']
+            stats_table.add_row("⏰ En Aktif Saat", f"{hour}:00 ({count} aktivite)")
+            
+        console.print(stats_table)
+        console.print()
+
+
     def run(self, options):
         console = Console()
         username_input = options.get("USERNAME")
@@ -580,6 +753,8 @@ class GitHubTracker(BaseModule):
         mutual_only = options.get("MUTUAL_ONLY")
         compare_user = options.get("COMPARE")
         network_analysis_opt = options.get("NETWORK_ANALYSIS")
+        activity_opt = options.get("ACTIVITY")
+        activity_days = int(options.get("DAYS"))
         
         target_user = self.get_username(username_input)
         
@@ -627,9 +802,20 @@ class GitHubTracker(BaseModule):
             network_stats = self.analyze_network(followers, limit=analysis_limit)
             self.print_network_analysis(network_stats, console)
 
+        # Aktivite Takibi (FAZ 4.1)
+        activity_events = None
+        activity_analysis = None
+        if activity_opt == "True":
+            activity_events = self.fetch_activity(target_user, days=activity_days)
+            if activity_events:
+                activity_analysis = self.analyze_activity(activity_events)
+                self.print_activity(activity_events, activity_analysis, console)
+            else:
+                console.print(f"[yellow]⚠ Son {activity_days} günlük aktivite verisi alınamadı.[/yellow]")
+
         # Dosyaya Kaydet
         if output_file:
-            self.save_to_file(target_user, following, followers, output_file, console, profile_info if show_profile == "True" else None, stats, repos, repo_analysis, rel_analysis, network_stats)
+            self.save_to_file(target_user, following, followers, output_file, console, profile_info if show_profile == "True" else None, stats, repos, repo_analysis, rel_analysis, network_stats, activity_analysis)
 
         # Karşılaştırma Analizi (Varsa) - Dosyaya append yaptığı için save_to_file'dan sonra çağrılmalı
         if compare_user:
@@ -703,7 +889,7 @@ class GitHubTracker(BaseModule):
         console.print(table)
         console.print("\n")
 
-    def save_to_file(self, target_user, following, followers, filename, console, profile_info=None, stats=None, repos=None, repo_analysis=None, rel_analysis=None, network_stats=None):
+    def save_to_file(self, target_user, following, followers, filename, console, profile_info=None, stats=None, repos=None, repo_analysis=None, rel_analysis=None, network_stats=None, activity_analysis=None):
         try:
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(f"GitHub Raporu: {target_user}\n")
@@ -730,6 +916,20 @@ class GitHubTracker(BaseModule):
                      f.write("En Yaygin Sirketler:\n")
                      for k,v in network_stats['top_companies']:
                          f.write(f"  - {k}: {v}\n")
+                     f.write("\n" + "-"*40 + "\n\n")
+
+                if activity_analysis:
+                     f.write("AKTIVITE TAKIBI (FAZ 4.1):\n")
+                     f.write(f"- Toplam Aktivite: {activity_analysis['total_events']}\n")
+                     f.write("\nAktivite Turleri:\n")
+                     for event_type, count in activity_analysis['by_type'].most_common():
+                         f.write(f"  - {event_type.replace('_', ' ').title()}: {count}\n")
+                     if activity_analysis['most_active_day']:
+                         day, count = activity_analysis['most_active_day']
+                         f.write(f"\nEn Aktif Gun: {day} ({count} aktivite)\n")
+                     if activity_analysis['most_active_hour']:
+                         hour, count = activity_analysis['most_active_hour']
+                         f.write(f"En Aktif Saat: {hour}:00 ({count} aktivite)\n")
                      f.write("\n" + "-"*40 + "\n\n")
 
                 if profile_info:

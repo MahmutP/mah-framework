@@ -33,8 +33,27 @@ class BaseHandler:
                 try:
                     self.client_sock, self.client_addr = self.sock.accept()
                     print(f"[+] Bağlantı geldi: {self.client_addr[0]}:{self.client_addr[1]}")
-                    self.handle_connection(self.client_sock)
-                    break # Şimdilik tek bağlantı sonrası duralım veya handler logic'i karar versin
+                    
+                    # Session Manager'a kaydet
+                    from core.shared_state import shared_state
+                    session_id = None
+                    if shared_state.session_manager:
+                        connection_info = {
+                            "host": self.client_addr[0],
+                            "port": self.client_addr[1],
+                            "type": "Generic"
+                        }
+                        session_id = shared_state.session_manager.add_session(self, connection_info)
+                        print(f"[*] Oturum açıldı: Session {session_id}")
+
+                    # handle_connection artık session_id almalı (veya alabilir)
+                    self.handle_connection(self.client_sock, session_id)
+                    
+                    # Çoklu bağlantı için break kaldırıldı (MultiHandler mantığına uygun olarak)
+                    # Ancak BaseHandler tek bağlantı mantığıyla devam edebilir,
+                    # MultiHandler bunu override edebilir.
+                    # Şimdilik BaseHandler tek bağlantı mantığını koruyalım, break kalsın.
+                    break 
                 except KeyboardInterrupt:
                     raise
                 except Exception as e:
@@ -63,9 +82,16 @@ class BaseHandler:
             except:
                 pass
 
-    def handle_connection(self, client_sock: socket.socket):
+    def handle_connection(self, client_sock: socket.socket, session_id: int = None):
         """
         Gelen bağlantıyı yönetecek fonksiyon.
         Alt sınıflar bunu override etmeli.
         """
         raise NotImplementedError("Alt sınıflar handle_connection metodunu uygulamalıdır.")
+
+    def interact(self, session_id: int):
+        """
+        Oturumla etkileşime geçen fonksiyon. (CLI/Shell)
+        Alt sınıflar bunu override etmeli.
+        """
+        print(f"[*] {session_id} numaralı oturum interaktif modu desteklemiyor.")

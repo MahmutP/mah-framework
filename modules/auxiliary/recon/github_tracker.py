@@ -1201,6 +1201,15 @@ class GitHubTracker(BaseModule):
         
         target_user = self.get_username(username_input)
         
+        # FAZ 6.2: Otomatik Dosya İsmi (Eğer OUTPUT boşsa)
+        if not output_file:
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # Format option'ına göre uzantı belirle
+            ext = output_format if output_format else "txt"
+            output_file = f"{target_user}_report_{timestamp}.{ext}"
+            console.print(f"[dim][*] Çıktı dosyası belirtilmedi, otomatik oluşturuldu: {output_file}[/dim]")
+        
         console.print(f"[bold green][+] Hedef Kullanıcı:[/bold green] {target_user}")
         
         profile_info = None

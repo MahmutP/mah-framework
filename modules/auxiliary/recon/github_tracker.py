@@ -106,6 +106,13 @@ class GitHubTracker(BaseModule):
                 required=False,
                 description="Organizasyon bilgilerini ve üyelerini çek",
                 choices=["True", "False"]
+            ),
+            "FORMAT": Option(
+                name="FORMAT",
+                value="txt",
+                required=False,
+                description="Çıktı formatı (txt, json, csv, html, md)",
+                choices=["txt", "json", "csv", "html", "md"]
             )
         }
         super().__init__()
@@ -1188,7 +1195,9 @@ class GitHubTracker(BaseModule):
         activity_opt = options.get("ACTIVITY")
         activity_days = int(options.get("DAYS"))
         contributions_opt = options.get("CONTRIBUTIONS")
+        contributions_opt = options.get("CONTRIBUTIONS")
         orgs_opt = options.get("ORGS")  # FAZ 5.1
+        output_format = options.get("FORMAT") # FAZ 6.1
         
         target_user = self.get_username(username_input)
         
@@ -1280,7 +1289,7 @@ class GitHubTracker(BaseModule):
 
         # Dosyaya Kaydet
         if output_file:
-            self.save_to_file(target_user, following, followers, output_file, console, profile_info if show_profile == "True" else None, stats, repos, repo_analysis, rel_analysis, network_stats, activity_analysis, contribution_analysis, orgs_data)
+            self.save_to_file(target_user, following, followers, output_file, output_format, console, profile_info if show_profile == "True" else None, stats, repos, repo_analysis, rel_analysis, network_stats, activity_analysis, contribution_analysis, orgs_data)
 
         # Karşılaştırma Analizi (Varsa) - Dosyaya append yaptığı için save_to_file'dan sonra çağrılmalı
         if compare_user:
@@ -1354,7 +1363,293 @@ class GitHubTracker(BaseModule):
         console.print(table)
         console.print("\n")
 
-    def save_to_file(self, target_user, following, followers, filename, console, profile_info=None, stats=None, repos=None, repo_analysis=None, rel_analysis=None, network_stats=None, activity_analysis=None, contribution_analysis=None, orgs_data=None):
+    def save_to_file(self, target_user, following, followers, filename, format, console, profile_info=None, stats=None, repos=None, repo_analysis=None, rel_analysis=None, network_stats=None, activity_analysis=None, contribution_analysis=None, orgs_data=None):
+        """FAZ 6.1: Sonuçları belirtilen formatta dosyaya kaydeder."""
+        try:
+            # Format belirleme (dosya uzantısından veya option'dan)
+            if filename.endswith('.json'): format = 'json'
+            elif filename.endswith('.csv'): format = 'csv'
+            elif filename.endswith('.html'): format = 'html'
+            elif filename.endswith('.md'): format = 'md'
+            elif filename.endswith('.txt'): format = 'txt'
+            
+            console.print(f"[yellow][*] Sonuçlar {format.upper()} formatında kaydediliyor...[/yellow]")
+            
+            if format == 'json':
+                self.save_to_json(target_user, following, followers, filename, profile_info, stats, repos, repo_analysis, rel_analysis, network_stats, activity_analysis, contribution_analysis, orgs_data)
+            elif format == 'csv':
+                self.save_to_csv(target_user, following, followers, filename, profile_info, stats, repos, repo_analysis, rel_analysis, network_stats, activity_analysis, contribution_analysis, orgs_data)
+            elif format == 'html':
+                self.save_to_html(target_user, following, followers, filename, profile_info, stats, repos, repo_analysis, rel_analysis, network_stats, activity_analysis, contribution_analysis, orgs_data)
+            elif format == 'md':
+                self.save_to_markdown(target_user, following, followers, filename, profile_info, stats, repos, repo_analysis, rel_analysis, network_stats, activity_analysis, contribution_analysis, orgs_data)
+            else:
+                self.save_to_txt(target_user, following, followers, filename, profile_info, stats, repos, repo_analysis, rel_analysis, network_stats, activity_analysis, contribution_analysis, orgs_data)
+                
+            console.print(f"[bold green][+] Sonuçlar başarıyla {filename} dosyasına kaydedildi.[/bold green]")
+        except Exception as e:
+            console.print(f"[bold red][!] Dosya kaydetme hatası: {e}[/bold red]")
+
+    def save_to_json(self, target_user, following, followers, filename, profile_info, stats, repos, repo_analysis, rel_analysis, network_stats, activity_analysis, contribution_analysis, orgs_data):
+        import json
+        from datetime import datetime
+
+        # Kapsamlı bir sözlük oluştur
+        data = {
+            "meta": {
+                "target_user": target_user,
+                "scan_date": datetime.now().isoformat(),
+                "module": "github_tracker"
+            },
+            "profile": profile_info,
+            "stats": stats,
+            "repositories": repos,
+            "repository_analysis": repo_analysis,
+            "network": {
+                "following_count": len(following),
+                "followers_count": len(followers),
+                "relationship_analysis": {
+                    "mutual_count": len(rel_analysis['mutual']) if rel_analysis else 0,
+                    "not_following_back_count": len(rel_analysis['not_following_back']) if rel_analysis else 0,
+                    "not_followed_back_count": len(rel_analysis['not_followed_back']) if rel_analysis else 0,
+                    "mutual_users": list(rel_analysis['mutual']) if rel_analysis else [],
+                } if rel_analysis else None,
+                "network_analysis_stats": network_stats
+            },
+            "activity": {
+                "summary": activity_analysis if activity_analysis else None,
+                "contributions": contribution_analysis if contribution_analysis else None
+            },
+            "organizations": orgs_data,
+            "following_list": following,
+            "followers_list": followers
+        }
+
+        # JSON serileştirilemeyen tipleri temizle (örn: set -> list, datetime -> str)
+        # Basit bir custom encoder veya recursive conversion gerekebilir.
+        # Şimdilik yukarıda manuel list conversion yaptım.
+        # Ancak activity_analysis içinde datetime ve Counter nesneleri olabilir.
+        
+        def default_serializer(obj):
+            if isinstance(obj, (datetime,)):
+                return obj.isoformat()
+            if hasattr(obj, 'most_common'): # Counter
+                return dict(obj)
+            return str(obj)
+
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4, default=default_serializer, ensure_ascii=False)
+
+    def save_to_csv(self, target_user, following, followers, filename, profile_info, stats, repos, repo_analysis, rel_analysis, network_stats, activity_analysis, contribution_analysis, orgs_data):
+        import csv
+        
+        # CSV formatı hiyerarşik veriler için çok uygun değil, bu yüzden
+        # farklı kategorileri farklı dosyalar yerine aynı dosyada bölümler halinde yazmak zor.
+        # Alternatif olarak: Sadece Following/Followers listesini CSV yaparız, diğerleri özet olarak kalır.
+        # Veya birden fazla CSV oluşturmak gerekir ki bu tek dosya output mantığına ters.
+        # Basit yaklaşım: Düz bir yapı oluşturalım.
+        
+        with open(filename, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            
+            # Profil
+            writer.writerow(["SECTION", "KEY", "VALUE"])
+            writer.writerow(["PROFILE", "Username", target_user])
+            if profile_info:
+                for k, v in profile_info.items():
+                    writer.writerow(["PROFILE", k, v])
+            
+            # İstatistikler
+            if stats:
+                for k, v in stats.items():
+                    writer.writerow(["STATS", k, v])
+            
+            # Repo Özeti
+            if repo_analysis:
+                for lang, count in repo_analysis.get('top_languages', []):
+                    writer.writerow(["REPO_STATS", f"Language_{lang}", count])
+            
+            writer.writerow([])
+            
+            # Repolar
+            writer.writerow(["SECTION", "Name", "Language", "Stars", "Forks", "Updated"])
+            if repos:
+                for r in repos:
+                    writer.writerow(["REPO", r['name'], r['language'], r['stars'], r['forks'], r['updated']])
+                    
+            writer.writerow([])
+            
+            # İlişkiler (Sadece listeler)
+            writer.writerow(["SECTION", "Username", "Type", "Link"])
+            for u in following:
+                writer.writerow(["RELATION", u['username'], "Following", u['link']])
+            for u in followers:
+                writer.writerow(["RELATION", u['username'], "Follower", u['link']])
+
+    def save_to_markdown(self, target_user, following, followers, filename, profile_info, stats, repos, repo_analysis, rel_analysis, network_stats, activity_analysis, contribution_analysis, orgs_data):
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(f"# GitHub Raporu: {target_user}\n\n")
+            
+            if profile_info:
+                f.write("## 👤 Profil Bilgileri\n")
+                f.write(f"| Özellik | Değer |\n|---|---|\n")
+                if profile_info.get('bio'): f.write(f"| Bio | {profile_info['bio']} |\n")
+                if profile_info.get('location'): f.write(f"| Konum | {profile_info['location']} |\n")
+                if profile_info.get('company'): f.write(f"| Şirket | {profile_info['company']} |\n")
+                if profile_info.get('twitter'): f.write(f"| Twitter | {profile_info['twitter']} |\n")
+                
+                if stats:
+                     f.write(f"| **Toplam Star** | {stats.get('total_stars', 0)} |\n")
+                     f.write(f"| **Toplam Fork** | {stats.get('total_forks', 0)} |\n")
+                f.write("\n")
+
+            if orgs_data:
+                f.write("## 🏢 Organizasyonlar\n")
+                for org in orgs_data:
+                    f.write(f"- **[{org['name']}]({org['url']})**\n")
+                    f.write(f"  - {org.get('details', {}).get('description', '-')}\n")
+                    teams = org.get('teams', [])
+                    if teams: f.write(f"  - *Takımlar:* {', '.join(teams)}\n")
+                f.write("\n")
+
+            if repos:
+                f.write(f"## 📁 Depolar ({len(repos)})\n")
+                f.write("| İsim | Dil | ⭐ | 🍴 | Güncelleme |\n|---|---|---|---|---|\n")
+                for r in repos:
+                    f.write(f"| [{r['name']}]({r['link']}) | {r['language']} | {r['stars']} | {r['forks']} | {r['updated']} |\n")
+                f.write("\n")
+
+            if rel_analysis:
+                f.write("## 🔗 İlişki Analizi\n")
+                f.write(f"- **Karşılıklı Takip:** {len(rel_analysis['mutual'])}\n")
+                f.write(f"- **Takip Edip Dönmeyenler:** {len(rel_analysis['not_following_back'])}\n")
+                f.write(f"- **Sizi Takip Edip Etmedikleriniz:** {len(rel_analysis['not_followed_back'])}\n")
+                
+                if rel_analysis['mutual']:
+                    f.write("\n### 🤝 Karşılıklı Takipleşenler\n")
+                    f.write(", ".join(list(rel_analysis['mutual'])))
+                    f.write("\n")
+
+            if activity_analysis:
+                f.write("## 📈 Aktivite Özeti\n")
+                f.write(f"- **Toplam Aktivite:** {activity_analysis['total_events']}\n")
+                if activity_analysis.get('most_active_day'):
+                    f.write(f"- **En Aktif Gün:** {activity_analysis['most_active_day'][0]} ({activity_analysis['most_active_day'][1]})\n")
+                
+                f.write("\n### 📊 Aktivite Dağılımı\n")
+                for et, count in activity_analysis['by_type'].most_common():
+                    f.write(f"- {et}: {count}\n")
+                f.write("\n")
+
+            f.write("## 👥 Takip Listeleri\n")
+            f.write(f"**Following ({len(following)})**\n")
+            f.write(", ".join([f"[{u['username']}]({u['link']})" for u in following]))
+            f.write(f"\n\n**Followers ({len(followers)})**\n")
+            f.write(", ".join([f"[{u['username']}]({u['link']})" for u in followers]))
+            f.write("\n")
+
+    def save_to_html(self, target_user, following, followers, filename, profile_info, stats, repos, repo_analysis, rel_analysis, network_stats, activity_analysis, contribution_analysis, orgs_data):
+        import html
+        
+        css = """
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 960px; margin: 0 auto; padding: 20px; }
+        h1, h2, h3 { color: #24292e; border-bottom: 1px solid #eaecef; padding-bottom: .3em; }
+        .stat-box { background: #f6f8fa; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #e1e4e8; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { text-align: left; padding: 10px; border: 1px solid #dfe2e5; }
+        th { background: #f6f8fa; }
+        .tag { display: inline-block; padding: 2px 5px; background: #e1e4e8; border-radius: 4px; font-size: 0.9em; margin-right: 5px; margin-bottom: 5px;}
+        .repo-card { border: 1px solid #e1e4e8; padding: 15px; border-radius: 6px; margin-bottom: 10px; }
+        .flex-container { display: flex; flex-wrap: wrap; gap: 10px; }
+        """
+        
+        content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>GitHub Raporu: {target_user}</title>
+    <style>{css}</style>
+</head>
+<body>
+    <h1>GitHub Raporu: {target_user}</h1>
+    
+    <div class="stat-box">
+        <h2>👤 Profil</h2>
+        <p>
+            {f'<b>Bio:</b> {html.escape(profile_info.get("bio", "-"))}<br>' if profile_info else ''}
+            {f'<b>Konum:</b> {html.escape(profile_info.get("location", "-"))}<br>' if profile_info else ''}
+            {f'<b>Şirket:</b> {html.escape(profile_info.get("company", "-"))}<br>' if profile_info else ''}
+            {f'<b>Website:</b> <a href="{profile_info.get("website")}">{profile_info.get("website")}</a><br>' if profile_info and profile_info.get("website") else ''}
+        </p>
+        <p>
+            <b>Public Repos:</b> {profile_info.get("public_repos", 0) if profile_info else 0} | 
+            <b>Stars:</b> {stats.get("total_stars", 0) if stats else 0} | 
+            <b>Forks:</b> {stats.get("total_forks", 0) if stats else 0}
+        </p>
+    </div>
+"""
+        
+        if orgs_data:
+            content += "<h2>🏢 Organizasyonlar</h2><ul>"
+            for org in orgs_data:
+                content += f"""<li>
+                    <b><a href="{org['url']}">{org['name']}</a></b>: {html.escape(org.get('details', {}).get('description', '-') or '-')}
+                    <br><small>Takımlar: {', '.join(org.get('teams', []))}</small>
+                </li>"""
+            content += "</ul>"
+
+        if repos:
+             content += f"<h2>📁 Depolar ({len(repos)})</h2><table>"
+             content += "<thead><tr><th>İsim</th><th>Dil</th><th>Star</th><th>Fork</th><th>Güncelleme</th></tr></thead><tbody>"
+             for r in repos:
+                 content += f"""<tr>
+                    <td><a href="{r['link']}">{r['name']}</a><br><small>{html.escape(r['description'])}</small></td>
+                    <td>{r['language']}</td>
+                    <td>{r['stars']}</td>
+                    <td>{r['forks']}</td>
+                    <td>{r['updated']}</td>
+                 </tr>"""
+             content += "</tbody></table>"
+
+        if rel_analysis:
+            content += f"""<h2>🔗 İlişki Analizi</h2>
+            <div class="stat-box">
+                <p><b>Karşılıklı Takip:</b> {len(rel_analysis['mutual'])}</p>
+                <p><b>Takip Edip Dönmeyenler:</b> {len(rel_analysis['not_following_back'])}</p>
+            </div>"""
+            
+            if rel_analysis['mutual']:
+                content += "<h3>🤝 Karşılıklı Takipleşenler</h3><div class='flex-container'>"
+                for u in rel_analysis['mutual']:
+                    content += f"<span class='tag'>{u}</span>"
+                content += "</div>"
+        
+        if activity_analysis:
+            content += "<h2>📈 Aktivite</h2>"
+            content += "<ul>"
+            for et, count in activity_analysis['by_type'].most_common():
+                content += f"<li>{et}: {count}</li>"
+            content += "</ul>"
+            
+        content += f"""
+    <h2>👥 Listeler</h2>
+    <h3>Following ({len(following)})</h3>
+    <div class='flex-container'>
+    {''.join([f"<a href='{u['link']}' class='tag'>{u['username']}</a>" for u in following])}
+    </div>
+    
+    <h3>Followers ({len(followers)})</h3>
+    <div class='flex-container'>
+    {''.join([f"<a href='{u['link']}' class='tag'>{u['username']}</a>" for u in followers])}
+    </div>
+    
+</body>
+</html>
+"""
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+    def save_to_txt(self, target_user, following, followers, filename, profile_info=None, stats=None, repos=None, repo_analysis=None, rel_analysis=None, network_stats=None, activity_analysis=None, contribution_analysis=None, orgs_data=None):
         try:
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(f"GitHub Raporu: {target_user}\n")
@@ -1493,6 +1788,5 @@ class GitHubTracker(BaseModule):
                 for u in followers:
                     f.write(f"- {u['username']} ({u['link']})\n")
                     
-            console.print(f"[bold green][+] Sonuçlar dosyaya kaydedildi:[/bold green] {filename}")
         except Exception as e:
             console.print(f"[bold red][!] Dosya kaydetme hatası:[/bold red] {e}")

@@ -8,6 +8,13 @@ class SessionsCommand(Command):
     Description = "Aktif oturumları listeler ve yönetir."
     Aliases = []
     Category = "core"
+    Usage = "sessions [seçenekler]"
+    Examples = [
+        "sessions -l              # Aktif oturumları listeler",
+        "sessions list            # Aktif oturumları listeler",
+        "sessions -i <id>         # Belirtilen ID'li oturumla etkileşime geçer",
+        "sessions -k <id>         # Belirtilen ID'li oturumu sonlandırır"
+    ]
 
     def execute(self, *args) -> bool:
         if not shared_state.session_manager:
@@ -35,7 +42,8 @@ class SessionsCommand(Command):
             except ValueError:
                 print("[!] Geçersiz session ID.")
         else:
-            print(self.help())
+            print(f"Kullanım: {self.Usage}")
+            print("Detaylı bilgi için 'help sessions' komutunu kullanın.")
             
         return True
 
@@ -82,13 +90,3 @@ class SessionsCommand(Command):
         
         shared_state.session_manager.remove_session(session_id)
         print(f"[*] {session_id} numaralı oturum sonlandırıldı.")
-
-    def help(self):
-        return """
-        Kullanım: sessions [seçenekler]
-        
-        Seçenekler:
-            -l, list       : Aktif oturumları listeler.
-            -i <id>        : Belirtilen ID'li oturumla etkileşime geçer.
-            -k <id>        : Belirtilen ID'li oturumu sonlandırır.
-        """

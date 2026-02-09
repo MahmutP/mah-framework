@@ -1111,6 +1111,34 @@ class GitHubTracker(BaseModule):
         except:
             return []
 
+    def fetch_org_teams(self, org_name):
+        """FAZ 5.2: Organizasyonun public takımlarını çeker."""
+        url = f"https://github.com/orgs/{org_name}/teams"
+        teams = []
+        headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'}
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code != 200:
+                return []
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            # Takım linklerini bul
+            team_links = soup.select('a[href*="/teams/"]')
+            
+            for link in team_links:
+                name = link.get_text(strip=True)
+                href = link.get('href')
+                
+                # Link kontrolü: /orgs/ORGNAME/teams/TEAMNAME formatında olmalı
+                if href and f"/orgs/{org_name}/teams/" in href:
+                     # Sadece ana takım linkini al (members, repositories vb. alt linkleri ele)
+                     if not href.endswith("/members") and not href.endswith("/repositories"):
+                         if name and name not in teams:
+                             teams.append(name)
+            return teams
+        except:
+            return []
+
     def print_organizations(self, orgs, console):
         """Organizasyonları listeler."""
         if not orgs:
@@ -1120,6 +1148,7 @@ class GitHubTracker(BaseModule):
         table = Table(title=f"🏢 Organizasyonlar ({len(orgs)})", style="bold cyan")
         table.add_column("Organizasyon", style="white")
         table.add_column("Detaylar", style="green")
+        table.add_column("Takımlar", style="magenta")
         table.add_column("Üyeler (İlk 10)", style="yellow")
         
         for org in orgs:
@@ -1128,10 +1157,18 @@ class GitHubTracker(BaseModule):
             
             members = org.get('members', [])
             members_str = ", ".join(members) if members else "-"
+
+            teams = org.get('teams', [])
+            teams_str = ", ".join(teams) if teams else "0"
+            if len(teams) > 5:
+                teams_str = f"{len(teams)} Takım ({', '.join(teams[:3])}...)"
+            elif len(teams) == 0:
+                teams_str = "-"
             
             table.add_row(
                 org['name'],
                 desc,
+                teams_str,
                 members_str
             )
             
@@ -1233,6 +1270,10 @@ class GitHubTracker(BaseModule):
                         
                         members = self.fetch_org_members(org_slug)
                         org['members'] = members
+
+                        teams = self.fetch_org_teams(org_slug)
+                        org['teams'] = teams
+                        
                         time.sleep(0.5) 
                 
                 self.print_organizations(orgs_data, console)
@@ -1394,6 +1435,8 @@ class GitHubTracker(BaseModule):
                         f.write(f"- {org['name']} ({org['url']})\n")
                         desc = org.get('details', {}).get('description', '-')
                         f.write(f"  Aciklama: {desc}\n")
+                        teams = org.get('teams', [])
+                        f.write(f"  Takimlar ({len(teams)}): {', '.join(teams)}\n")
                         members = org.get('members', [])
                         f.write(f"  Uyeler ({len(members)}): {', '.join(members)}\n")
                         f.write("  ---\n")

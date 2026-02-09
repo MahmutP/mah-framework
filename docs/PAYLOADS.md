@@ -103,6 +103,25 @@ Mah-Framework offers encoding mechanisms to obfuscate payloads:
 ---
 ---
 
+### 🖥️ Handling Connections & Sessions
+
+Once a payload executes on the target and connects back to your listener, a new session is created.
+
+*   **List Sessions:**
+    ```bash
+    sessions -l
+    ```
+*   **Interact with a Session:**
+    ```bash
+    sessions -i <session_id>
+    ```
+*   **Kill a Session:**
+    ```bash
+    sessions -k <session_id>
+    ```
+
+---
+
 <a name="-türkçe"></a>
 ## 🇹🇷 Türkçe
 
@@ -199,4 +218,21 @@ Mah-Framework, payloadların tespit edilmesini zorlaştırmak için çeşitli en
 *   **Base64:** Payload kodunu Base64 formatına çevirir ve runtime'da decode eder.
 *   **XOR:** Basit XOR şifreleme algoritması.
 
-*Dokümantasyon son güncelleme tarihi: 2026-01-31*
+### 🖥️ Bağlantıları Yönetme ve Oturumlar (Sessions)
+
+Bir payload hedef sistemde çalışıp dinleyicinize bağlandığında, yeni bir oturum oluşturulur.
+
+*   **Oturumları Listele:**
+    ```bash
+    sessions -l
+    ```
+*   **Oturumla Etkileşime Geç:**
+    ```bash
+    sessions -i <session_id>
+    ```
+*   **Oturumu Sonlandır:**
+    ```bash
+    sessions -k <session_id>
+    ```
+
+*Dokümantasyon son güncelleme tarihi: 2026-02-09*

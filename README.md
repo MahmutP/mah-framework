@@ -158,11 +158,13 @@ mahmut > checkupdate
 ```
 > ⚠️ **Important:** Run `checkupdate` periodically to ensure you're using the latest version.
 
-### 🔌 Plugin System
-Mah Framework supports plugins to extend functionality.
+### 🖥️ Session Management
+Mah Framework includes a built-in session manager to handle multiple active connections (shells, payloads).
+
 ```bash
-mahmut > plugins list
-mahmut > plugins enable audit_logger
+mahmut > sessions -l            # List active sessions
+mahmut > sessions -i 1          # Interact with session 1
+mahmut > sessions -k 1          # Kill session 1
 ```
 
 ### 🤝 Contributing
@@ -323,11 +325,13 @@ mahmut > checkupdate
 ```
 > ⚠️ **Önemli:** En son sürümü kullandığınızdan emin olmak için `checkupdate` komutunu düzenli olarak çalıştırın.
 
-### 🔌 Plugin Sistemi
-Mah Framework, işlevselliği artırmak için plugin desteği sunar.
+### 🖥️ Oturum Yönetimi (Sessions)
+Mah Framework, birden fazla aktif bağlantıyı (shell, payload) yönetmek için dahili bir oturum yöneticisi içerir.
+
 ```bash
-mahmut > plugins list
-mahmut > plugins enable audit_logger
+mahmut > sessions -l            # Aktif oturumları listele
+mahmut > sessions -i 1          # 1 numaralı oturuma bağlan (etkileşim)
+mahmut > sessions -k 1          # 1 numaralı oturumu sonlandır
 ```
 
 ### 🤝 Katkıda Bulunma

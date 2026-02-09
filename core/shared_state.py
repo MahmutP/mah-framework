@@ -26,6 +26,7 @@ class SharedState:
         self.plugin_manager = None
         self.is_recording = False
         self.recorded_commands = []
+        self.session_manager = None
 
     def get_selected_module(self):
         """Seçili modülü çağırmaya yarıyan fonksiyon

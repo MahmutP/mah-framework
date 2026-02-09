@@ -92,6 +92,13 @@ class GitHubTracker(BaseModule):
                 description="Son kaç günlük aktivite (varsayılan: 30)",
                 regex_check=True,
                 regex="^[0-9]+$"
+            ),
+            "CONTRIBUTIONS": Option(
+                name="CONTRIBUTIONS",
+                value="False",
+                required=False,
+                description="Contribution analizi çek (Yıllık katkı, aktif repolar, PR/Issue istatistikleri)",
+                choices=["True", "False"]
             )
         }
         super().__init__()
@@ -741,6 +748,256 @@ class GitHubTracker(BaseModule):
         console.print(stats_table)
         console.print()
 
+    # ==================== FAZ 4.2: CONTRIBUTION ANALİZİ ====================
+    
+    def fetch_contributions(self, username):
+        """FAZ 4.2: Kullanıcının yıllık contribution sayısını ve contribution graph verilerini çeker."""
+        import re
+        
+        # GitHub'ın contribution calendar sayfasını kullan
+        url = f"https://github.com/users/{username}/contributions"
+        headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code != 200:
+                return None
+                
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            contributions = {
+                'yearly_total': 0,
+                'current_streak': 0,
+                'longest_streak': 0,
+                'daily_contributions': []
+            }
+            
+            # H2 elementinden yıllık toplam contribution sayısını bul
+            # Format: "3,060 contributions in the last year"
+            for h2 in soup.find_all('h2'):
+                text = h2.get_text(strip=True)
+                match = re.search(r'([\d,]+)\s*contributions?', text, re.IGNORECASE)
+                if match:
+                    contributions['yearly_total'] = int(match.group(1).replace(',', ''))
+                    break
+            
+            # Tool-tip elementlerinden günlük contribution'ları topla (alternatif hesaplama)
+            if contributions['yearly_total'] == 0:
+                tooltips = soup.select('tool-tip')
+                total_from_tips = 0
+                for tt in tooltips:
+                    text = tt.get_text(strip=True)
+                    match = re.search(r'(\d+)\s+contribution', text)
+                    if match:
+                        total_from_tips += int(match.group(1))
+                if total_from_tips > 0:
+                    contributions['yearly_total'] = total_from_tips
+            
+            return contributions
+            
+        except Exception as e:
+            return None
+    
+    def fetch_contribution_repos(self, username, events=None):
+        """FAZ 4.2: En aktif olduğu repo'ları belirler (push eventlerinden)."""
+        from collections import Counter
+        
+        if events is None:
+            # Eğer events verilmediyse, fetch_activity ile çek (daha uzun bir periyod için)
+            events = self.fetch_activity(username, days=365)
+            
+        if not events:
+            return []
+            
+        # Push eventlerinden repo isimlerini çıkar
+        repo_counts = Counter()
+        
+        for event in events:
+            if event['type'] == 'push' and event.get('link'):
+                # GitHub atom feed linki: https://github.com/user/repo/...
+                link = event['link']
+                parts = link.replace('https://github.com/', '').split('/')
+                if len(parts) >= 2:
+                    repo_name = f"{parts[0]}/{parts[1]}"
+                    repo_counts[repo_name] += 1
+        
+        # En aktif repoları döndür
+        return repo_counts.most_common(10)
+    
+    def fetch_pr_stats(self, username):
+        """FAZ 4.2: Kullanıcının Pull Request istatistiklerini çeker."""
+        import re
+        
+        stats = {
+            'total_prs': 0,
+            'open_prs': 0,
+            'closed_prs': 0,
+            'merged_prs': 0
+        }
+        
+        headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
+        
+        try:
+            # Toplam PR sayısı
+            total_url = f"https://github.com/search?q=author:{username}+is:pr&type=issues"
+            response = requests.get(total_url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                text = response.text
+                # "XX results" formatını bul
+                match = re.search(r'([\d,]+)\s+results?', text, re.IGNORECASE)
+                if match:
+                    stats['total_prs'] = int(match.group(1).replace(',', ''))
+            
+            time.sleep(0.3)
+            
+            # Open PR sayısı
+            open_url = f"https://github.com/search?q=author:{username}+is:pr+is:open&type=issues"
+            response = requests.get(open_url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                match = re.search(r'([\d,]+)\s+results?', response.text, re.IGNORECASE)
+                if match:
+                    stats['open_prs'] = int(match.group(1).replace(',', ''))
+            
+            time.sleep(0.3)
+            
+            # Merged PR sayısı
+            merged_url = f"https://github.com/search?q=author:{username}+is:pr+is:merged&type=issues"
+            response = requests.get(merged_url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                match = re.search(r'([\d,]+)\s+results?', response.text, re.IGNORECASE)
+                if match:
+                    stats['merged_prs'] = int(match.group(1).replace(',', ''))
+            
+            # Closed = Total - Open (veya merged + unmerged closed)
+            stats['closed_prs'] = stats['total_prs'] - stats['open_prs']
+                
+            return stats
+            
+        except Exception as e:
+            return stats
+    
+    def fetch_issue_stats(self, username):
+        """FAZ 4.2: Kullanıcının Issue istatistiklerini çeker."""
+        import re
+        
+        stats = {
+            'total_issues': 0,
+            'open_issues': 0,
+            'closed_issues': 0
+        }
+        
+        headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
+        
+        try:
+            # Toplam Issue sayısı (PR dahil değil, sadece issue)
+            total_url = f"https://github.com/search?q=author:{username}+is:issue&type=issues"
+            response = requests.get(total_url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                match = re.search(r'([\d,]+)\s+results?', response.text, re.IGNORECASE)
+                if match:
+                    stats['total_issues'] = int(match.group(1).replace(',', ''))
+            
+            time.sleep(0.3)
+            
+            # Open Issue sayısı
+            open_url = f"https://github.com/search?q=author:{username}+is:issue+is:open&type=issues"
+            response = requests.get(open_url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                match = re.search(r'([\d,]+)\s+results?', response.text, re.IGNORECASE)
+                if match:
+                    stats['open_issues'] = int(match.group(1).replace(',', ''))
+            
+            # Closed = Total - Open
+            stats['closed_issues'] = stats['total_issues'] - stats['open_issues']
+            
+            return stats
+            
+        except Exception as e:
+            return stats
+    
+    def analyze_contributions(self, username, activity_events=None):
+        """FAZ 4.2: Tüm contribution analizini bir araya getirir."""
+        console = Console()
+        console.print(f"[yellow][*] {username} için contribution analizi yapılıyor...[/yellow]")
+        
+        analysis = {
+            'contributions': None,
+            'active_repos': [],
+            'pr_stats': None,
+            'issue_stats': None
+        }
+        
+        # 1. Yıllık contribution sayısı
+        analysis['contributions'] = self.fetch_contributions(username)
+        time.sleep(0.5)
+        
+        # 2. En aktif olduğu repolar (Push eventlerinden)
+        analysis['active_repos'] = self.fetch_contribution_repos(username, activity_events)
+        time.sleep(0.5)
+        
+        # 3. PR istatistikleri
+        analysis['pr_stats'] = self.fetch_pr_stats(username)
+        time.sleep(0.5)
+        
+        # 4. Issue istatistikleri
+        analysis['issue_stats'] = self.fetch_issue_stats(username)
+        
+        return analysis
+    
+    def print_contributions(self, analysis, console):
+        """FAZ 4.2: Contribution analiz sonuçlarını tablo olarak gösterir."""
+        if not analysis:
+            console.print("[yellow]⚠ Contribution verisi alınamadı.[/yellow]")
+            return
+            
+        # Ana tablo - Genel Contribution Özeti
+        main_table = Table(title="📊 Contribution Analizi", style="bold green", expand=True)
+        main_table.add_column("Kategori", style="cyan")
+        main_table.add_column("Değer", style="yellow")
+        main_table.add_column("Detay", style="white")
+        
+        # Yıllık contribution
+        if analysis['contributions']:
+            yearly = analysis['contributions'].get('yearly_total', 0)
+            main_table.add_row(
+                "📅 Yıllık Contributions", 
+                str(yearly), 
+                "Son 1 yıl"
+            )
+        
+        # PR istatistikleri
+        if analysis['pr_stats']:
+            pr = analysis['pr_stats']
+            main_table.add_row(
+                "🔀 Pull Requests", 
+                f"{pr['total_prs']}", 
+                f"Açık: {pr['open_prs']} | Kapalı: {pr['closed_prs']} | Merged: {pr['merged_prs']}"
+            )
+        
+        # Issue istatistikleri
+        if analysis['issue_stats']:
+            iss = analysis['issue_stats']
+            main_table.add_row(
+                "🐛 Issues", 
+                f"{iss['total_issues']}", 
+                f"Açık: {iss['open_issues']} | Kapalı: {iss['closed_issues']}"
+            )
+        
+        console.print(main_table)
+        console.print()
+        
+        # En aktif repolar tablosu
+        if analysis['active_repos']:
+            repo_table = Table(title="🔥 En Aktif Olduğu Repolar (Push Sayısına Göre)", style="bold magenta")
+            repo_table.add_column("#", style="dim", width=3)
+            repo_table.add_column("Repository", style="cyan")
+            repo_table.add_column("Push Sayısı", style="yellow", justify="right")
+            
+            for idx, (repo, count) in enumerate(analysis['active_repos'][:10], 1):
+                repo_table.add_row(str(idx), repo, str(count))
+            
+            console.print(repo_table)
+            console.print()
 
     def run(self, options):
         console = Console()
@@ -755,6 +1012,7 @@ class GitHubTracker(BaseModule):
         network_analysis_opt = options.get("NETWORK_ANALYSIS")
         activity_opt = options.get("ACTIVITY")
         activity_days = int(options.get("DAYS"))
+        contributions_opt = options.get("CONTRIBUTIONS")  # FAZ 4.2
         
         target_user = self.get_username(username_input)
         
@@ -813,9 +1071,15 @@ class GitHubTracker(BaseModule):
             else:
                 console.print(f"[yellow]⚠ Son {activity_days} günlük aktivite verisi alınamadı.[/yellow]")
 
+        # Contribution Analizi (FAZ 4.2)
+        contribution_analysis = None
+        if contributions_opt == "True":
+            contribution_analysis = self.analyze_contributions(target_user, activity_events)
+            self.print_contributions(contribution_analysis, console)
+
         # Dosyaya Kaydet
         if output_file:
-            self.save_to_file(target_user, following, followers, output_file, console, profile_info if show_profile == "True" else None, stats, repos, repo_analysis, rel_analysis, network_stats, activity_analysis)
+            self.save_to_file(target_user, following, followers, output_file, console, profile_info if show_profile == "True" else None, stats, repos, repo_analysis, rel_analysis, network_stats, activity_analysis, contribution_analysis)
 
         # Karşılaştırma Analizi (Varsa) - Dosyaya append yaptığı için save_to_file'dan sonra çağrılmalı
         if compare_user:
@@ -889,7 +1153,7 @@ class GitHubTracker(BaseModule):
         console.print(table)
         console.print("\n")
 
-    def save_to_file(self, target_user, following, followers, filename, console, profile_info=None, stats=None, repos=None, repo_analysis=None, rel_analysis=None, network_stats=None, activity_analysis=None):
+    def save_to_file(self, target_user, following, followers, filename, console, profile_info=None, stats=None, repos=None, repo_analysis=None, rel_analysis=None, network_stats=None, activity_analysis=None, contribution_analysis=None):
         try:
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(f"GitHub Raporu: {target_user}\n")
@@ -930,6 +1194,36 @@ class GitHubTracker(BaseModule):
                      if activity_analysis['most_active_hour']:
                          hour, count = activity_analysis['most_active_hour']
                          f.write(f"En Aktif Saat: {hour}:00 ({count} aktivite)\n")
+                     f.write("\n" + "-"*40 + "\n\n")
+
+                # FAZ 4.2: Contribution Analizi
+                if contribution_analysis:
+                     f.write("CONTRIBUTION ANALIZI (FAZ 4.2):\n")
+                     
+                     if contribution_analysis.get('contributions'):
+                         yearly = contribution_analysis['contributions'].get('yearly_total', 0)
+                         f.write(f"- Yillik Contribution: {yearly}\n")
+                     
+                     if contribution_analysis.get('pr_stats'):
+                         pr = contribution_analysis['pr_stats']
+                         f.write(f"\nPull Request Istatistikleri:\n")
+                         f.write(f"  - Toplam PR: {pr['total_prs']}\n")
+                         f.write(f"  - Acik PR: {pr['open_prs']}\n")
+                         f.write(f"  - Kapali PR: {pr['closed_prs']}\n")
+                         f.write(f"  - Merged PR: {pr['merged_prs']}\n")
+                     
+                     if contribution_analysis.get('issue_stats'):
+                         iss = contribution_analysis['issue_stats']
+                         f.write(f"\nIssue Istatistikleri:\n")
+                         f.write(f"  - Toplam Issue: {iss['total_issues']}\n")
+                         f.write(f"  - Acik Issue: {iss['open_issues']}\n")
+                         f.write(f"  - Kapali Issue: {iss['closed_issues']}\n")
+                     
+                     if contribution_analysis.get('active_repos'):
+                         f.write(f"\nEn Aktif Repolar (Push Sayisina Gore):\n")
+                         for idx, (repo, count) in enumerate(contribution_analysis['active_repos'][:10], 1):
+                             f.write(f"  {idx}. {repo}: {count} push\n")
+                     
                      f.write("\n" + "-"*40 + "\n\n")
 
                 if profile_info:

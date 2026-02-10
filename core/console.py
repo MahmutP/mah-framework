@@ -74,7 +74,7 @@ class Console:
         """
         selected_module = shared_state.get_selected_module()
         if selected_module:
-            module_path = selected_module.Name
+            module_path = selected_module.Path
             return HTML(f'<u>mahmut</u> (<style fg="ansired">{module_path}</style>) > ')
         return HTML('<u>mahmut</u> > ')
     def get_terminal_width(self) -> int:

@@ -8,7 +8,7 @@ import os
 
 class HttpDirBuster(BaseModule):
     def __init__(self):
-        self.Name = "auxiliary/scanner/http_dir_buster"
+        self.Name = "HTTP Directory Buster"
         self.Description = "Web sunucusunda gizli veya açık dizinleri/dosyaları tespit eder."
         self.Author = "MahmutP & AI"
         self.Category = "auxiliary/scanner"

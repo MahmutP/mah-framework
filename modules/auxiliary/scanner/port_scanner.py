@@ -6,7 +6,7 @@ import concurrent.futures
 
 class PortScanner(BaseModule):
     def __init__(self):
-        self.Name = "auxiliary/scanner/port_scanner"
+        self.Name = "Port Scanner"
         self.Description = "Belirtilen hedef IP üzerindeki açık TCP portlarını tarar."
         self.Author = "Mahmut P."
         self.Category = "auxiliary/scanner"

@@ -7,7 +7,7 @@ class Payload(BaseModule):
     Python Shell Reverse TCP Payload.
     Hedef sistemde çalıştırıldığında bize shell bağlantısı gönderir.
     """
-    Name = "python/shell_reverse_tcp"
+    Name = "Python Shell Reverse TCP"
     Description = "Python tabanlı Reverse TCP Shell."
     Author = "Mahmut P."
     Category = "payloads"

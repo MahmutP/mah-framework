@@ -44,7 +44,7 @@ from rich import print
 class HelloWorld(BaseModule):
     def __init__(self):
         # 1. Module Metadata
-        self.Name = "test/hello_world"
+        self.Name = "Hello World Test Module" # Human-readable name
         self.Description = "Developer guide example module"
         self.Author = "Your Name"
         self.Category = "test"
@@ -88,7 +88,7 @@ class HelloWorld(BaseModule):
 ### 📚 BaseModule API Reference
 
 #### Properties
-*   **Name** (`str`): Unique name of the module (e.g., `exploit/linux/ftp/vsftpd_234`).
+*   **Name** (`str`): Human-readable name of the module (e.g., `VSFTPD 2.3.4 Backdoor`). The system automatically handles the path.
 *   **Description** (`str`): Description shown in the `info` command.
 *   **Author** (`str`): Name of the author.
 *   **Category** (`str`): Module category (`exploit`, `scanner`, etc.).
@@ -214,7 +214,7 @@ from rich import print
 class HelloWorld(BaseModule):
     def __init__(self):
         # 1. Modül Meta Verileri
-        self.Name = "test/hello_world"
+        self.Name = "Hello World Test Modülü" # Okunabilir modül adı
         self.Description = "Geliştirici rehberi örnek modülü"
         self.Author = "Sizin Adınız"
         self.Category = "test"
@@ -258,7 +258,7 @@ class HelloWorld(BaseModule):
 ### 📚 BaseModule API Referansı
 
 #### Özellikler (Properties)
-*   **Name** (`str`): Modülün benzersiz adı (örn: `exploit/linux/ftp/vsftpd_234`).
+*   **Name** (`str`): Modülün okunabilir adı (örn: `VSFTPD 2.3.4 Backdoor`). Dosya yolu sistem tarafından otomatik yönetilir.
 *   **Description** (`str`): `info` komutunda görünen açıklama.
 *   **Author** (`str`): Yazar adı.
 *   **Category** (`str`): Modül kategorisi (`exploit`, `scanner`, vb.).

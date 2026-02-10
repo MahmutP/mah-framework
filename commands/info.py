@@ -35,6 +35,7 @@ class Info(Command):
         print(f"Modül Bilgileri: {selected_module.Name}")
         print("-" * (len(selected_module.Name) + 16)) 
         print(f"  Ad:          {selected_module.Name}")
+        print(f"  Yol:         {selected_module.Path}")
         print(f"  Açıklama:    {selected_module.Description}")
         print(f"  Yazar:       {selected_module.Author}")
         print(f"  Kategori:    {selected_module.Category}")

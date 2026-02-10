@@ -32,8 +32,8 @@
 *   **🛡️ Type Safe & Tested**: 100% type-annotated codebase with comprehensive unit tests (`pytest` & `mypy`), ensuring high reliability.
 
 ### 📊 Project Statistics
-*   **16** Commands
-*   **11+** Modules
+*   **19** Commands
+*   **30+** Modules
 *   **100%** Test Coverage (`20/20 passed`)
 *   **Plugins System**, **Advanced Logging** & **Resource Script Support**
 
@@ -43,7 +43,7 @@ The initial version of this project was developed entirely without AI assistance
 ### �📦 Available Modules
 Mah Framework comes with built-in modules across various categories:
 *   **Exploit**: `vsftpd_234_backdoor` ...
-*   **Auxiliary**: `scanner/port_scanner`, `scanner/http_dir_buster`, `recon/github_tracker`, `scanner/vsftpd_234_scanner` ...
+*   **Auxiliary**: `scanner/port_scanner`, `scanner/http_dir_buster`, [`recon/github_tracker`](docs/GITHUB_TRACKER.md), `scanner/vsftpd_234_scanner` ...
 *   **Payloads**: `python/shell_reverse_tcp`, `python/mahpreter/reverse_tcp`, `linux/bash_reverse_tcp`, `mahpreter/reverse_dns`, `php/reverse_tcp` ...
 *   **Handler**: `exploit/multi/handler` (Unified Listener)
 *   **Example**: `hash_generator`, `toplama` ...
@@ -199,8 +199,8 @@ pytest                           # Run all tests
 *   **🛡️ Tip Güvenli ve Test Edilmiş**: %100 tip güvenliği (Type Safety) ve kapsayıcı birim testleri (`pytest` & `mypy`) ile yüksek kararlılık sağlar.
 
 ### 📊 Proje İstatistikleri
-*   **16** Komut
-*   **11+** Modül
+*   **19** Komut
+*   **30+** Modül
 *   **%100** Test Kapsamı (`20/20 passed`)
 *   **Plugin Sistemi**, **Gelişmiş Loglama** & **Resource Dosya Desteği**
 
@@ -210,7 +210,7 @@ Bu projenin ilk hali tamamen yapay zeka desteği olmaksızın geliştirilmiştir
 ### 📦 Mevcut Modüller
 Mah Framework, çeşitli kategorilerde yerleşik modüllerle gelir:
 *   **Exploit**: `vsftpd_234_backdoor` ...
-*   **Auxiliary**: `scanner/port_scanner`, `scanner/http_dir_buster`, `recon/github_tracker`, `scanner/vsftpd_234_scanner` ...
+*   **Auxiliary**: `scanner/port_scanner`, `scanner/http_dir_buster`, [`recon/github_tracker`](docs/GITHUB_TRACKER.md), `scanner/vsftpd_234_scanner` ...
 *   **Payloads**: `python/shell_reverse_tcp`, `python/mahpreter/reverse_tcp`, `linux/bash_reverse_tcp`, `mahpreter/reverse_dns`, `php/reverse_tcp` ...
 *   **Handler**: `exploit/multi/handler` (Unified Listener)
 *   **Example**: `hash_generator`, `toplama` ...

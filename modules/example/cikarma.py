@@ -9,7 +9,7 @@ class cikarma(BaseModule):
     Args:
         BaseModule (_type_): Ana komut sınıfı.
     """
-    Name = "cikarma"
+    Name = "Subtraction Tool"
     Description = "Çıkarma işlemi yapmaya yarıyan örnek bir modül."
     Author = "Mahmut P."
     Category = "example"

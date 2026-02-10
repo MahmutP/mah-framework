@@ -44,6 +44,8 @@ class ModuleManager:
                         module_instance = obj()
                         if not module_instance.Category:
                             module_instance.Category = "uncategorized"
+                        # Enforce module Name to be the full path for consistency
+                        module_instance.Name = module_name_for_dict
                         self.modules[module_name_for_dict] = module_instance 
                         break 
             except SyntaxError as e:

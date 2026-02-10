@@ -74,7 +74,7 @@ class Use(Command):
         module_obj = module_manager.get_module(module_path)
         if module_obj:
             shared_state.set_selected_module(module_obj)
-            print(f"Modül '{module_obj.Name}' seçildi.")
+            print(f"Modül '{module_obj.Path}' seçildi.")
             return True
         else:
             print(f"Modül bulunamadı: '{module_path}'. 'show modules' ile mevcut modülleri listeleyebilirsiniz.")

@@ -7,7 +7,7 @@ class Payload(BaseModule):
     Python Shell Bind TCP Payload.
     Hedef sistemde bir port açar ve bağlantı bekler.
     """
-    Name = "python/shell_bind_tcp"
+    Name = "Python Shell Bind TCP"
     Description = "Python tabanlı Bind TCP Shell."
     Author = "Mahmut P."
     Category = "payloads"

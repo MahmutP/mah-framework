@@ -291,7 +291,9 @@ def test_run_full_integration(tracker):
         "SORT_BY": "updated",
         "MUTUAL_ONLY": "False",
         "COMPARE": "otheruser",
-        "NETWORK_ANALYSIS": "True"
+        "NETWORK_ANALYSIS": "True",
+        "DAYS": "30",
+        "ACTIVITY": "False"
     }
     
     # Call run

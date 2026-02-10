@@ -12,7 +12,7 @@ class TestPortScanner:
         return PortScanner()
 
     def test_init(self, scanner):
-        assert scanner.Name == "auxiliary/scanner/port_scanner"
+        assert scanner.Name == "Port Scanner"
         assert "RHOST" in scanner.Options
         assert "RPORTS" in scanner.Options
 
@@ -52,8 +52,8 @@ class TestHttpDirBuster:
         return HttpDirBuster()
 
     def test_init(self, buster):
-        assert buster.Name == "auxiliary/scanner/http_dir_buster"
-        assert "RHOST" in buster.Options
+        assert buster.Name == "HTTP Directory Buster"
+        assert buster.Options["RHOST"]
         assert "WORDLIST" in buster.Options
 
     @patch('urllib.request.urlopen')

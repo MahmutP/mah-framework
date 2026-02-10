@@ -44,8 +44,13 @@ class ModuleManager:
                         module_instance = obj()
                         if not module_instance.Category:
                             module_instance.Category = "uncategorized"
-                        # Enforce module Name to be the full path for consistency
-                        module_instance.Name = module_name_for_dict
+                        
+                        # Set the Path attribute to the file path
+                        module_instance.Path = module_name_for_dict
+                        
+                        # Do NOT overwrite module_instance.Name here. 
+                        # It should be the human-readable name defined in the module class.
+                        
                         self.modules[module_name_for_dict] = module_instance 
                         break 
             except SyntaxError as e:

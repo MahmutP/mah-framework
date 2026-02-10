@@ -8,7 +8,7 @@ import time
 
 class GitHubTracker(BaseModule):
     def __init__(self):
-        self.Name = "auxiliary/recon/github_tracker"
+        self.Name = "GitHub Tracker"
         self.Description = "GitHub kullanıcısının profil, takipçi ve takip edilenlerini çeker."
         self.Author = "Mahmut P."
         self.Category = "auxiliary/recon"

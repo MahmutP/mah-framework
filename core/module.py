@@ -11,6 +11,7 @@ class BaseModule:
     Description: str = "description for module" # modül açıklaması, search ve show için
     Author: str = "Unknown" # kodlayanın adı
     Category: str = "uncategorized" # katagorisi tanımlanmazsa, katagorisizdir.
+    Path: str = "" # modülün dosya yolu (örn: auxiliary/recon/github_tracker)
     Options: Dict[str, Option] = {} # core/option.py
     def __init__(self):
         """init fonksiyon.

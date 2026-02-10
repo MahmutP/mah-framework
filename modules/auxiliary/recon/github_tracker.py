@@ -1539,6 +1539,22 @@ class GitHubTracker(BaseModule):
                     f.write(", ".join(list(rel_analysis['mutual'])))
                     f.write("\n")
 
+            if network_stats:
+                f.write("## 🕸️ Ağ Analizi\n")
+                f.write(f"- **Taranan Kişi:** {network_stats['total_scanned']}\n")
+                f.write(f"- **Aktiflik Oranı:** {network_stats['active_count']}/{network_stats['total_scanned']}\n")
+                
+                if network_stats['top_locations']:
+                    f.write("\n### 📍 En Yaygın Lokasyonlar\n")
+                    for loc, count in network_stats['top_locations']:
+                        f.write(f"- {loc}: {count}\n")
+                    
+                if network_stats['top_companies']:
+                    f.write("\n### 🏢 En Yaygın Şirketler\n")
+                    for comp, count in network_stats['top_companies']:
+                        f.write(f"- {comp}: {count}\n")
+                f.write("\n")
+
             if activity_analysis:
                 f.write("## 📈 Aktivite Özeti\n")
                 f.write(f"- **Toplam Aktivite:** {activity_analysis['total_events']}\n")
@@ -1548,6 +1564,26 @@ class GitHubTracker(BaseModule):
                 f.write("\n### 📊 Aktivite Dağılımı\n")
                 for et, count in activity_analysis['by_type'].most_common():
                     f.write(f"- {et}: {count}\n")
+                f.write("\n")
+
+            if contribution_analysis:
+                f.write("## 🏆 Contribution Analizi\n")
+                if contribution_analysis.get('contributions'):
+                     yearly = contribution_analysis['contributions'].get('yearly_total', 0)
+                     f.write(f"- **Yıllık Contribution:** {yearly}\n")
+                
+                if contribution_analysis.get('pr_stats'):
+                     pr = contribution_analysis['pr_stats']
+                     f.write(f"- **Pull Requests:** {pr['total_prs']} (Açık: {pr['open_prs']}, Kapalı: {pr['closed_prs']}, Merged: {pr['merged_prs']})\n")
+                     
+                if contribution_analysis.get('issue_stats'):
+                     iss = contribution_analysis['issue_stats']
+                     f.write(f"- **Issues:** {iss['total_issues']} (Açık: {iss['open_issues']}, Kapalı: {iss['closed_issues']})\n")
+                     
+                if contribution_analysis.get('active_repos'):
+                     f.write("\n### 🔥 En Aktif Repolar\n")
+                     for idx, (repo, count) in enumerate(contribution_analysis['active_repos'][:10], 1):
+                         f.write(f"{idx}. {repo} ({count} push)\n")
                 f.write("\n")
 
             f.write("## 👥 Takip Listeleri\n")
@@ -1633,6 +1669,37 @@ class GitHubTracker(BaseModule):
                     content += f"<span class='tag'>{u}</span>"
                 content += "</div>"
         
+        if network_stats:
+            content += f"""
+            <h2>🕸️ Ağ Analizi</h2>
+            <div class="stat-box">
+                <p><b>Taranan:</b> {network_stats['total_scanned']} | <b>Aktif:</b> {network_stats['active_count']}</p>
+                <p><b>Lokasyonlar:</b> {', '.join([f"{k} ({v})" for k,v in network_stats['top_locations']])}</p>
+                <p><b>Şirketler:</b> {', '.join([f"{k} ({v})" for k,v in network_stats['top_companies']])}</p>
+            </div>
+            """
+
+        if contribution_analysis:
+             content += "<h2>🏆 Contribution Analizi</h2><div class='stat-box'>"
+             if contribution_analysis.get('contributions'):
+                 yearly = contribution_analysis['contributions'].get('yearly_total', 0)
+                 content += f"<p><b>Yıllık Contribution:</b> {yearly}</p>"
+             
+             if contribution_analysis.get('pr_stats'):
+                 pr = contribution_analysis['pr_stats']
+                 content += f"<p><b>Pull Requests:</b> {pr['total_prs']} (Open: {pr['open_prs']}, Merged: {pr['merged_prs']})</p>"
+                 
+             if contribution_analysis.get('issue_stats'):
+                 iss = contribution_analysis['issue_stats']
+                 content += f"<p><b>Issues:</b> {iss['total_issues']} (Open: {iss['open_issues']})</p>"
+                 
+             if contribution_analysis.get('active_repos'):
+                 content += "<h3>🔥 En Aktif Repolar</h3><ul>"
+                 for repo, count in contribution_analysis['active_repos'][:10]:
+                     content += f"<li>{repo}: {count} push</li>"
+                 content += "</ul>"
+             content += "</div>"
+
         if activity_analysis:
             content += "<h2>📈 Aktivite</h2>"
             content += "<ul>"

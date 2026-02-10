@@ -34,7 +34,7 @@
 ### 📊 Project Statistics
 *   **19** Commands
 *   **30+** Modules
-*   **100%** Test Coverage (`20/20 passed`)
+*   **100%** Test Coverage (`44/44 passed`)
 *   **Plugins System**, **Advanced Logging** & **Resource Script Support**
 
 ### � Development Note
@@ -201,7 +201,7 @@ pytest                           # Run all tests
 ### 📊 Proje İstatistikleri
 *   **19** Komut
 *   **30+** Modül
-*   **%100** Test Kapsamı (`20/20 passed`)
+*   **%100** Test Kapsamı (`44/44 passed`)
 *   **Plugin Sistemi**, **Gelişmiş Loglama** & **Resource Dosya Desteği**
 
 ### 💡 Geliştirme Notu

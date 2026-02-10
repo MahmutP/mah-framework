@@ -8,7 +8,7 @@ class toplama(BaseModule):
     Args:
         BaseModule (_type_): Ana modül sınıfı.
     """
-    Name =  "toplama"
+    Name =  "Addition Tool"
     Description = "Toplama işlemi yapan örnek bir modül."
     Author= "Mahmut P."
     Category = "example"

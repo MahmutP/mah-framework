@@ -26,11 +26,16 @@ class ModuleManager:
             if file_path.name == '__init__.py':
                 continue
             # Template dosyalarını atla ({{ }} yer tutucuları içeren payload şablonları)
+            # Ancak BaseModule alt sınıfı tanımlayan dosyaları (generate.py gibi) atlama
             try:
                 content = file_path.read_text(encoding='utf-8', errors='ignore')
                 if '{{' in content and '}}' in content:
-                    logger.debug(f"Template dosyası atlandı: {file_path}")
-                    continue
+                    # Dosya BaseModule alt sınıfı tanımlıyorsa modül olarak yükle
+                    if 'BaseModule' not in content:
+                        logger.debug(f"Template dosyası atlandı: {file_path}")
+                        continue
+                    else:
+                        logger.debug(f"Template içeren modül dosyası yükleniyor: {file_path}")
             except Exception:
                 pass
             # Relative path using pathlib, with forward slashes for consistency

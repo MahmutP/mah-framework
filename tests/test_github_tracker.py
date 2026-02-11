@@ -1,7 +1,15 @@
 import pytest
-import requests_mock
+try:
+    import requests_mock
+    HAS_REQUESTS_MOCK = True
+except ImportError:
+    HAS_REQUESTS_MOCK = False
+
 from modules.auxiliary.recon.github_tracker import GitHubTracker
 from unittest.mock import MagicMock
+
+# Skip tests if requests_mock is not installed
+pytestmark = pytest.mark.skipif(not HAS_REQUESTS_MOCK, reason="requests_mock kütüphanesi yüklü değil")
 
 @pytest.fixture
 def tracker():
@@ -52,7 +60,7 @@ def test_fetch_profile_info_empty(tracker):
         assert info['company'] is None
 
 def test_fetch_statistics(tracker):
-    """FAZ 1.2: İstatistik çekme testi"""
+    """İstatistik çekme testi"""
     username = "testuser"
     url = f"https://github.com/{username}?tab=repositories&page=1"
     
@@ -85,7 +93,7 @@ def test_fetch_statistics(tracker):
             assert stats['total_forks'] == 10
 
 def test_extract_nav_count(tracker):
-    """FAZ 1.2: Nav count çıkarma testi"""
+    """Nav count çıkarma testi"""
     from bs4 import BeautifulSoup
     
     html = """
@@ -104,7 +112,7 @@ def test_extract_nav_count(tracker):
     assert gists == 5
 
 def test_fetch_repositories(tracker):
-    """FAZ 2.1: Repository çekme testi"""
+    """Repository çekme testi"""
     username = "testuser"
     url = f"https://github.com/{username}?tab=repositories&page=1&sort=updated"
     
@@ -152,7 +160,7 @@ def test_fetch_repositories(tracker):
         assert repos[1]['description'] == "-"
 
 def test_analyze_repositories(tracker):
-    """FAZ 2.2: Repository analiz testi"""
+    """Repository analiz testi"""
     repos = [
         {'name': 'repo1', 'language': 'Python', 'stars': '10', 'forks': '5', 'updated': 'yesterday'},
         {'name': 'repo2', 'language': 'Python', 'stars': '20', 'forks': '2', 'updated': 'today'},
@@ -179,7 +187,7 @@ def test_analyze_repositories(tracker):
     assert analysis['most_forked'][0]['name'] == 'repo5' # 200
 
 def test_analyze_relationships(tracker):
-    """FAZ 3.1: İlişki analizi testi"""
+    """İlişki analizi testi"""
     following = [
         {'username': 'mutual_user', 'link': '...'},
         {'username': 'not_following_back_user', 'link': '...'},
@@ -201,7 +209,7 @@ def test_analyze_relationships(tracker):
     assert len(analysis['not_followed_back']) == 1
 
 def test_analyze_network(tracker):
-    """FAZ 3.2: Ağ analizi testi"""
+    """Ağ analizi testi"""
     from unittest.mock import MagicMock
     
     users = [{'username': 'u1'}, {'username': 'u2'}]
@@ -225,7 +233,7 @@ def test_analyze_network(tracker):
     assert 'Turkey' in [x for x,y in stats['top_locations']]
 
 def test_compare_users(tracker):
-    """FAZ 3.1: İki kullanıcı karşılaştırma testi (logic verification)"""
+    """İki kullanıcı karşılaştırma testi (logic verification)"""
     from unittest.mock import MagicMock
     
     user1 = "u1"

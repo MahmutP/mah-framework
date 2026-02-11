@@ -91,7 +91,7 @@ class HelloWorld(BaseModule):
 *   **Name** (`str`): Human-readable name of the module (e.g., `VSFTPD 2.3.4 Backdoor`). The system automatically handles the path.
 *   **Description** (`str`): Description shown in the `info` command.
 *   **Author** (`str`): Name of the author.
-*   **Category** (`str`): Module category (`exploit`, `scanner`, etc.).
+*   **Category** (`str`): Module category (`exploit`, `scanner`, `forensics`, etc.).
 *   **Options** (`Dict[str, Option]`): Parameters accepted by the module.
 
 #### Methods
@@ -261,7 +261,7 @@ class HelloWorld(BaseModule):
 *   **Name** (`str`): Modülün okunabilir adı (örn: `VSFTPD 2.3.4 Backdoor`). Dosya yolu sistem tarafından otomatik yönetilir.
 *   **Description** (`str`): `info` komutunda görünen açıklama.
 *   **Author** (`str`): Yazar adı.
-*   **Category** (`str`): Modül kategorisi (`exploit`, `scanner`, vb.).
+*   **Category** (`str`): Modül kategorisi (`exploit`, `scanner`, `forensics`, vb.).
 *   **Options** (`Dict[str, Option]`): Modülün kabul ettiği parametreler.
 
 #### Metotlar (Methods)

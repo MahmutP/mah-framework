@@ -33,8 +33,8 @@
 
 ### 📊 Project Statistics
 *   **19** Commands
-*   **30+** Modules
-*   **100%** Test Coverage (`44/44 passed`)
+*   **22** Modules
+*   **100%** Test Coverage (`76/76 passed`)
 *   **Plugins System**, **Advanced Logging** & **Resource Script Support**
 
 ### � Development Note
@@ -44,6 +44,7 @@ The initial version of this project was developed entirely without AI assistance
 Mah Framework comes with built-in modules across various categories:
 *   **Exploit**: `vsftpd_234_backdoor` ...
 *   **Auxiliary**: `scanner/port_scanner`, `scanner/http_dir_buster`, [`recon/github_tracker`](docs/GITHUB_TRACKER.md), `scanner/vsftpd_234_scanner` ...
+*   **Forensics**: [`forensics/metadata_extractor`](docs/METADATA_MODULES.md), [`forensics/metadata_cleaner`](docs/METADATA_MODULES.md)
 *   **Payloads**: `python/shell_reverse_tcp`, `python/mahpreter/reverse_tcp`, `linux/bash_reverse_tcp`, `mahpreter/reverse_dns`, `php/reverse_tcp` ...
 *   **Handler**: `exploit/multi/handler` (Unified Listener)
 *   **Example**: `hash_generator`, `toplama` ...
@@ -200,8 +201,8 @@ pytest                           # Run all tests
 
 ### 📊 Proje İstatistikleri
 *   **19** Komut
-*   **30+** Modül
-*   **%100** Test Kapsamı (`44/44 passed`)
+*   **22** Modül
+*   **%100** Test Kapsamı (`76/76 passed`)
 *   **Plugin Sistemi**, **Gelişmiş Loglama** & **Resource Dosya Desteği**
 
 ### 💡 Geliştirme Notu
@@ -211,6 +212,7 @@ Bu projenin ilk hali tamamen yapay zeka desteği olmaksızın geliştirilmiştir
 Mah Framework, çeşitli kategorilerde yerleşik modüllerle gelir:
 *   **Exploit**: `vsftpd_234_backdoor` ...
 *   **Auxiliary**: `scanner/port_scanner`, `scanner/http_dir_buster`, [`recon/github_tracker`](docs/GITHUB_TRACKER.md), `scanner/vsftpd_234_scanner` ...
+*   **Forensics**: [`forensics/metadata_extractor`](docs/METADATA_MODULES.md), [`forensics/metadata_cleaner`](docs/METADATA_MODULES.md)
 *   **Payloads**: `python/shell_reverse_tcp`, `python/mahpreter/reverse_tcp`, `linux/bash_reverse_tcp`, `mahpreter/reverse_dns`, `php/reverse_tcp` ...
 *   **Handler**: `exploit/multi/handler` (Unified Listener)
 *   **Example**: `hash_generator`, `toplama` ...

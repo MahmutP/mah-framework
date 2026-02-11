@@ -31,8 +31,15 @@ class Set(Command):
         super().__init__()
         self.completer_function = self._set_completer 
     
-    def _get_path_completions(self, current_input: str, default_dir: str = ".") -> List[str]:
-        """Dosya yolu tamamlama mantığı."""
+    def _get_path_completions(self, current_input: str, default_dir: str = ".", extensions: list = None) -> List[str]:
+        """Dosya yolu tamamlama mantığı.
+        
+        Args:
+            current_input: Kullanıcının girdiği kısmi yol.
+            default_dir: Varsayılan dizin.
+            extensions: Sadece bu uzantılara sahip dosyaları göster (örn: ['.jpg', '.png']).
+                        None ise tüm dosyalar gösterilir. Dizinler her zaman gösterilir.
+        """
         # Eğer input boşsa varsayılan dizini kullan
         if not current_input:
             path = default_dir
@@ -47,15 +54,25 @@ class Set(Command):
         try:
             if os.path.isdir(dirname):
                 for name in os.listdir(dirname):
+                    # Uzantı filtresi aktifse gizli dosyaları (. ile başlayan) atla
+                    if extensions and name.startswith('.'):
+                        continue
+                    
                     if name.startswith(basename):
                         full_path = os.path.join(dirname, name)
                         # Eğer varsayılan dizin "." ise ve input boşsa "./" ekleme
                         if dirname == ".": 
                             full_path = name
                         
-                        if os.path.isdir(os.path.join(dirname, name)):
+                        actual_path = os.path.join(dirname, name)
+                        if os.path.isdir(actual_path):
                             suggestions.append(full_path + "/")
                         else:
+                            # Uzantı filtresi varsa kontrol et
+                            if extensions:
+                                _, ext = os.path.splitext(name)
+                                if ext.lower() not in extensions:
+                                    continue
                             suggestions.append(full_path)
         except Exception:
             pass
@@ -95,7 +112,8 @@ class Set(Command):
                 
                 # 1. Dosya yolu tamamlama önceliği: Option içinde tanımlı dizin
                 if hasattr(opt, "completion_dir") and opt.completion_dir:
-                    return self._get_path_completions("", default_dir=opt.completion_dir)
+                    exts = getattr(opt, 'completion_extensions', None)
+                    return self._get_path_completions("", default_dir=opt.completion_dir, extensions=exts)
 
                 # 2. Choices varsa (Öncelikli)
                 if opt.choices:
@@ -122,9 +140,9 @@ class Set(Command):
                 opt = options[option_name]
                 
                 # 1. Dosya yolu tamamlama
-                # 1. Dosya yolu tamamlama
                 if hasattr(opt, "completion_dir") and opt.completion_dir:
-                    return self._get_path_completions(current_value, default_dir=opt.completion_dir)
+                    exts = getattr(opt, 'completion_extensions', None)
+                    return self._get_path_completions(current_value, default_dir=opt.completion_dir, extensions=exts)
                 
                 choices = []
                 if opt.choices:

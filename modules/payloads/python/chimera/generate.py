@@ -31,10 +31,10 @@ class Payload(BaseModule):
         lport = self.get_option_value("LPORT")
 
         # Agent kaynak kodunu oku
+        # Agent kaynak kodunu oku
         agent_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
-            "..", "..", "..", "..",   # modules/payloads/python/chimera/ → proje kökü
-            "payloads", "python", "chimera_agent.py"
+            "agent.py"
         )
         agent_path = os.path.normpath(agent_path)
 

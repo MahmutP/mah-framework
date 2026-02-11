@@ -1,5 +1,5 @@
 """
-Chimera Multi-Handler Class (Faz 1.2)
+Chimera Multi-Handler Class
 Mevcut exploit/multi/handler mimarisine uygun özel handler sınıfı.
 Gelecekteki C2 (AES-256-GCM / ECDH) protokolüne hazırlık içerir.
 """
@@ -64,7 +64,7 @@ class Handler(BaseHandler):
         
         print(f"[*] Chimera Handler: Yeni bağlantı kabul edildi. (Session: {session_id})")
 
-        # 1. SSL/TLS Handshake (Faz 1.3 - C2 Encryption)
+        # 1. SSL/TLS Handshake (C2 Encryption)
         try:
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
             context.load_cert_chain(certfile=self.cert_file, keyfile=self.key_file)

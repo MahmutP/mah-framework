@@ -25,6 +25,14 @@ class ModuleManager:
         for file_path in self.modules_dir.rglob('*.py'):
             if file_path.name == '__init__.py':
                 continue
+            # Template dosyalarını atla ({{ }} yer tutucuları içeren payload şablonları)
+            try:
+                content = file_path.read_text(encoding='utf-8', errors='ignore')
+                if '{{' in content and '}}' in content:
+                    logger.debug(f"Template dosyası atlandı: {file_path}")
+                    continue
+            except Exception:
+                pass
             # Relative path using pathlib, with forward slashes for consistency
             relative_path = file_path.relative_to(self.modules_dir)
             module_name_for_dict = relative_path.with_suffix('').as_posix()

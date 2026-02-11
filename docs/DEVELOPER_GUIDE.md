@@ -114,6 +114,8 @@ The `core.option.Option` class is used to receive input from the user.
 *   **regex_check** (`bool`): Enable regex validation?
 *   **regex** (`str`): Validation pattern.
 *   **choices** (`List[Any]`): Optional list of values for auto-completion suggestions.
+*   **completion_dir** (`str`): Default directory for file path auto-completion (e.g., `"."`). Enables Tab-completion for file paths.
+*   **completion_extensions** (`List[str]`): File extensions to show in auto-completion (e.g., `['.jpg', '.png']`). Hidden files (dot-prefixed) are automatically filtered out. Directories are always shown.
 
 ---
 
@@ -283,6 +285,8 @@ Kullanıcıdan veri almak için `core.option.Option` sınıfı kullanılır.
 *   **regex_check** (`bool`): Regex doğrulaması yapılsın mı?
 *   **regex** (`str`): Doğrulama paterni.
 *   **choices** (`List[Any]`): Otomatik tamamlama önerileri için opsiyonel liste.
+*   **completion_dir** (`str`): Dosya yolu otomatik tamamlaması için varsayılan dizin (örn: `"."`). Tab tuşu ile dosya yolu tamamlamayı aktif eder.
+*   **completion_extensions** (`List[str]`): Otomatik tamamlamada gösterilecek dosya uzantıları (örn: `['.jpg', '.png']`). Gizli dosyalar (`.` ile başlayan) otomatik filtrelenir. Dizinler her zaman gösterilir.
 
 ---
 

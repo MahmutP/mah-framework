@@ -1,5 +1,5 @@
 """
-Chimera Core Agent - Unit Tests (Faz 1.1)
+Chimera Core Agent - Unit Tests
 Agent'ın temel fonksiyonlarını test eder:
 - Bağlantı kurma / kapatma
 - Length-prefixed veri gönderme/alma protokolü

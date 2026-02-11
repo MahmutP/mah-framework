@@ -10,3 +10,10 @@ env/
 # Editör ayar dosyaları (isteğe bağlı)
 .vscode/
 .idea/
+
+# SSL Sertifikaları (her kullanıcı kendi üretmeli)
+server.crt
+server.key
+*.crt
+*.key
+*.pem

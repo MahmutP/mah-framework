@@ -168,13 +168,13 @@ class GitHubTracker(BaseModule):
             else:
                 info['email'] = None
 
-            # FAZ 1.2: İstatistik Bilgileri - Repo ve Gist sayıları
+            # İstatistik Bilgileri - Repo ve Gist sayıları
             # Profil sayfasındaki nav linklerden repo/gist sayısını çek
             info['public_repos'] = self._extract_nav_count(soup, 'Repositories')
             info['public_gists'] = self._extract_nav_count(soup, 'Gists')
 
             # Creation Date & Last Activity (Harder to scrape reliably without auth/JS, skipping for basic implementation)
-            # These will be implemented in Phase 7 with API integration.
+            # These will be implemented in future phases with API integration.
             
             return info
 
@@ -200,7 +200,7 @@ class GitHubTracker(BaseModule):
             return 0
     
     def fetch_statistics(self, username):
-        """FAZ 1.2: Kullanıcının toplam star ve fork sayılarını hesaplar."""
+        """Kullanıcının toplam star ve fork sayılarını hesaplar."""
         console = Console()
         stats = {'total_stars': 0, 'total_forks': 0}
         page = 1
@@ -257,7 +257,7 @@ class GitHubTracker(BaseModule):
         return stats
 
     def fetch_repositories(self, username, limit=50, sort_by="updated"):
-        """FAZ 2.1: Kullanıcının repository listesini ve detaylarını çeker."""
+        """Kullanıcının repository listesini ve detaylarını çeker."""
         console = Console()
         repos = []
         page = 1
@@ -358,7 +358,7 @@ class GitHubTracker(BaseModule):
             return 0
 
     def analyze_repositories(self, repos):
-        """FAZ 2.2: Repository listesini analiz eder."""
+        """Repository listesini analiz eder."""
         from collections import Counter
         
         if not repos:
@@ -456,7 +456,7 @@ class GitHubTracker(BaseModule):
         return users
 
     def analyze_relationships(self, following, followers):
-        """FAZ 3.1: Takipçi ilişkilerini analiz eder."""
+        """Takipçi ilişkilerini analiz eder."""
         if not following or not followers:
             return None
             
@@ -500,7 +500,7 @@ class GitHubTracker(BaseModule):
                  console.print()
 
     def compare_users(self, user1, user1_followers, user1_following, user2, console, output_file=None):
-        """FAZ 3.1: İki kullanıcıyı karşılaştırır (Ortak takipçi/takip edilen)."""
+        """İki kullanıcıyı karşılaştırır (Ortak takipçi/takip edilen)."""
         console.print(f"\n[bold blue]🔄 {user1} ve {user2} Karşılaştırılıyor...[/bold blue]")
         
         # User 2 verilerini çek
@@ -541,7 +541,7 @@ class GitHubTracker(BaseModule):
                  console.print(f"[red][!] Dosya yazma hatası: {e}[/red]")
 
     def analyze_network(self, users, limit=20):
-        """FAZ 3.2: Ağ Analizi (Lokasyon, Şirket, Aktiflik)."""
+        """Ağ Analizi (Lokasyon, Şirket, Aktiflik)."""
         from collections import Counter
         from rich.progress import track
         
@@ -606,7 +606,7 @@ class GitHubTracker(BaseModule):
         console.print()
 
     def fetch_activity(self, username, days=30):
-        """FAZ 4.1: Kullanıcının son aktivitelerini çeker (Atom feed kullanarak)."""
+        """Kullanıcının son aktivitelerini çeker (Atom feed kullanarak)."""
         import xml.etree.ElementTree as ET
         from datetime import datetime, timedelta
         
@@ -762,10 +762,10 @@ class GitHubTracker(BaseModule):
         console.print(stats_table)
         console.print()
 
-    # ==================== FAZ 4.2: CONTRIBUTION ANALİZİ ====================
+    # ==================== CONTRIBUTION ANALİZİ ====================
     
     def fetch_contributions(self, username):
-        """FAZ 4.2: Kullanıcının yıllık contribution sayısını ve contribution graph verilerini çeker."""
+        """Kullanıcının yıllık contribution sayısını ve contribution graph verilerini çeker."""
         import re
         
         # GitHub'ın contribution calendar sayfasını kullan
@@ -813,7 +813,7 @@ class GitHubTracker(BaseModule):
             return None
     
     def fetch_contribution_repos(self, username, events=None):
-        """FAZ 4.2: En aktif olduğu repo'ları belirler (push eventlerinden)."""
+        """En aktif olduğu repo'ları belirler (push eventlerinden)."""
         from collections import Counter
         
         if events is None:
@@ -839,7 +839,7 @@ class GitHubTracker(BaseModule):
         return repo_counts.most_common(10)
     
     def fetch_pr_stats(self, username):
-        """FAZ 4.2: Kullanıcının Pull Request istatistiklerini çeker."""
+        """Kullanıcının Pull Request istatistiklerini çeker."""
         import re
         
         stats = {
@@ -891,7 +891,7 @@ class GitHubTracker(BaseModule):
             return stats
     
     def fetch_issue_stats(self, username):
-        """FAZ 4.2: Kullanıcının Issue istatistiklerini çeker."""
+        """Kullanıcının Issue istatistiklerini çeker."""
         import re
         
         stats = {
@@ -930,7 +930,7 @@ class GitHubTracker(BaseModule):
             return stats
     
     def analyze_contributions(self, username, activity_events=None):
-        """FAZ 4.2: Tüm contribution analizini bir araya getirir."""
+        """Tüm contribution analizini bir araya getirir."""
         console = Console()
         console.print(f"[yellow][*] {username} için contribution analizi yapılıyor...[/yellow]")
         
@@ -959,7 +959,7 @@ class GitHubTracker(BaseModule):
         return analysis
     
     def print_contributions(self, analysis, console):
-        """FAZ 4.2: Contribution analiz sonuçlarını tablo olarak gösterir."""
+        """Contribution analiz sonuçlarını tablo olarak gösterir."""
         if not analysis:
             console.print("[yellow]⚠ Contribution verisi alınamadı.[/yellow]")
             return
@@ -1015,10 +1015,10 @@ class GitHubTracker(BaseModule):
             console.print(repo_table)
             console.print()
 
-    # ==================== FAZ 5.1: ORGANIZASYON DESTEĞİ ====================
+    # ==================== ORGANIZASYON DESTEĞİ ====================
 
     def fetch_organizations(self, username):
-        """FAZ 5.1: Kullanıcının üye olduğu organizasyonları çeker."""
+        """Kullanıcının üye olduğu organizasyonları çeker."""
         url = f"https://github.com/{username}"
         headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'}
         try:
@@ -1055,7 +1055,7 @@ class GitHubTracker(BaseModule):
             return []
 
     def fetch_org_details(self, org_name):
-        """FAZ 5.1: Organizasyon detaylarını çeker."""
+        """Organizasyon detaylarını çeker."""
         url = f"https://github.com/{org_name}"
         info = {}
         headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'}
@@ -1084,7 +1084,7 @@ class GitHubTracker(BaseModule):
             return None
 
     def fetch_org_members(self, org_name, limit=10):
-        """FAZ 5.1: Organizasyonun public üyelerini çeker."""
+        """Organizasyonun public üyelerini çeker."""
         url = f"https://github.com/orgs/{org_name}/people"
         members = []
         headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'}
@@ -1119,7 +1119,7 @@ class GitHubTracker(BaseModule):
             return []
 
     def fetch_org_teams(self, org_name):
-        """FAZ 5.2: Organizasyonun public takımlarını çeker."""
+        """Organizasyonun public takımlarını çeker."""
         url = f"https://github.com/orgs/{org_name}/teams"
         teams = []
         headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'}
@@ -1196,12 +1196,12 @@ class GitHubTracker(BaseModule):
         activity_days = int(options.get("DAYS"))
         contributions_opt = options.get("CONTRIBUTIONS")
         contributions_opt = options.get("CONTRIBUTIONS")
-        orgs_opt = options.get("ORGS")  # FAZ 5.1
-        output_format = options.get("FORMAT") # FAZ 6.1
+        orgs_opt = options.get("ORGS")
+        output_format = options.get("FORMAT")
         
         target_user = self.get_username(username_input)
         
-        # FAZ 6.2: Otomatik Dosya İsmi (Eğer OUTPUT boşsa)
+        # Otomatik Dosya İsmi (Eğer OUTPUT boşsa)
         if not output_file:
             from datetime import datetime
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1244,7 +1244,7 @@ class GitHubTracker(BaseModule):
             self.print_table("FOLLOWING", following, console)
             self.print_table("FOLLOWERS", followers, console)
             
-        # Ağ Analizi (FAZ 3.2) - Followers üzerinde
+        # Ağ Analizi - Followers üzerinde
         network_stats = None
         if network_analysis_opt == "True":
             # Limit parametresini kullanalım ama çok yüksekse uyaralım veya max 50 ile sınırlayalım
@@ -1254,7 +1254,7 @@ class GitHubTracker(BaseModule):
             network_stats = self.analyze_network(followers, limit=analysis_limit)
             self.print_network_analysis(network_stats, console)
 
-        # Aktivite Takibi (FAZ 4.1)
+        # Aktivite Takibi
         activity_events = None
         activity_analysis = None
         if activity_opt == "True":
@@ -1265,13 +1265,13 @@ class GitHubTracker(BaseModule):
             else:
                 console.print(f"[yellow]⚠ Son {activity_days} günlük aktivite verisi alınamadı.[/yellow]")
 
-        # Contribution Analizi (FAZ 4.2)
+        # Contribution Analizi
         contribution_analysis = None
         if contributions_opt == "True":
             contribution_analysis = self.analyze_contributions(target_user, activity_events)
             self.print_contributions(contribution_analysis, console)
 
-        # Organizasyon Analizi (FAZ 5.1)
+        # Organizasyon Analizi
         orgs_data = []
         if orgs_opt == "True":
             orgs_data = self.fetch_organizations(target_user)
@@ -1322,7 +1322,7 @@ class GitHubTracker(BaseModule):
         if info.get('twitter'): table.add_row("Twitter", info['twitter'])
         if info.get('email'): table.add_row("E-posta", info['email'])
         
-        # FAZ 1.2: İstatistik Bilgileri
+        # İstatistik Bilgileri
         table.add_row("─" * 15, "─" * 20)  # Ayırıcı
         table.add_row("📊 [bold]İSTATİSTİKLER[/bold]", "")
         if info.get('public_repos') is not None:
@@ -1373,7 +1373,7 @@ class GitHubTracker(BaseModule):
         console.print("\n")
 
     def save_to_file(self, target_user, following, followers, filename, format, console, profile_info=None, stats=None, repos=None, repo_analysis=None, rel_analysis=None, network_stats=None, activity_analysis=None, contribution_analysis=None, orgs_data=None):
-        """FAZ 6.1: Sonuçları belirtilen formatta dosyaya kaydeder."""
+        """Sonuçları belirtilen formatta dosyaya kaydeder."""
         try:
             # Format belirleme (dosya uzantısından veya option'dan)
             if filename.endswith('.json'): format = 'json'
@@ -1732,7 +1732,7 @@ class GitHubTracker(BaseModule):
                 f.write("="*40 + "\n\n")
                 
                 if rel_analysis:
-                     f.write("ILISKI ANALIZI (FAZ 3.1):\n")
+                     f.write("ILISKI ANALIZI:\n")
                      f.write(f"- Karsilikli Takip: {len(rel_analysis['mutual'])}\n")
                      f.write(f"- Takip Edip Donmeyenler: {len(rel_analysis['not_following_back'])}\n")
                      f.write(f"- Seni Takip Edip Etmediklerin: {len(rel_analysis['not_followed_back'])}\n")
@@ -1743,7 +1743,7 @@ class GitHubTracker(BaseModule):
                      f.write("\n" + "-"*40 + "\n\n")
 
                 if network_stats:
-                     f.write("AG ANALIZI (FAZ 3.2):\n")
+                     f.write("AG ANALIZI:\n")
                      f.write(f"- Taranan Kisi: {network_stats['total_scanned']}\n")
                      f.write(f"- Aktif Kullanici Orani: {network_stats['active_count']}/{network_stats['total_scanned']}\n")
                      f.write("En Yaygin Lokasyonlar:\n")
@@ -1755,7 +1755,7 @@ class GitHubTracker(BaseModule):
                      f.write("\n" + "-"*40 + "\n\n")
 
                 if activity_analysis:
-                     f.write("AKTIVITE TAKIBI (FAZ 4.1):\n")
+                     f.write("AKTIVITE TAKIBI:\n")
                      f.write(f"- Toplam Aktivite: {activity_analysis['total_events']}\n")
                      f.write("\nAktivite Turleri:\n")
                      for event_type, count in activity_analysis['by_type'].most_common():
@@ -1768,9 +1768,9 @@ class GitHubTracker(BaseModule):
                          f.write(f"En Aktif Saat: {hour}:00 ({count} aktivite)\n")
                      f.write("\n" + "-"*40 + "\n\n")
 
-                # FAZ 4.2: Contribution Analizi
+                # Contribution Analizi
                 if contribution_analysis:
-                     f.write("CONTRIBUTION ANALIZI (FAZ 4.2):\n")
+                     f.write("CONTRIBUTION ANALIZI:\n")
                      
                      if contribution_analysis.get('contributions'):
                          yearly = contribution_analysis['contributions'].get('yearly_total', 0)
@@ -1801,7 +1801,7 @@ class GitHubTracker(BaseModule):
                      f.write("\n" + "-"*40 + "\n\n")
 
                 if orgs_data:
-                    f.write("ORGANIZASYONLAR (FAZ 5.1):\n")
+                    f.write("ORGANIZASYONLAR:\n")
                     for org in orgs_data:
                         f.write(f"- {org['name']} ({org['url']})\n")
                         desc = org.get('details', {}).get('description', '-')
@@ -1822,7 +1822,7 @@ class GitHubTracker(BaseModule):
                     if profile_info.get('twitter'): f.write(f"- Twitter: {profile_info['twitter']}\n")
                     if profile_info.get('email'): f.write(f"- Email: {profile_info['email']}\n")
                     
-                    # FAZ 1.2: İstatistik Bilgileri
+                    # İstatistik Bilgileri
                     f.write("\nISTATISTIKLER:\n")
                     if profile_info.get('public_repos') is not None:
                         f.write(f"- Public Repo: {profile_info['public_repos']}\n")
@@ -1835,7 +1835,7 @@ class GitHubTracker(BaseModule):
                     f.write("\n" + "-"*40 + "\n\n")
 
                 if repo_analysis:
-                    f.write("REPO ANALIZI ve ISTATISTIKLERI (FAZ 2.2):\n")
+                    f.write("REPO ANALIZI ve ISTATISTIKLERI:\n")
                     f.write("En Cok Kullanilan Diller:\n")
                     for lang, count in repo_analysis['top_languages']:
                         f.write(f"- {lang}: {count}\n")

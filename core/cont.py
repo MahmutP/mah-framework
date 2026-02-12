@@ -1,20 +1,30 @@
 # core/cont.py
+# Bu dosya, tüm framework genelinde kullanılan sabit (değişmeyen) değerleri içerir.
+# Ayarlar, varsayılan değerler ve yapılandırma parametreleri buradan yönetilir.
 
 # ==============================================================================
 # LOGLAMA SABİTLERİ
 # Uygulamanın loglama sistemi için temel ayarları tanımlar.
 # ==============================================================================
-# Henüz logging yapısı kodlanmadı.
 LOG_LEVELS = {
     # Hata ayıklama seviyesi: Geliştirme sırasında detaylı bilgileri loglamak için kullanılır.
+    # Değişken değerleri, fonksiyon giriş-çıkışları gibi detaylar buradadır.
     "DEBUG": 10,
+    
     # Bilgi seviyesi: Uygulamanın normal çalışması sırasındaki önemli olayları loglar.
+    # Örn: "Sunucu başlatıldı", "Bağlantı kabul edildi".
     "INFO": 20,
+    
     # Uyarı seviyesi: Potansiyel sorunlara işaret eden ancak uygulamayı durdurmayan olayları loglar.
+    # Örn: "Disk alanı azalıyor", "Bilinmeyen yapılandırma parametresi".
     "WARNING": 30,
+    
     # Hata seviyesi: Bir işlevin düzgün çalışmasını engelleyen hataları loglar.
+    # Örn: "Dosya bulunamadı", "Bağlantı koptu".
     "ERROR": 40,
+    
     # Kritik seviye: Uygulamanın tamamen durmasına neden olabilecek çok ciddi hataları loglar.
+    # Örn: "Bellek doldu", "Çekirdek modül yüklenemedi".
     "CRITICAL": 50
 }
 
@@ -23,7 +33,7 @@ LOG_LEVELS = {
 DEFAULT_LOG_LEVEL = "INFO"
 
 # Log dosyalarının saklanacağı dizin yolu.
-# Bu dizin, logları kalıcı olarak diske kaydetmek için kullanılır.
+# Bu dizin, logları kalıcı olarak diske kaydetmek için oluşturulur.
 LOG_DIR = "config/logs"
 
 # ==============================================================================
@@ -40,46 +50,45 @@ ALIASES_FILE = "config/aliases.json"
 # Terminal çıktılarının düzenlenmesi ve hizalanması için kullanılır.
 # ==============================================================================
 
-# Terminal genişliği belirlenemediğinde kullanılacak varsayılan sütun sayısı.
-# Çıktıların taşmasını önlemek için bir yedek değerdir.
+# Terminal genişliği belirlenemediğinde (örn: pipe kullanımında) kullanılacak varsayılan sütun sayısı.
+# Çıktıların taşmasını veya bozuk görünmesini önlemek için bir yedek değerdir.
 DEFAULT_TERMINAL_WIDTH = 120
 
-# Tablo ve liste çıktılarının başlangıcındaki sol kenar boşluğu (boşluk sayısı).
+# Tablo ve liste çıktılarının başlangıcındaki sol kenar boşluğu (indentation).
 LEFT_PADDING = 4
 
-# Tablo sütunları arasındaki minimum boşluk (boşluk sayısı).
+# Tablo sütunları arasındaki minimum boşluk (whitespace).
 COL_SPACING = 4
 
-# Otomatik tamamlama için kullanılan 'Tab' karakterinin genişliği (şu an kullanılmıyor olabilir
-# ancak genel terminal çıktıları için bir standart tanımlar).
+# Otomatik tamamlama veya hizalama için kullanılan 'Tab' karakterinin genişliği.
 TAB_SPING = 8
 
 # ==============================================================================
 # KOMUT VE MODÜL YÖNETİMİ SABİTLERİ
-# Komut ve modül kategorilerini tanımlar.
+# Komut ve modül kategorilerini ve varsayılan davranışları tanımlar.
 # ==============================================================================
 
 # Komutların kategorilerini ve bunların kullanıcıya gösterilecek başlıklarını
-# tanımlayan sözlük. Bu, 'help' komutunun çıktısını düzenler.
+# tanımlayan sözlük. Bu, 'help' komutunun çıktısını düzenler ve gruplar.
 COMMAND_CATEGORIES = {
     "core": "Core Commands",      # Uygulamanın temel komutları (help, exit, vb.)
     "module": "Module Commands",  # Modüllerle etkileşim komutları (use, set, run, vb.)
     "system": "System Commands"   # Sistemle ilgili komutlar (alias, clear, shell, vb.)
 }
 
-# Modül seçenekleri için varsayılan regex deseni.
-# Bir seçenek için özel bir regex tanımlanmadığında, bu desen (herhangi bir karakter)
-# kullanılır, bu da her türlü değere izin verildiği anlamına gelir.
+# Modül seçenekleri (Option) için varsayılan regex deseni.
+# Bir seçenek için özel bir doğrulama kuralı (regex) tanımlanmadığında, 
+# bu desen (herhangi bir karakter dizisi) kullanılır.
 DEFAULT_REGEX = r".*"
 
 # ==============================================================================
-# UYGULAMA METADATA SABİTLERİ (İsteğe Bağlı Eklemeler)
+# UYGULAMA METADATA SABİTLERİ (Bilgi Amaçlı)
 # ==============================================================================
 
 # Uygulamanın gösterim adı (prompt veya banner için kullanılabilir).
 APP_NAME = "Mah Framework"
 
-# Uygulamanın versiyon numarası.
+# Uygulamanın versiyon numarası. Güncellemelerle birlikte artırılır.
 APP_VERSION = "1.0.0"
 
 # Geliştiricinin iletişim bilgisi veya ekip adı.

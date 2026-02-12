@@ -1,112 +1,89 @@
-# Plugin'lerin miras alacağı temel sınıf
-# Tüm plugin'ler bu sınıftan türetilmelidir
+# Framework'ün eklenti (plugin) mimarisinin temel yapı taşı.
+# Modüllerden farklı olarak, eklentiler framework'ün olaylarını (event) dinler ve tepki verir.
 
 from typing import Dict, Callable, Any
 from core.hooks import HookType
 
 
 class BasePlugin:
-    """Tüm plugin'lerin miras alacağı temel sınıf.
+    """
+    Eklentilerin (Plugin) Ana Sınıfı.
     
-    Bu sınıf, plugin geliştirmek için gerekli temel yapıyı sağlar.
-    Yeni bir plugin oluştururken bu sınıftan miras alınmalı ve
-    gerekli özellikler ile metodlar override edilmelidir.
-    
-    Attributes:
-        Name: Plugin'in adı.
-        Description: Plugin'in açıklaması.
-        Author: Plugin'i geliştiren kişi.
-        Version: Plugin versiyonu.
-        Enabled: Plugin'in aktif olup olmadığı.
-        Priority: Plugin önceliği (düşük değer = önce çalışır).
-    
-    Example:
-        >>> class MyPlugin(BasePlugin):
-        ...     Name = "My Plugin"
-        ...     Description = "Örnek bir plugin"
-        ...     Author = "Mahmut"
-        ...     Version = "1.0.0"
-        ...     
-        ...     def get_hooks(self):
-        ...         return {
-        ...             HookType.POST_COMMAND: self.on_command_complete
-        ...         }
-        ...     
-        ...     def on_command_complete(self, command_line: str, success: bool, **kwargs):
-        ...         print(f"Komut çalıştırıldı: {command_line}")
+    Yeni bir eklenti geliştirmek için bu sınıftan miras alınmalı ve ilgili metodlar doldurulmalıdır.
+    Eklentiler, framework başlatıldığında, bir modül seçildiğinde veya komut çalıştırıldığında
+    devreye girebilen kod parçacıklarıdır.
     """
     
-    # Plugin temel özellikleri
+    # ==============================================================================
+    # Eklenti Metadata (Kimlik) Bilgileri
+    # ==============================================================================
+    
     Name: str = "Default Plugin"
-    """Plugin'in görünen adı."""
+    """Plugin'in kullanıcıya görünen adı. 'plugins list' komutunda çıkar."""
     
     Description: str = "Plugin description"
-    """Plugin'in ne yaptığını açıklayan kısa metin."""
+    """Plugin'in ne yaptığını anlatan kısa açıklama."""
     
     Author: str = "Unknown"
-    """Plugin'i geliştiren kişinin adı."""
+    """Plugin'i kodlayan kişinin adı."""
     
     Version: str = "1.0.0"
-    """Plugin'in sürüm numarası (semantic versioning önerilir)."""
+    """Plugin sürüm numarası. (Major.Minor.Patch formatı önerilir)"""
     
     Enabled: bool = True
-    """Plugin'in aktif olup olmadığını belirtir. False ise hook'lar tetiklenmez."""
+    """
+    Plugin'in varsayılan olarak aktif olup olmadığını belirler.
+    Kullanıcı 'config' dosyasından veya çalışma zamanında bunu değiştirebilir.
+    False ise hook'lar tetiklenmez.
+    """
     
     Priority: int = 100
-    """Plugin önceliği. Düşük değerli plugin'ler önce çalışır (0-1000 arası önerilir)."""
+    """
+    Plugin'in çalışma önceliği.
+    Aynı olayı dinleyen birden fazla plugin varsa, PERFORMANS ve SIRALAMA için kullanılır.
+    Düşük sayı = Yüksek öncelik (Daha önce çalışır).
+    """
     
     def __init__(self) -> None:
-        """Plugin init fonksiyonu.
-        
-        Alt sınıflar bu metodu override edebilir ancak super().__init__()
-        çağrılması önerilir.
+        """
+        Plugin örneği oluşturulduğunda çalışan yapıcı metod.
+        Genellikle değişken tanımları için kullanılır. Ağırlıklı işler on_load'da yapılmalıdır.
         """
         pass
     
     def on_load(self) -> None:
-        """Plugin yüklendiğinde çağrılır.
+        """
+        Plugin framework'e yüklendiğinde VEYA aktifleştirildiğinde (enabled) çağrılır.
         
-        Bu metod, plugin ilk kez yüklendiğinde veya enable edildiğinde
-        çalıştırılır. Başlangıç yapılandırmaları burada yapılabilir.
-        
-        Override edilebilir.
+        Kullanım:
+        - Veritabanı bağlantısını başlatmak.
+        - Gerekli dosyaları kontrol etmek.
+        - Kullanıcıya "Plugin yüklendi" mesajı göstermek.
         """
         pass
     
     def on_unload(self) -> None:
-        """Plugin kaldırıldığında çağrılır.
+        """
+        Plugin framework'den kaldırıldığında VEYA devre dışı bırakıldığında (disabled) çağrılır.
         
-        Bu metod, plugin disable edildiğinde veya framework kapanırken
-        çalıştırılır. Temizlik işlemleri burada yapılabilir.
-        
-        Override edilebilir.
+        Kullanım:
+        - Açık bağlantıları kapatmak.
+        - Geçici dosyaları temizlemek.
+        - Kaynakları serbest bırakmak.
         """
         pass
     
     def get_hooks(self) -> Dict[HookType, Callable[..., Any]]:
-        """Plugin'in dinlediği hook'ları döndürür.
-        
-        Bu metod, plugin'in hangi event'leri dinlediğini ve her event için
-        hangi handler fonksiyonunun çağrılacağını tanımlar.
+        """
+        Plugin'in HANGİ olayları dinlediğini ve bu olaylar olduğunda HANGİ fonksiyonu çağıracağını belirler.
         
         Returns:
-            Dict[HookType, Callable]: Hook türü -> handler fonksiyonu eşleştirmesi.
+            Dict: HookType (Olay Türü) -> Fonksiyon (Handler) eşleşmesi.
             
-        Example:
-            >>> def get_hooks(self):
-            ...     return {
-            ...         HookType.PRE_COMMAND: self.before_command,
-            ...         HookType.POST_MODULE_RUN: self.after_module
-            ...     }
-        
-        Hook Handler Parametreleri:
-            - ON_STARTUP: Parametre yok
-            - ON_SHUTDOWN: Parametre yok
-            - PRE_COMMAND: command_line (str)
-            - POST_COMMAND: command_line (str), success (bool)
-            - PRE_MODULE_RUN: module_path (str), module (BaseModule)
-            - POST_MODULE_RUN: module_path (str), module (BaseModule), success (bool)
-            - ON_MODULE_SELECT: module_path (str), module (BaseModule)
-            - ON_OPTION_SET: option_name (str), value (Any), module (BaseModule)
+        Örnek:
+            return {
+                HookType.PRE_COMMAND: self.komut_oncesi_calis,
+                HookType.POST_MODULE_RUN: self.modul_sonrasi_calis
+            }
         """
         return {}

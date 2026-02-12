@@ -1,95 +1,99 @@
-# Plugin yönetimi için ana sınıf
-# Plugin'lerin yüklenmesi, etkinleştirilmesi ve hook tetiklemelerini yönetir
+# Plugin (Eklenti) yaşam döngüsünü ve olay tabanlı hook sistemini yöneten sınıf.
+# Framework'ün genişletilebilirliğini sağlayan ana bileşendir.
 
 from pathlib import Path
-import importlib.util
+import importlib.util # Dosyalardan dinamik sınıf yüklemek için.
 from typing import Dict, List, Callable, Optional, Any, Tuple
 
-from core.plugin import BasePlugin
-from core.hooks import HookType
+from core.plugin import BasePlugin # Plugin'lerin temel sınıfı.
+from core.hooks import HookType # Olay türleri (Enum).
 from core import logger
 
 
 class PluginManager:
-    """Plugin yönetim sınıfı.
+    """
+    Eklenti Yönetim Sınıfı (PluginManager).
     
-    Bu sınıf, plugin'lerin yüklenmesi, etkinleştirilmesi, devre dışı bırakılması
-    ve hook tetiklemelerini yönetir.
-    
-    Attributes:
-        plugins_dir: Plugin dosyalarının bulunduğu klasör.
-        plugins: Yüklü plugin'lerin isim -> obje eşleştirmesi.
-        hooks: Hook türü -> handler listesi eşleştirmesi.
-    
-    Example:
-        >>> pm = PluginManager()
-        >>> pm.load_plugins()
-        >>> pm.trigger_hook(HookType.ON_STARTUP)
+    Bu sınıfın sorumlulukları:
+    1. 'plugins/' dizinindeki eklentileri bulmak ve yüklemek.
+    2. Eklentileri etkinleştirmek (enable) veya devre dışı bırakmak (disable).
+    3. Framework içindeki olaylar tetiklendiğinde (trigger_hook), ilgili eklenti fonksiyonlarını çağırmak.
     """
     
     def __init__(self, plugins_dir: str = "plugins") -> None:
-        """PluginManager init fonksiyonu.
-        
+        """
         Args:
-            plugins_dir: Plugin dosyalarının bulunduğu klasör. Varsayılan: "plugins"
+            plugins_dir (str): Eklenti dosyalarının aranacağı dizin. Varsayılan: "plugins".
         """
         self.plugins_dir: Path = Path(plugins_dir)
+        
+        # Yüklü plugin nesnelerini tutan sözlük (Plugin Adı -> Plugin Instance).
         self.plugins: Dict[str, BasePlugin] = {}
+        
+        # Hook kayıtlarını tutan yapı.
+        # Key: HookType (Örn: PRE_COMMAND)
+        # Value: (Öncelik, Fonksiyon) demetlerinin listesi.
         self.hooks: Dict[HookType, List[Tuple[int, Callable[..., Any]]]] = {
             hook: [] for hook in HookType
         }
     
     def load_plugins(self) -> None:
-        """Tüm plugin'leri yükler.
-        
-        plugins/ klasöründeki tüm .py dosyalarını tarar, BasePlugin'den
-        türeyen sınıfları bulur ve yükler. Her plugin için on_load() çağrılır
-        ve hook'lar kaydedilir.
         """
+        Belirtilen dizindeki tüm eklentileri tarar, belleğe yükler ve başlatır.
+        Her plugin için 'on_load' metodunu çağırır ve hook'larını kaydeder.
+        """
+        # Yeniden yükleme ihtimaline karşı mevcut listeleri temizle.
         self.plugins.clear()
         for hook in self.hooks:
             self.hooks[hook].clear()
         
+        # Plugin dizini yoksa uyarı ver ve çık.
         if not self.plugins_dir.exists():
             logger.warning(f"Plugin klasörü bulunamadı: {self.plugins_dir}")
             return
         
+        # .py dosyalarını gez
         for file_path in self.plugins_dir.glob("*.py"):
+            # Paket dosyalarını atla.
             if file_path.name == "__init__.py":
                 continue
             
             plugin_name = file_path.stem
             
             try:
+                # 1. Modül spesifikasyonu oluştur.
                 spec = importlib.util.spec_from_file_location(plugin_name, str(file_path))
                 if spec is None or spec.loader is None:
                     logger.warning(f"Plugin spesifikasyonu alınamadı: {file_path}")
                     continue
                 
+                # 2. Modülü yükle.
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
                 
-                # BasePlugin'den türeyen sınıfları bul
+                # 3. BasePlugin'den türetilmiş sınıfları bul.
                 for name, obj in module.__dict__.items():
                     if (isinstance(obj, type) and 
                         issubclass(obj, BasePlugin) and 
                         obj is not BasePlugin):
                         
+                        # Sınıftan örnek (instance) oluştur.
                         plugin_instance = obj()
                         self.plugins[plugin_name] = plugin_instance
                         
-                        # on_load() çağır
+                        # Eklentinin başlangıç kodunu (on_load) çalıştır.
                         try:
                             plugin_instance.on_load()
                         except Exception as e:
+                            # Bir plugin'in yüklenirken hata vermesi diğerlerini etkilememeli.
                             logger.exception(f"Plugin on_load hatası '{plugin_name}'")
                         
-                        # Hook'ları kaydet
+                        # Eğer plugin varsayılan olarak aktifse, hook'larını sisteme kaydet.
                         if plugin_instance.Enabled:
                             self._register_hooks(plugin_instance)
                         
                         logger.info(f"Plugin yüklendi: {plugin_name} v{plugin_instance.Version}")
-                        break
+                        break # Bir dosyada tek plugin sınıfı varsayıyoruz.
                         
             except SyntaxError as e:
                 logger.exception(f"Plugin sözdizimi hatası '{file_path}'")
@@ -101,63 +105,62 @@ class PluginManager:
         logger.info(f"{len(self.plugins)} plugin yüklendi")
     
     def _register_hooks(self, plugin: BasePlugin) -> None:
-        """Plugin'in hook'larını kaydeder.
+        """
+        Bir eklentinin dinlemek istediği olayları (hook'ları) sisteme kaydeder.
         
         Args:
-            plugin: Hook'ları kaydedilecek plugin.
+            plugin: Kaydedilecek eklenti nesnesi.
         """
+        # Eklentiden dinleyeceği hook'ları al.
         plugin_hooks = plugin.get_hooks()
+        
         for hook_type, handler in plugin_hooks.items():
-            # (priority, handler) tuple olarak ekle
+            # (Öncelik, İşleyici Fonksiyon) şeklinde listeye ekle.
             self.hooks[hook_type].append((plugin.Priority, handler))
-            # Priority'ye göre sırala (düşük önce)
+            
+            # Öncelik değerine (Priority) göre listeyi sırala.
+            # Düşük sayı (örn: 10) = Yüksek Öncelik (Listenin başında yer alır).
             self.hooks[hook_type].sort(key=lambda x: x[0])
     
     def _unregister_hooks(self, plugin: BasePlugin) -> None:
-        """Plugin'in hook'larını kaldırır.
-        
-        Args:
-            plugin: Hook'ları kaldırılacak plugin.
+        """
+        Bir eklentinin hook kayıtlarını sistemden siler.
+        Plugin devre dışı bırakıldığında veya kaldırıldığında kullanılır.
         """
         plugin_hooks = plugin.get_hooks()
         for hook_type, handler in plugin_hooks.items():
+            # İlgili hook listesinden, bu plugin'in handler'ını filtreleyerek yeni liste oluştur.
             self.hooks[hook_type] = [
                 (p, h) for p, h in self.hooks[hook_type] if h != handler
             ]
     
     def unload_plugin(self, plugin_name: str) -> bool:
-        """Plugin'i kaldırır.
-        
-        Args:
-            plugin_name: Kaldırılacak plugin'in adı.
-            
-        Returns:
-            bool: Başarılı olup olmadığı.
+        """
+        Belirtilen eklentiyi tamamen sistemden kaldırır.
         """
         plugin = self.plugins.get(plugin_name)
         if not plugin:
             logger.warning(f"Plugin bulunamadı: {plugin_name}")
             return False
         
+        # Eklentinin temizlik kodunu (on_unload) çalıştır.
         try:
             plugin.on_unload()
         except Exception as e:
             logger.exception(f"Plugin on_unload hatası '{plugin_name}'")
         
+        # Hook'ları sil.
         self._unregister_hooks(plugin)
+        
+        # Nesneyi sözlükten sil.
         del self.plugins[plugin_name]
         
         logger.info(f"Plugin kaldırıldı: {plugin_name}")
         return True
     
     def enable_plugin(self, plugin_name: str) -> bool:
-        """Plugin'i etkinleştirir.
-        
-        Args:
-            plugin_name: Etkinleştirilecek plugin'in adı.
-            
-        Returns:
-            bool: Başarılı olup olmadığı.
+        """
+        Pasif durumdaki bir eklentiyi aktifleştirir. Hook'larını kaydeder.
         """
         plugin = self.plugins.get(plugin_name)
         if not plugin:
@@ -175,13 +178,8 @@ class PluginManager:
         return True
     
     def disable_plugin(self, plugin_name: str) -> bool:
-        """Plugin'i devre dışı bırakır.
-        
-        Args:
-            plugin_name: Devre dışı bırakılacak plugin'in adı.
-            
-        Returns:
-            bool: Başarılı olup olmadığı.
+        """
+        Aktif bir eklentiyi pasifleştirir. Hook'larını siler ama bellekte tutar.
         """
         plugin = self.plugins.get(plugin_name)
         if not plugin:
@@ -199,51 +197,35 @@ class PluginManager:
         return True
     
     def trigger_hook(self, hook_type: HookType, **kwargs: Any) -> None:
-        """Belirtilen hook'u tetikler.
-        
-        Kayıtlı tüm handler'ları priority sırasına göre çağırır.
-        Her handler try-except ile sarılır, bir handler'ın hatası
-        diğer handler'ların çalışmasını engellemez.
+        """
+        BELİRLİ BİR OLAY GERÇEKLEŞTİĞİNDE ÇAĞRILIR.
+        Kayıtlı tüm eklentilerin ilgili fonksiyonlarını sırayla çalıştırır.
         
         Args:
-            hook_type: Tetiklenecek hook türü.
-            **kwargs: Handler'lara geçirilecek parametreler.
+            hook_type: Tetiklenen olayın türü (örn: HookType.PRE_COMMAND).
+            **kwargs: İşleyicilere (handler) gönderilecek parametreler (örn: command_line="help").
         """
         handlers = self.hooks.get(hook_type, [])
         
         for priority, handler in handlers:
             try:
+                # İşleyici fonksiyonu çağır.
                 handler(**kwargs)
             except Exception as e:
+                # Bir eklentinin çökmesi, framework'ü veya diğer eklentileri durdurmamalı.
                 logger.exception(f"Plugin hook hatası ({hook_type.value})")
-                # Hata olsa bile diğer handler'lara devam et
                 continue
     
     def get_all_plugins(self) -> Dict[str, BasePlugin]:
-        """Tüm plugin'leri döndürür.
-        
-        Returns:
-            Dict[str, BasePlugin]: Plugin adı -> obje eşleştirmesi.
-        """
+        """Yüklü tüm plugin'leri döndürür."""
         return self.plugins
     
     def get_plugin(self, plugin_name: str) -> Optional[BasePlugin]:
-        """Belirtilen plugin'i döndürür.
-        
-        Args:
-            plugin_name: Plugin adı.
-            
-        Returns:
-            Optional[BasePlugin]: Plugin objesi veya None.
-        """
+        """Belirtilen plugin'i döndürür."""
         return self.plugins.get(plugin_name)
     
     def get_enabled_plugins(self) -> Dict[str, BasePlugin]:
-        """Sadece aktif plugin'leri döndürür.
-        
-        Returns:
-            Dict[str, BasePlugin]: Aktif plugin'lerin adı -> obje eşleştirmesi.
-        """
+        """Sadece aktif (enable edilmiş) plugin'leri filtreleyip döndürür."""
         return {
             name: plugin 
             for name, plugin in self.plugins.items() 

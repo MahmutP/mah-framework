@@ -1,122 +1,155 @@
-"""Logging modülü - Uygulama olaylarını kaydetmek için basit logger.
+"""Logging modülü - Uygulama olaylarını kaydetmek için basit ve güçlü logger.
 
 Bu modül, uygulamanın tüm olaylarını, komut yürütmelerini ve hataları
-config/logs/ dizinine kaydeder.
+'config/logs/' dizinine kaydeder.
+Loglama için 'loguru' kütüphanesi kullanılır, bu da standart logging modülüne göre 
+daha kolay yapılandırma ve daha iyi performans sağlar.
 """
-"""Logging modülü - Uygulama olaylarını kaydetmek için basit logger.
 
-Bu modül, uygulamanın tüm olaylarını, komut yürütmelerini ve hataları
-config/logs/ dizinine kaydeder.
-"""
 from pathlib import Path
 from loguru import logger
 import sys
 
-# Log dizini ve dosya yolu
+# Log dosyalarının saklanacağı ana dizin ve dosya yolu belirleniyor.
+# __file__ ile bu dosyanın bulunduğu konumu alıp, iki üst dizine (framework köküne) çıkarız.
 LOG_DIR = Path(__file__).parent.parent / "config" / "logs"
 LOG_FILE = LOG_DIR / "app.log"
 
-# Logger instance (Loguru already provides a singleton, but we maintain the variable for compatibility if needed)
+# Logger instance'ı (örneği). 
+# Loguru aslında tekil (singleton) bir logger sağlar ama uyumluluk ve kolay erişim için değişkene atıyoruz.
 _logger = logger
 
 def setup_logger():
-    """Logger'ı yapılandır ve başlat.
+    """
+    Logger'ı yapılandırır ve başlatır.
+    Bu fonksiyon uygulamanın en başında çalıştırılmalıdır.
+    
+    Yapılandırma detayları:
+    1. Log dizini yoksa oluşturur.
+    2. Konsola (stderr) sadece ERROR seviyesindeki kritik mesajları basar.
+    3. Dosyaya (app.log) tüm detayları (DEBUG seviyesi dahil) yazar.
+    4. Dosya boyutuna göre otomatik döndürme (rotation) ve eski dosyaları silme (retention) yapar.
     
     Returns:
-        loguru.logger: Yapılandırılmış logger instance.
+        loguru.logger: Yapılandırılmış logger nesnesi.
     """
     global _logger
     
-    # Log dizinini oluştur
+    # Log dizinini oluştur (parents=True: aradaki eksik klasörleri de oluşturur)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     
-    # Mevcut handler'ları temizle (Loguru default handler'ı da dahil)
+    # Mevcut tüm handler'ları (işleyicileri) temizle.
+    # Loguru varsayılan olarak stderr'e her şeyi basar, bunu istemiyoruz.
     _logger.remove()
     
-    # Konsol çıktısı (Sadece hata ve kritik durumlar, minimal format)
+    # ==============================================================================
+    # 1. Konsol Çıktısı (Handler)
+    # ==============================================================================
+    # Konsola sadece hataları basacağız, böylece kullanıcının ekranı debug mesajlarıyla dolmaz.
     _logger.add(
-        sys.stderr,
-        format="<level>{level: <8}</level> | <level>{message}</level>",
-        level="ERROR"
+        sys.stderr, # Çıktı hedefi (Standard Error Stream)
+        format="<level>{level: <8}</level> | <level>{message}</level>", # Basit format
+        level="ERROR" # Sadece ERROR ve üzeri (CRITICAL) mesajları göster
     )
     
-    # Dosya çıktısı (Rotation ve Retention ile)
+    # ==============================================================================
+    # 2. Dosya Çıktısı (Handler)
+    # ==============================================================================
+    # Dosyaya her şeyi (DEBUG dahil) detaylı bir şekilde yazacağız.
     _logger.add(
-        LOG_FILE,
-        rotation="500 MB",
-        retention="10 days",
-        encoding="utf-8",
+        LOG_FILE, # Hedef dosya yolu
+        rotation="500 MB", # Dosya 500 MB olunca yeni dosyaya geç (app.log.1, app.log.2...)
+        retention="10 days", # 10 günden eski log dosyalarını otomatik sil
+        encoding="utf-8", # Türkçe karakter sorunu olmaması için UTF-8
+        # Detaylı format: Tarih | Seviye | Dosya:Fonksiyon:Satır - Mesaj
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
-        level="DEBUG"
+        level="DEBUG" # En düşük seviye, yani her şeyi kaydet
     )
     
     return _logger
-
 
 def get_logger():
-    """Mevcut logger instance'ını al.
+    """
+    Mevcut ve yapılandırılmış logger nesnesini döndürür.
+    Eğer logger henüz yapılandırılmamışsa, lazy initialization (talep anında başlatma) yapar.
     
     Returns:
-        loguru.logger: Logger instance.
+        loguru.logger: Kullanıma hazır logger nesnesi.
     """
-    # Loguru singleton olduğu için ve setup_logger idempotent tasarlandığı için
-    # her seferinde setup çağrısı yapmak yerine, sadece configure edilip edilmediğini kontrol edebiliriz
-    # Basitlik için burada setup_logger'ı çağırıyoruz, loguru.add duplicate handler eklemez (sink ID kontrolü gerekir ama burada remove() çağırıyoruz setup'ta).
-    # Ancak performans için sadece logger'ı döndürelim, configuration main.py başında yapılmalı normalde.
-    # Mevcut yapıya uyum sağlamak için setup_logger'ı burada çağırabiliriz ama duplicate handler sorunu olmasın diye
-    # setup_logger içinde remove() var. Bu yüzden her get_logger çağrısında handler'lar silinip tekrar eklenir.
-    # Bu verimsiz. O yüzden basit bir flag kullanabiliriz veya sadece logger döndürürüz.
-    # En doğrusu: setup_logger uygulamanın başında bir kere çağrılmalı. 
-    # Ama mevcut kod yapısını bozmamak için burada lazy initialization yapalım.
-    
-    # Not: Loguru zaten yapılandırılmışsa tekrar yapılandırmamak lazım.
-    # Ancak loguru'nun "handlers" listesine doğrudan erişim yok (internal).
-    # Basit bir çözüm olarak module level bir flag kullanabiliriz.
-    
+    # Aşağıdaki yardımcı fonksiyon sayesinde, logger yapılandırılmamışsa bile otomatik yapılandırılır.
     return _logger
 
-# Module level flag to track initialization
+# Logger'ın başlatılıp başlatılmadığını takip eden bayrak (flag).
+# Modül seviyesinde global bir değişkendir.
 _initialized = False
 
 def initialize_logging_if_needed():
+    """
+    Logger'ın daha önce yapılandırılıp yapılandırılmadığını kontrol eder.
+    Eğer yapılandırılmamışsa setup_logger() fonksiyonunu çağırır.
+    Bu, geliştiricinin manuel olarak setup çağırmayı unuttuğu durumlar için bir güvenlik önlemidir.
+    """
     global _initialized
     if not _initialized:
         setup_logger()
         _initialized = True
 
-# Kolaylık fonksiyonları - Loguru metodlarını wrap ediyoruz
+# ==============================================================================
+# Kolaylık Fonksiyonları (Wrapper Functions)
+# ==============================================================================
+# Geliştiricilerin direkt `core.logger.debug("mesaj")` şeklinde kullanabilmesi için
+# Loguru metodlarını sarmalıyoruz (wrap). Ayrıca her çağrıda başlatma kontrolü yapıyoruz.
+
 def debug(message):
-    """Debug seviyesinde log yaz."""
+    """
+    Debug seviyesinde (en detaylı) log kaydı oluşturur.
+    Geliştirme aşamasında değişken değerlerini izlemek için kullanılır.
+    """
     initialize_logging_if_needed()
     _logger.debug(message)
 
 
 def info(message):
-    """Info seviyesinde log yaz."""
+    """
+    Info seviyesinde (bilgilendirme) log kaydı oluşturur.
+    Uygulamanın normal akışını takip etmek için kullanılır (örn: Modül yüklendi).
+    """
     initialize_logging_if_needed()
     _logger.info(message)
 
 
 def warning(message):
-    """Warning seviyesinde log yaz."""
+    """
+    Warning seviyesinde (uyarı) log kaydı oluşturur.
+    Hata olmayan ama dikkat edilmesi gereken durumlar için (örn: Konfigürasyon eksik).
+    """
     initialize_logging_if_needed()
     _logger.warning(message)
 
 
 def error(message):
-    """Error seviyesinde log yaz."""
+    """
+    Error seviyesinde (hata) log kaydı oluşturur.
+    İşlemin başarısız olduğu durumlarda kullanılır.
+    """
     initialize_logging_if_needed()
     _logger.error(message)
 
 
 def critical(message):
-    """Critical seviyesinde log yaz."""
+    """
+    Critical seviyesinde (kritik hata) log kaydı oluşturur.
+    Uygulamanın çökmesine neden olabilecek ciddi sorunlar için.
+    """
     initialize_logging_if_needed()
     _logger.critical(message)
 
 
 def exception(message):
-    """Exception log yaz."""
+    """
+    Bir Exception (Hata) yakalandığında kullanılır.
+    Hata mesajıyla birlikte tam yığın izini (traceback) de loglar.
+    Bu sayede hatanın kodun neresinde oluştuğu tam olarak görülebilir.
+    """
     initialize_logging_if_needed()
     _logger.exception(message)
-

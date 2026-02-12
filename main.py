@@ -219,7 +219,7 @@ def main():
     
     # Sessiz mod değilse banner ve bilgi göster
     if not args.quiet:
-        plugin_count = len(plugin_manager.get_enabled_plugins())
+        plugin_count = len(plugin_manager.get_all_plugins())
         print_startup_info(command_manager, module_manager, plugin_count)
     
     # ON_STARTUP hook'unu tetikle

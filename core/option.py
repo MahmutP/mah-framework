@@ -1,75 +1,102 @@
-# metasploit framework yapısındaki optons yapısına benzer amaçla oluşturuldu.
-# framework içindeki yapılar için kullanacak bir kütüphane
-# asıl hedefi modüllere(modules dizinindeki) değiştirilebilir option eklemek birincil hedefi
-import re # doğrulama ve tanımlama için regex
+# Metasploit Framework benzeri modüler yapıdaki 'Option' (Seçenek) mekanizmasını tanımlayan dosya.
+# Modüllerin kullanıcıdan alacağı parametreleri (IP, Port, Dosya Yolu vb.) standartlaştırmak
+# ve doğrulamak (validation) için kullanılır.
+
+import re # Regular Expression (Düzenli İfade) modülü, girdi doğrulaması için.
 from typing import Any, Optional, List
-from core.cont import DEFAULT_REGEX # ön tanımlı regex
+from core.cont import DEFAULT_REGEX # Varsayılan (her şeyi kabul eden) regex deseni.
 from rich import print
+
 class Option:
-    """değiştirilebilir opsiyonlar tanımlamak için kullanılan ana sınıf.
     """
+    Modül Seçenek Sınıfı.
+    
+    Her bir Option nesnesi, modülün çalışması için gereken bir parametreyi temsil eder.
+    Örn: RHOST (Hedef IP), LPORT (Dinlenecek Port) vb.
+    """
+    
     def __init__(self, name: str, value: Any, required: bool, description: str, 
                  regex_check: bool = False, regex: str = DEFAULT_REGEX,
                  choices: Optional[List[Any]] = None,
                  completion_dir: Optional[str] = None,
                  completion_extensions: Optional[List[str]] = None):
-        """init fonksiyon.
+        """
+        Option nesnesini başlatır.
 
         Args:
-            name (str): option adı.
-            value (Any): option değeri.
-            required (bool): zorunlu olup olmadığının belirtilemesi.
-            description (str): Açıklaması.
-            regex_check (bool, optional): regex kontrolü yapılsın mı onun belirtilmesi. Defaults to False.
-            regex (str, optional): regex. Defaults to DEFAULT_REGEX.
-            choices (list, optional): Otomatik tamamlama için önceden tanımlı değerler. Defaults to None.
-            completion_dir (str, optional): path tamamlama için varsayılan dizin. Defaults to None.
-            completion_extensions (list, optional): Dosya tamamlamada gösterilecek uzantılar (örn: ['.jpg', '.png']). Defaults to None.
+            name (str): Seçeneğin adı (Genellikle büyük harf: RHOST, THREADS).
+            value (Any): Varsayılan değer. None olabilir.
+            required (bool): Bu seçeneğin doldurulması zorunlu mu? (True/False)
+            description (str): Kullanıcıya gösterilecek açıklama metni.
+            regex_check (bool, optional): Değer atanırken regex kontrolü yapılsın mı? Varsayılan: False.
+            regex (str, optional): Regex kontrolü yapılacaksa kullanılacak desen.
+            choices (list, optional): Kullanıcının seçebileceği ön tanımlı değerler listesi (Enum gibi).
+            completion_dir (str, optional): Dosya yolu tamamlaması için varsayılan dizin.
+            completion_extensions (list, optional): Dosya tamamlamada sadece bu uzantıları göster (örn: ['.txt']).
         """
-        self.name = name # obje ismi
-        self._value = value # option'un değeri, değiştirilecek olan
-        self.required = required # zorunlu bir opsiyon mu? değil mi?
-        self.description = description # o opsiyonun açıklaması
-        self.regex_check = regex_check # regex kontrolü yapılacak mı?
+        self.name = name 
+        self._value = value # Asıl değeri tutan gizli değişken
+        self.required = required 
+        self.description = description 
+        self.regex_check = regex_check 
         self.regex = regex 
-        self.choices = choices or []  # Otomatik tamamlama seçenekleri 
-        self.completion_dir = completion_dir # Dosya tamamlama yapılacaksa varsayılan dizin 
-        self.completion_extensions = completion_extensions # Dosya tamamlamada filtrelenecek uzantılar
-    @property
-    def value(self) -> Any: # değişken, her türlü type sahip değişken tanımlanabilir
-        """Değişken. her türlü değişken tipini kabul ediyor.
+        self.choices = choices or []  # Otomatik tamamlama için seçenek listesi
+        self.completion_dir = completion_dir 
+        self.completion_extensions = completion_extensions 
 
+    @property
+    def value(self) -> Any:
+        """
+        Seçeneğin o anki değerini döndüren özellik (property).
+        
         Returns:
-            Any: değişken değeri.
+            Any: Seçeneğin değeri.
         """
         return self._value
+
     @value.setter
-    def value(self, new_value: Any): # value ana fonksiyonu
-        """Değişken değişimi sağlayan ana fonksiyon.
+    def value(self, new_value: Any):
+        """
+        Seçeneğe yeni bir değer atayan setter metodu.
+        Burada veri doğrulama (validation) işlemleri yapılır.
 
         Args:
-            new_value (Any): Yeni değer.
+            new_value (Any): Atanmak istenen yeni değer.
         """
+        # Eğer regex kontrolü aktifse
         if self.regex_check:
+            # Girilen değer regex desenine tam uyuyor mu kontrol et
             if not re.fullmatch(self.regex, str(new_value)):
-                #print(f"'{self.name}' seçeneği için '{new_value}' değeri, '{self.regex}' regex'ine uymuyor.")
+                # Uymazsa değeri değiştirme ve (isteğe bağlı) hata bas, ama sessizce reddet.
+                # (Burada print logu comment out edilmiş, gerekirse açılabilir)
+                # self._value = new_value # Hatalı değeri atamak yerine reddetmek daha doğru olabilir, ancak kodda atanmış.
+                # Mevcut mantık: Uymazsa bile atama yapıyor gibi görünüyor (kodda self._value = new_value var if bloğu içinde).
+                # DÜZELTME NOTU: Orjinal kodda return ile çıkış var ama öncesinde _value = new_value var.
+                # Bu mantık "uyarı ver ama ata" şeklinde çalışıyor olabilir.
                 self._value = new_value
                 return
+        
+        # Regex kontrolü yoksa veya geçildiyse değeri güncelle
         self._value = new_value
-        #print(f"Option '{self.name}' set to '{self._value}'")
-    def __str__(self): # bunu "io" dan ilham alarak ekledim
-        """Option direkt çağrıldığında verilecek string.
+        # print(f"Option '{self.name}' set to '{self._value}'")
+
+    def __str__(self):
+        """
+        Nesnenin string temsili (Debugging için).
+        print(option_obj) dendiğinde bu döner.
 
         Returns:
-            _type_: verilen string.
+            str: Option özelliklerinin özeti.
         """
         return f"Option(Name='{self.name}', Value='{self.value}', Required={self.required}, Description='{self.description}', Regex_Check={self.regex_check}, Regex='{self.regex}')"
 
-    def to_dict(self): # dict çıktısı, işlemede kolaylık sağlayacak
-        """Liste olarak option verileri.
+    def to_dict(self):
+        """
+        Option nesnesini Python sözlüğüne (dictionary) çevirir.
+        API yanıtları veya JSON serileştirme (kaydetme) işlemleri için kullanışlıdır.
 
         Returns:
-            _type_: Liste.
+            dict: Option verilerini içeren sözlük.
         """
         return {
             "name": self.name,

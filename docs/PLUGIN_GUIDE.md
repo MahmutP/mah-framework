@@ -134,6 +134,23 @@ plugins disable "İsim"    # Plugini devre dışı bırak
 
 ---
 
+```
+
+### Resource Monitor Plugin
+
+The **Resource Monitor** plugin logs system resource usage (CPU, RAM, Disk, Network) to a file in the background.
+
+- **Status**: Disabled by default.
+- **Log File**: `config/logs/resources.log`
+- **Interval**: Every 5 seconds.
+- **Commands**:
+  - Enable: `plugins enable resource_monitor`
+  - Disable: `plugins disable resource_monitor`
+
+**Note**: The monitoring starts automatically when you run any command after enabling the plugin. It runs silently in the background.
+
+---
+
 ### Example Plugin / Örnek Plugin
 
 ```python

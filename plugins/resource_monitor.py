@@ -90,26 +90,37 @@ class ResourceMonitor(BasePlugin):
         last_net = psutil.net_io_counters()
         last_time = time.time()
         
+        # Mevcut process (mah-framework)
+        current_process = psutil.Process()
+        
         while not self._stop_event.is_set():
             try:
                 current_time = time.time()
                 time_diff = current_time - last_time
                 if time_diff < 0.1: time_diff = 0.1 # Sıfıra bölünme hatasını önle
                 
-                # --- CPU ---
-                cpu_percent = psutil.cpu_percent(interval=None)
+                # --- CPU (Sistem Geneli vs Process) ---
+                sys_cpu_percent = psutil.cpu_percent(interval=None)
+                # Process CPU kullanımı %100'ü geçebilir (çok çekirdekli sistemlerde), bu yüzden çekirdek sayısına bölmek mantıklı olabilir
+                # ama standart top çıktısı gibi bırakalım.
+                proc_cpu_percent = current_process.cpu_percent(interval=None)
                 
-                # --- RAM ---
-                memory = psutil.virtual_memory()
-                ram_percent = memory.percent
-                ram_used_gb = round(memory.used / (1024**3), 2)
-                ram_total_gb = round(memory.total / (1024**3), 2)
+                # --- RAM (Sistem Geneli vs Process) ---
+                # Sistem
+                sys_memory = psutil.virtual_memory()
+                sys_ram_percent = sys_memory.percent
+                sys_ram_used_gb = round(sys_memory.used / (1024**3), 2)
+                sys_ram_total_gb = round(sys_memory.total / (1024**3), 2)
+                
+                # Process (RSS - Resident Set Size: RAM'deki fiziksel kullanımı)
+                proc_memory_info = current_process.memory_info()
+                proc_ram_mb = round(proc_memory_info.rss / (1024**2), 2) # MB cinsinden
                 
                 # --- Disk ---
                 disk = psutil.disk_usage('/')
                 disk_percent = disk.percent
                 
-                # --- Network ---
+                # --- Network (Sistem Geneli) ---
                 current_net = psutil.net_io_counters()
                 bytes_sent = current_net.bytes_sent - last_net.bytes_sent
                 bytes_recv = current_net.bytes_recv - last_net.bytes_recv
@@ -121,17 +132,18 @@ class ResourceMonitor(BasePlugin):
                 last_net = current_net
                 last_time = current_time
                 
-                # --- GPU (Basit Kontrol) ---
-                # GPU bilgisi almak Python'da standart değil, platforma göre değişir.
-                # Burada sadece placeholder bırakıyoruz.
+                # --- GPU (Placeholder) ---
                 gpu_info = "N/A"
                 
                 # Log formatı
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                # Format: [Zaman] SYS_CPU: %x | PROC_CPU: %y | SYS_RAM: %a | PROC_RAM: b MB ...
                 log_line = (
                     f"[{timestamp}] "
-                    f"CPU: {cpu_percent}% | "
-                    f"RAM: {ram_percent}% ({ram_used_gb}/{ram_total_gb} GB) | "
+                    f"SYS_CPU: {sys_cpu_percent}% | "
+                    f"PROC_CPU: {proc_cpu_percent}% | "
+                    f"SYS_RAM: {sys_ram_percent}% ({sys_ram_used_gb}/{sys_ram_total_gb} GB) | "
+                    f"PROC_RAM: {proc_ram_mb} MB | "
                     f"Disk: {disk_percent}% | "
                     f"Net: ↑{sent_kbps} KB/s ↓{recv_kbps} KB/s | "
                     f"GPU: {gpu_info}\n"

@@ -8,6 +8,7 @@
 import sys
 import os
 import shutil 
+import datetime
 from prompt_toolkit import PromptSession # Kullanıcıdan girdi almak için oturum yönetimi
 from prompt_toolkit.history import InMemoryHistory # Komut geçmişini RAM'de tutmak için (Kalıcı değil)
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory # Geçmişten gelen komutları silik bir şekilde önermek için
@@ -131,7 +132,7 @@ class Console:
             # Terminal boyutu alınamazsa (örn: pipe içine yazılıyorsa) varsayılanı kullan.
             print(f"Terminal genişliği alınamadı, varsayılan {DEFAULT_TERMINAL_WIDTH} kullanılıyor.")
             return DEFAULT_TERMINAL_WIDTH
-
+    
     def _handle_input(self, user_input: str) -> None:
         """
         Kullanıcıdan alınan ham metin girdisini işler.
@@ -192,6 +193,17 @@ class Console:
         """
         if not self.running:  # Zaten kapalıysa işlem yapma
             return
+            
+        # Otomatik kayıt kontrolü
+        if shared_state.is_recording and shared_state.recorded_commands:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"autosave_{timestamp}.rc"
+            print(f"[bold yellow]Uyarı:[/bold yellow] Kayıt bitirilmeden çıkış yapıldı.")
+            print(f"Komutlar otomatik olarak '[bold cyan]{filename}[/bold cyan]' dosyasına kaydediliyor...")
+            
+            # Record komutunu 'stop' parametresiyle çağırarak kaydetme işlemini yap
+            self.command_manager.execute_command(f"record stop {filename}")
+            
         self.running = False
         
         # Eklentilere kapanış sinyali gönder (ON_SHUTDOWN hook)

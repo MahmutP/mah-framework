@@ -26,6 +26,10 @@
 *   **🎨 Modern UI**: Beautiful, readable, and colorful terminal outputs powered by the `rich` library.
 *   **🌈 Dynamic Banner**: Randomly generated, colorful ASCII banners using `pyfiglet` and `rich`, featuring a curated list of readable fonts.
 *   **🧠 Intelligent Interaction**: Auto-completion, history navigation, and advanced input handling via `prompt_toolkit`.
+    *   `Tab`: Auto-completion
+    *   `Ctrl+R`: Reverse search in history
+    *   `Up/Down Arrow`: Navigate previous commands
+*   **💾 Persistent History**: Command history is saved locally (`.mah_history`) and preserved across sessions.
 *   **📝 Comprehensive Logging**: Powered by `loguru`, this system tracks application events, errors, and command executions in `config/logs/` with automatic rotation and retention.
 *   **🛠️ System Utilities**: Includes tools for cache cleaning and log management (`pycache_sil.sh`).
 *   **🌐 Network Ready**: Built-in support for libraries like `telnetlib3` and `psutil` for network and system management tasks.
@@ -191,6 +195,13 @@ pytest                           # Run all tests
 ### ✨ Özellikler
 
 *   **🧩 Modüler Mimari**: `modules/` ve `commands/` klasörleri sayesinde yeni özellikleri tak-çıkar mantığıyla kolayca ekleyin.
+*   **Modüler Yapı**: Dinamik olarak modül yükleme ve kaldırma.
+*   **Kalıcı Geçmiş**: Komut geçmişi kaydedilir ve oturumlar arası korunur (`~/.mah_history`).
+*   **Gelişmiş CLI**: Renkli çıktı, otomatik tamamlama ve ipuçları.
+    *   `Tab`: Otomatik tamamlama
+    *   `Ctrl+R`: Geçmişte arama yapma
+    *   `Yukarı/Aşağı Ok`: Önceki komutlara gitme
+*   **Payload Yönetimi**: `msfvenom` entegrasyonu ile payload oluşturma.
 *   **🎨 Modern Arayüz**: `rich` kütüphanesi ile renklendirilmiş, okunaklı ve şık terminal çıktıları.
 *   **🌈 Dinamik Banner**: `pyfiglet` ve `rich` kullanılarak oluşturulan, okunabilir fontlardan seçilen rastgele ve renkli ASCII bannerlar.
 *   **🧠 Akıllı Etkileşim**: `prompt_toolkit` desteği ile otomatik tamamlama ve komut geçmişi özellikleri.

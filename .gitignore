@@ -17,3 +17,6 @@ server.key
 *.crt
 *.key
 *.pem
+
+# Geçici dosyalar
+.mah_history

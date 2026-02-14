@@ -10,7 +10,7 @@ import os
 import shutil 
 import datetime
 from prompt_toolkit import PromptSession # Kullanıcıdan girdi almak için oturum yönetimi
-from prompt_toolkit.history import InMemoryHistory # Komut geçmişini RAM'de tutmak için (Kalıcı değil)
+from prompt_toolkit.history import FileHistory # Komut geçmişini dosyada tutmak için (Kalıcı)
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory # Geçmişten gelen komutları silik bir şekilde önermek için
 from prompt_toolkit.completion import Completer, Completion # Otomatik tamamlama alt yapısı
 from prompt_toolkit.key_binding import KeyBindings # Özel klavye tuş kombinasyonları
@@ -44,8 +44,11 @@ class Console:
         self.command_manager = command_manager
         self.module_manager = module_manager
         
-        # Komut geçmişini başlat (şuanlık sadece hafızada, uygulama kapanınca silinir)
-        self.history = InMemoryHistory()
+        # Komut geçmişini başlat (Kalıcı olarak dosyada tutulur)
+        # Framework root dizinini bul (core klasörünün bir üstü)
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        history_file = os.path.join(base_dir, ".mah_history")
+        self.history = FileHistory(history_file)
         
         # Otomatik tamamlama nesnesini oluştur
         self.completer = CLICompleter(command_manager, module_manager)
@@ -85,7 +88,7 @@ class Console:
 
         # Oturumu başlat ve ayarları uygula
         return PromptSession(
-            history=self.history, # Geçmiş yönetimi
+            history=self.history, # Geçmiş yönetimi (Artık FileHistory)
             auto_suggest=AutoSuggestFromHistory(), # Geçmişten öneriler (sağ ok ile tamamlama)
             completer=self.completer, # Tab ile tamamlama mantığı
             validator=self.validator, # Girdi doğrulama

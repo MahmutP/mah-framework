@@ -20,3 +20,6 @@ server.key
 
 # Geçici dosyalar
 .mah_history
+
+# Log dosyaları
+config/logs/

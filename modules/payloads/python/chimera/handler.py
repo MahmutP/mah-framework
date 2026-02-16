@@ -270,6 +270,7 @@ class Handler(BaseHandler):
 
 [Sistem Bilgisi]
   sysinfo               - Detaylı sistem bilgisi (OS, IP, process, yetki)
+  detect                - Ortam analizi (AV/EDR ve VM/Sandbox tespiti)
   pwd                   - Mevcut dizini göster
   
 [Dosya İşlemleri]

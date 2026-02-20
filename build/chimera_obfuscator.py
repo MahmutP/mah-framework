@@ -152,15 +152,16 @@ class _NameCollector(ast.NodeVisitor):
         self.defined: set = set()
 
     def visit_FunctionDef(self, node):
-        if node.name not in _PROTECTED_NAMES and not node.name.startswith("__"):
-            self.defined.add(node.name)
+        if not getattr(self, "in_class", False):
+            if node.name not in _PROTECTED_NAMES and not node.name.startswith("__"):
+                self.defined.add(node.name)
         # Parametreler
-        for arg in node.args.args + node.args.posonlyargs + node.args.kwonlyargs:
+        for arg in node.args.args + getattr(node.args, 'posonlyargs', []) + node.args.kwonlyargs:
             if arg.arg not in _PROTECTED_NAMES and arg.arg != "self" and arg.arg != "cls":
                 self.defined.add(arg.arg)
-        if node.args.vararg and node.args.vararg.arg not in _PROTECTED_NAMES:
+        if getattr(node.args, 'vararg', None) and node.args.vararg.arg not in _PROTECTED_NAMES:
             self.defined.add(node.args.vararg.arg)
-        if node.args.kwarg and node.args.kwarg.arg not in _PROTECTED_NAMES:
+        if getattr(node.args, 'kwarg', None) and node.args.kwarg.arg not in _PROTECTED_NAMES:
             self.defined.add(node.args.kwarg.arg)
         self.generic_visit(node)
 
@@ -169,7 +170,11 @@ class _NameCollector(ast.NodeVisitor):
     def visit_ClassDef(self, node):
         if node.name not in _PROTECTED_NAMES and not node.name.startswith("__"):
             self.defined.add(node.name)
+        
+        in_class_prev = getattr(self, "in_class", False)
+        self.in_class = True
         self.generic_visit(node)
+        self.in_class = in_class_prev
 
     def visit_Name(self, node):
         if (isinstance(node.ctx, ast.Store) and
@@ -198,14 +203,15 @@ class _NameRenamer(ast.NodeTransformer):
         self.mapping = mapping
 
     def visit_FunctionDef(self, node):
-        if node.name in self.mapping:
-            node.name = self.mapping[node.name]
-        for arg in node.args.args + node.args.posonlyargs + node.args.kwonlyargs:
+        if not getattr(self, "in_class", False):
+            if node.name in self.mapping:
+                node.name = self.mapping[node.name]
+        for arg in node.args.args + getattr(node.args, 'posonlyargs', []) + node.args.kwonlyargs:
             if arg.arg in self.mapping:
                 arg.arg = self.mapping[arg.arg]
-        if node.args.vararg and node.args.vararg.arg in self.mapping:
+        if getattr(node.args, 'vararg', None) and node.args.vararg.arg in self.mapping:
             node.args.vararg.arg = self.mapping[node.args.vararg.arg]
-        if node.args.kwarg and node.args.kwarg.arg in self.mapping:
+        if getattr(node.args, 'kwarg', None) and node.args.kwarg.arg in self.mapping:
             node.args.kwarg.arg = self.mapping[node.args.kwarg.arg]
         self.generic_visit(node)
         return node
@@ -215,7 +221,11 @@ class _NameRenamer(ast.NodeTransformer):
     def visit_ClassDef(self, node):
         if node.name in self.mapping:
             node.name = self.mapping[node.name]
+
+        in_class_prev = getattr(self, "in_class", False)
+        self.in_class = True
         self.generic_visit(node)
+        self.in_class = in_class_prev
         return node
 
     def visit_Name(self, node):

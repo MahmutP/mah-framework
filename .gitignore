@@ -23,3 +23,6 @@ server.key
 
 # Log dosyaları
 config/logs/
+
+# Hatırlatma dosyaları
+config/last_update_reminder.txt

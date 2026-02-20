@@ -174,7 +174,7 @@ class GitHubTracker(BaseModule):
             info['public_gists'] = self._extract_nav_count(soup, 'Gists')
 
             # Creation Date & Last Activity (Harder to scrape reliably without auth/JS, skipping for basic implementation)
-            # These will be implemented in future phases with API integration.
+            # These will be implemented in future updates with API integration.
             
             return info
 

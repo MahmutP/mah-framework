@@ -1,6 +1,6 @@
 # Chimera In-Memory Module Loading - Kullanım Kılavuzu
 
-## Faz 2.1: Hafızadan Modül Yükleme
+## Hafızadan Modül Yükleme
 
 Bu özellik, Chimera Agent'a Python kodlarını disk'e yazmadan doğrudan RAM'de çalıştırma yeteneği kazandırır. Bu sayede antivirüs yazılımlarının dosya taraması (static analysis) atlatılır.
 

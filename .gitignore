@@ -26,3 +26,6 @@ config/logs/
 
 # Hatırlatma dosyaları
 config/last_update_reminder.txt
+
+# macOS özel dosyalar
+.DS_Store

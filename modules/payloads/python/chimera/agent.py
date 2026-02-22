@@ -2203,7 +2203,7 @@ class ChimeraAgent:
     def install_persistence(self) -> str:
         """Ajanı sistem başlangıcında çalışacak şekilde ayarlar.
         
-        Windows: HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+        Windows: HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run
         Linux: .bashrc veya crontab
         
         Returns:

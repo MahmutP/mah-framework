@@ -18,7 +18,7 @@ def _load_chimera_agent_class():
     gen = Payload()
     gen.set_option_value("LHOST", "127.0.0.1")
     gen.set_option_value("LPORT", 9999)
-    code = gen.generate()
+    code = gen.generate()["code"]
     
     module = types.ModuleType("chimera_agent_test")
     exec(compile(code, "<chimera_agent>", "exec"), module.__dict__)

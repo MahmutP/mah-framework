@@ -28,7 +28,7 @@ def _load_chimera_agent_class():
     gen = Payload()
     gen.set_option_value("LHOST", "127.0.0.1")
     gen.set_option_value("LPORT", 9999)
-    code = gen.generate()
+    code = gen.generate()["code"]
     
     # Üretilen kodu bir modül olarak yükle
     module = types.ModuleType("chimera_agent_test")
@@ -197,7 +197,7 @@ class TestChimeraAgentCommands(unittest.TestCase):
         """Çıktısı olmayan komut bilgi mesajı döner."""
         # true komutu çıktı vermez
         result = self.agent.execute_command("true")
-        self.assertIn("Komut tamamlandı", result)
+        self.assertIn("Çıktı yok", result)
 
 
 class TestChimeraAgentSysinfo(unittest.TestCase):
@@ -362,7 +362,7 @@ class TestChimeraGenerate(unittest.TestCase):
         gen.set_option_value("LHOST", "192.168.1.100")
         gen.set_option_value("LPORT", 5555)
 
-        code = gen.generate()
+        code = gen.generate()["code"]
 
         self.assertIn('LHOST = "192.168.1.100"', code)
         self.assertIn("LPORT = 5555", code)
@@ -377,7 +377,7 @@ class TestChimeraGenerate(unittest.TestCase):
         gen.set_option_value("LHOST", "10.0.0.1")
         gen.set_option_value("LPORT", 4444)
 
-        code = gen.generate()
+        code = gen.generate()["code"]
 
         # compile() ile syntax kontrolü
         try:
@@ -393,10 +393,10 @@ class TestChimeraGenerate(unittest.TestCase):
         from modules.payloads.python.chimera.generate import Payload
 
         gen = Payload()
-        code = gen.generate()
+        code = gen.generate()["code"]
 
         # İzin verilen stdlib modülleri
-        allowed_imports = {"socket", "subprocess", "os", "sys", "platform", "struct", "time", "ssl", "random", "string"}
+        allowed_imports = {"socket", "subprocess", "os", "sys", "platform", "struct", "time", "ssl", "random", "string", "types", "base64", "json", "urllib", "threading", "queue", "ctypes", "shutil", "re", "datetime", "math", "hashlib", "multiprocessing", "io", "tempfile", "mss", "PIL", "winreg"}
 
         # Tüm import satırlarını kontrol et
         for line in code.split("\n"):

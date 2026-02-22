@@ -112,7 +112,7 @@ python3 main.py -x "use example/hash_generator; set TEXT hello; run"
 python3 main.py -q -x "banner; help"
 ```
 
-**Port Scanner Usage:**
+**Port Target Scanner Usage:**
 ```bash
 use auxiliary/scanner/port_scanner
 set RHOST 192.168.1.1
@@ -120,11 +120,12 @@ set RPORTS 20-80,443,8080
 run
 ```
 
-**Directory Buster Usage (DirBuster):**
+**Handler (Listener) Usage:**
 ```bash
-use auxiliary/scanner/http_dir_buster
-set RHOST http://example.com
-set WORDLIST config/wordlists/dirs/common.txt
+use exploit/multi/handler
+set PAYLOAD payloads/python/chimera/generate
+set LPORT 4444
+set BACKGROUND false
 run
 ```
 
@@ -295,11 +296,12 @@ set RPORTS 20-80,443,8080
 run
 ```
 
-**Dizin Tarayıcı Kullanımı (DirBuster):**
+**Handler (Dinleyici) Kullanımı:**
 ```bash
-use auxiliary/scanner/http_dir_buster
-set RHOST http://ornek-site.com
-set WORDLIST config/wordlists/dirs/common.txt
+use exploit/multi/handler
+set PAYLOAD payloads/python/chimera/generate
+set LPORT 4444
+set BACKGROUND false
 run
 ```
 

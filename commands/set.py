@@ -117,7 +117,7 @@ class Set(Command):
 
                 # 2. Choices varsa (Öncelikli)
                 if opt.choices:
-                    return list(opt.choices)
+                    return [str(c) for c in opt.choices]
 
                 # 3. İsim bazlı tahmin (Fallback)
                 if 'WORDLIST' in option_name.upper():
@@ -146,7 +146,7 @@ class Set(Command):
                 
                 choices = []
                 if opt.choices:
-                    choices = list(opt.choices)
+                    choices = [str(c) for c in opt.choices]
                 else: 
                      # İsim bazlı tahmin (Fallback) - Sadece choices yoksa bak
                     if 'WORDLIST' in option_name.upper():

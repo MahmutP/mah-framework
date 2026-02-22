@@ -102,10 +102,36 @@ class Handler(BaseHandler):
             print(f"[!] Handshake hatası: {e}")
             return
 
-        # 3. Komut Döngüsü (Interactive Session)
-        # Bu handler şu an için interaktif modda çalışacak.
-        # İleride C2 sunucusu gibi asenkron komut kuyruğu mantığına geçebilir.
+        # 3. Arka plan / Ön plan etkileşimi
+        # MultiHandler her zaman thread açar ve (gerekirse) main thread'den 'interact' çağrısı yapar.
+        # Biz burada sadece soket bağlantısını tutmakla yükümlüyüz.
+        background = str(self.options.get("BACKGROUND", "false")).lower() in ['true', '1', 'yes', 'y']
+        
+        if background:
+            session_pid = None
+            if self.session_id and shared_state.session_manager:
+                session = shared_state.session_manager.get_session(self.session_id)
+                # Session içindeki sysinfo'dan PID'yi parse etmeye çalışabiliriz, veya ekrana sadece Thread/Session ID basabiliriz
+                print(f"[*] Chimera Session {self.session_id} arka planda açıldı. (PID: {threading.get_ident()})")
+            else:
+                print(f"[*] Chimera Session {self.session_id} arka planda açıldı. (PID: {threading.get_ident()})")
+            print(f"[*] Etkileşim için 'sessions -i {self.session_id}' kullanın.\n")
+
+            
+        # Soket kapanmasın diye bekle
+        try:
+            while getattr(self, "running", True) and self.client_sock:
+                time.sleep(1)
+        except:
+            pass
+
+    def interact(self, session_id: int):
+        """
+        Oturumla etkileşime geçen (Interactive Shell) metod.
+        'sessions -i ID' komutuyla çağrılır.
+        """
         self.interactive_session()
+
 
     def send_data(self, data: str):
         """HTTP Response olarak şifreli veri gönderir."""

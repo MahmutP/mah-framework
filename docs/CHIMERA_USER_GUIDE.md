@@ -35,10 +35,11 @@ mah > use exploit/multi/handler
 mah (exploit/multi/handler) > set PAYLOAD payloads/python/chimera/generate
 mah (exploit/multi/handler) > set LHOST 192.168.1.10
 mah (exploit/multi/handler) > set LPORT 4444
+mah (exploit/multi/handler) > set BACKGROUND false
 mah (exploit/multi/handler) > run
 ```
 
-This module starts a secure listener continuously running in the background (AES-256-GCM + ECDH) that supports multi-client connections.
+This module starts a secure listener continuously running in the foreground (AES-256-GCM + ECDH) that supports multi-client connections. If `BACKGROUND` is set to `true`, the shell drops back to the main prompt while listening silently.
 
 #### 1.3. Session Management
 When a connection is received, a new session is created. Use the `sessions` command to manage sessions.
@@ -193,10 +194,11 @@ mah > use exploit/multi/handler
 mah (exploit/multi/handler) > set PAYLOAD payloads/python/chimera/generate
 mah (exploit/multi/handler) > set LHOST 192.168.1.10
 mah (exploit/multi/handler) > set LPORT 4444
+mah (exploit/multi/handler) > set BACKGROUND false
 mah (exploit/multi/handler) > run
 ```
 
-Bu modül arka planda güvenli (AES-256-GCM + ECDH) ve çoklu bağlantı (multi-client) destekleyen dinleyiciyi başlatır.
+Bu modül ön planda güvenli (AES-256-GCM + ECDH) ve çoklu bağlantı (multi-client) destekleyen dinleyiciyi başlatır. Eğer `BACKGROUND` seçeneği `true` yapılırsa, dinleyici sessizce ana menünün arkasında çalışmaya devam eder.
 
 #### 1.3. Session Yönetimi
 Bağlantı geldiğinde yeni bir session oluşur. Session'ları yönetmek için `sessions` komutu kullanılır.

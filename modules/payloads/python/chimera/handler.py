@@ -258,6 +258,8 @@ class Handler(BaseHandler):
             except:
                 pass
             self.client_sock = None
+            if shared_state.session_manager and self.session_id:
+                shared_state.session_manager.remove_session(self.session_id)
             self.session_id = None # Session düştü
 
 
@@ -278,6 +280,8 @@ class Handler(BaseHandler):
                     # Session'ı kapat
                     print("[*] Bağlantı kapatılıyor...")
                     self.send_data("terminate")
+                    if shared_state.session_manager and self.session_id:
+                        shared_state.session_manager.remove_session(self.session_id)
                     break
                     
                 if cmd_lower in ["background", "bg"]:
@@ -627,6 +631,8 @@ class Handler(BaseHandler):
                         print(response)
                 else:
                     print("[!] Bağlantı koptu.")
+                    if shared_state.session_manager and self.session_id:
+                        shared_state.session_manager.remove_session(self.session_id)
                     break
                     
             except KeyboardInterrupt:

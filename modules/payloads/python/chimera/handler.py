@@ -321,7 +321,12 @@ class Handler(BaseHandler):
                 cmd = input(f"chimera ({self.session_id}) > ")
                 if not cmd.strip(): continue
                 
-                cmd_lower = cmd.strip().lower()
+                # Kullanıcı yanlışlıkla kopyala-yapıştır yaparken "chimera (1) > " kısmını da alırsa temizle
+                import re
+                cmd = re.sub(r'^chimera\s*\(\d+\)\s*>\s*', '', cmd.strip())
+                if not cmd: continue
+                
+                cmd_lower = cmd.lower()
                 
                 if cmd_lower in ["exit", "quit"]:
                     # Session'ı kapat

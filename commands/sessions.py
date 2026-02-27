@@ -4,6 +4,9 @@ from core.shared_state import shared_state
 from core.cont import LEFT_PADDING, COL_SPACING, DEFAULT_TERMINAL_WIDTH
 from rich import print
 
+import time
+from datetime import timedelta
+
 class SessionsCommand(Command):
     Name = "sessions"
     Description = "Aktif oturumları listeler ve yönetir."
@@ -12,6 +15,7 @@ class SessionsCommand(Command):
     Usage = "sessions [seçenekler]"
     Examples = [
         "sessions -l              # Aktif oturumları listeler",
+        "sessions -g              # Oturumları hedefe (IP) göre gruplandırarak listeler",
         "sessions list            # Aktif oturumları listeler",
         "sessions -i <id>         # Belirtilen ID'li oturumla etkileşime geçer",
         "sessions -k <id>         # Belirtilen ID'li oturumu sonlandırır"
@@ -29,7 +33,9 @@ class SessionsCommand(Command):
         subcommand = args[0].lower()
 
         if subcommand == "-l" or subcommand == "list":
-            self.list_sessions()
+            self.list_sessions(group_by_host=False)
+        elif subcommand == "-g" or subcommand == "--group":
+            self.list_sessions(group_by_host=True)
         elif subcommand == "-i" and len(args) > 1:
             try:
                 session_id = int(args[1])
@@ -48,73 +54,90 @@ class SessionsCommand(Command):
             
         return True
 
-    def list_sessions(self):
+    def list_sessions(self, group_by_host: bool = False):
         sessions = shared_state.session_manager.get_all_sessions()
         if not sessions:
             print("Aktif oturum yok.")
             return
 
-        # Prepare rows
+        current_time = time.time()
         rows = []
         for s_id, data in sessions.items():
             info_str = f"{data['info'].get('host', 'Unknown')}:{data['info'].get('port', 0)}"
+            
+            # Uptime hesapla
+            connected_at = data.get("connected_at", current_time)
+            uptime_seconds = int(current_time - connected_at)
+            uptime_str = str(timedelta(seconds=uptime_seconds))
+            
             rows.append({
                 "id": str(s_id),
                 "type": str(data['type']),
                 "info": info_str,
-                "status": str(data['status'])
+                "host": data['info'].get('host', 'Unknown'),
+                "status": str(data['status']),
+                "uptime": uptime_str
             })
 
-        # Define Headers
-        headers = ["ID", "Type", "Information", "Status"]
+        if group_by_host:
+            # IP adresine göre gruplandır
+            groups = {}
+            for row in rows:
+                groups.setdefault(row["host"], []).append(row)
+            
+            print("\nAktif Oturumlar (Gruplandırılmış)")
+            print("=================================")
+            for host, host_rows in groups.items():
+                print(f"\n[cyan]Hedef: {host}[/cyan]")
+                self._print_table(host_rows)
+        else:
+            print("\nAktif Oturumlar")
+            print("===============")
+            self._print_table(rows)
 
-        # Calculate max widths
-        id_width = max(len(r["id"]) for r in rows)
-        type_width = max(len(r["type"]) for r in rows)
-        info_width = max(len(r["info"]) for r in rows)
-        status_width = max(len(r["status"]) for r in rows)
+    def _print_table(self, rows: list):
+        if not rows:
+            return
+            
+        headers = ["ID", "Type", "Information", "Status", "Uptime"]
 
-        # Ensure headers fit
-        id_width = max(id_width, len(headers[0]))
-        type_width = max(type_width, len(headers[1]))
-        info_width = max(info_width, len(headers[2]))
-        status_width = max(status_width, len(headers[3]))
+        id_width = max(max(len(r["id"]) for r in rows), len(headers[0]))
+        type_width = max(max(len(r["type"]) for r in rows), len(headers[1]))
+        info_width = max(max(len(r["info"]) for r in rows), len(headers[2]))
+        status_width = max(max(len(r["status"]) for r in rows), len(headers[3]))
+        uptime_width = max(max(len(r["uptime"]) for r in rows), len(headers[4]))
 
-        # Helper method for padding
         def pad(text, width):
             return text.ljust(width)
 
-        print("\nAktif Oturumlar")
-        print("=" * len("Aktif Oturumlar"))
-
-        # Print Headers
         header_line = (
             f"{' ' * LEFT_PADDING}"
             f"{pad(headers[0], id_width)}{' ' * COL_SPACING}"
             f"{pad(headers[1], type_width)}{' ' * COL_SPACING}"
             f"{pad(headers[2], info_width)}{' ' * COL_SPACING}"
-            f"{pad(headers[3], status_width)}"
+            f"{pad(headers[3], status_width)}{' ' * COL_SPACING}"
+            f"{pad(headers[4], uptime_width)}"
         )
         print(header_line)
 
-        # Print Separator
         separator_line = (
             f"{' ' * LEFT_PADDING}"
             f"{'-' * id_width}{' ' * COL_SPACING}"
             f"{'-' * type_width}{' ' * COL_SPACING}"
             f"{'-' * info_width}{' ' * COL_SPACING}"
-            f"{'-' * status_width}"
+            f"{'-' * status_width}{' ' * COL_SPACING}"
+            f"{'-' * uptime_width}"
         )
         print(separator_line)
 
-        # Print Rows
         for row in rows:
             line = (
                 f"{' ' * LEFT_PADDING}"
                 f"{pad(row['id'], id_width)}{' ' * COL_SPACING}"
                 f"{pad(row['type'], type_width)}{' ' * COL_SPACING}"
                 f"{pad(row['info'], info_width)}{' ' * COL_SPACING}"
-                f"{pad(row['status'], status_width)}"
+                f"{pad(row['status'], status_width)}{' ' * COL_SPACING}"
+                f"{pad(row['uptime'], uptime_width)}"
             )
             print(line)
         print() 

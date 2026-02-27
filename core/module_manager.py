@@ -102,6 +102,10 @@ class ModuleManager:
                         # Modülün adını (module_instance.Name) elle değiştirmiyoruz,
                         # sınıf içinde tanımlanan 'Name' özelliğini kullanıyoruz.
                         
+                        # --- ZORUNLU METADATA KONTROLÜ ---
+                        if module_instance.Name == "Default Module Name" or not module_instance.Description or module_instance.Description == "description for module":
+                            logger.warning(f"Modül metadata değerleri varsayılan veya eksik: {file_path}. Lütfen (Name, Description) alanlarını güncelleyin.")
+                        
                         self.modules[module_name_for_dict] = module_instance 
                         break # Bir dosyada bir modül sınıfı bekliyoruz, bulduktan sonra çık.
                         
@@ -123,6 +127,49 @@ class ModuleManager:
                 logger.exception(f"Modül yüklenirken beklenmeyen hata '{file_path}'")
                 
         logger.info(f"{len(self.modules)} modül yüklendi")
+
+    def reload_module(self, module_path: str) -> bool:
+        """
+        Belirtilen modülü diskten okuyup yeniden belleğe yükler. (Hot-Reload)
+        Geliştiricinin framework kapatmadan güncellemeleri görmesini sağlar.
+        """
+        # Daha önce yüklü bir modül ise objesini sil.
+        if module_path in self.modules:
+            del self.modules[module_path]
+            
+        full_path = self.modules_dir / f"{module_path}.py"
+        
+        if not full_path.exists():
+            print(f"[bold red]Modül dosyası bulunamadı:[/bold red] {full_path}")
+            return False
+
+        try:
+            spec = importlib.util.spec_from_file_location(module_path, str(full_path))
+            if spec is None or spec.loader is None:
+                print(f"Modül spesifikasyonu alınamadı: {full_path}")
+                return False
+            
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            
+            for name, obj in module.__dict__.items():
+                if isinstance(obj, type) and issubclass(obj, BaseModule) and obj is not BaseModule:
+                    module_instance = obj()
+                    
+                    if not module_instance.Category:
+                        module_instance.Category = "uncategorized"
+                    
+                    module_instance.Path = module_path
+                    self.modules[module_path] = module_instance 
+                    
+                    logger.info(f"Modül başarıyla yeniden yüklendi: {module_path}")
+                    return True
+                    
+        except Exception as e:
+            logger.exception(f"Modül yeniden yüklenirken hata: {full_path}")
+            print(f"[bold red]Reload hatası:[/bold red] {e}")
+            
+        return False
 
     def get_module(self, module_path: str) -> Optional[BaseModule]:
         """
@@ -193,6 +240,11 @@ class ModuleManager:
         # Zorunlu seçenekler (Required Options) kontrolü.
         if not module.check_required_options():
             logger.warning(f"Modül çalıştırılamadı (eksik seçenekler): {module_path}")
+            return False
+            
+        # Zorunlu Bağımlılık (Requirements) kontrolü.
+        if not module.check_dependencies():
+            logger.warning(f"Modül çalıştırılamadı (eksik bağımlılıklar): {module_path}")
             return False
         
         # Modül çalışmadan ÖNCE (PRE_MODULE_RUN) eklenti hook'unu tetikle.

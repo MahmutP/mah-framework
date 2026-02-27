@@ -158,6 +158,12 @@ class BaseHandler:
             client_key = session_id if session_id is not None else id(client_sock)
             with self.clients_lock:
                 self.clients.pop(client_key, None)
+                
+            # Session Manager'dan otomatik oturum temizliği (Dead Session Detection)
+            if session_id is not None:
+                from core.shared_state import shared_state
+                if shared_state.session_manager:
+                    shared_state.session_manager.remove_session(session_id)
 
     def stop(self):
         """

@@ -282,6 +282,10 @@ class Console:
         # Eklentilere kapanış sinyali gönder (ON_SHUTDOWN hook)
         if shared_state.plugin_manager:
             shared_state.plugin_manager.trigger_hook(HookType.ON_SHUTDOWN)
+            
+        # Tüm iletişim oturumlarını ve arka plan handler dinleyicilerini durdur
+        if shared_state.session_manager:
+            shared_state.session_manager.shutdown_all()
         
         logger.info("Konsol kapatılıyor")
         print("Konsol kapatıldı.")

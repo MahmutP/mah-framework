@@ -1,7 +1,7 @@
 """
 BaseHandler & BindHandler — Unit Tests
 
-Handler mimarisi yeniden yapılandırması (Faz 1.1) testleri:
+Handler mimarisi yeniden yapılandırması testleri:
   - Multi-client desteği
   - BindHandler (hedefe bağlanan handler)
   - Accept timeout

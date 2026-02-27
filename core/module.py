@@ -2,7 +2,9 @@
 # Bu dosya, bir modülün sahip olması gereken standart yapıyı, özellikleri ve metodları tanımlar.
 
 from typing import Dict, Any, Union, List
-from core.option import Option # Modül seçeneklerini (LHOST, RPORT vb.) tanımlamak için kullanılan sınıf.
+import importlib.util
+import shutil
+from core.option import Option
 
 class BaseModule:
     """
@@ -33,6 +35,13 @@ class BaseModule:
     # Bu değer ModuleManager tarafından otomatik atanır, manuel doldurulmasına gerek yoktur.
     Path: str = "" 
     
+    # Modülün versiyon numarası.
+    Version: str = "1.0"
+    
+    # Modülün çalışması için bağımlılıklar. 
+    # {"python": ["requests", "beautifulsoup4"], "system": ["nmap", "curl"]}
+    Requirements: Dict[str, List[str]] = {}
+
     # Modülün çalışması için gereken seçenekler (ayarlar).
     # Sözlük formatındadır: {"SEÇENEK_ADI": Option(...)}
     Options: Dict[str, Option] = {} 
@@ -130,3 +139,32 @@ class BaseModule:
             return False
             
         return True
+
+    def check_dependencies(self) -> bool:
+        """
+        Modülün tanımladığı Python ve sistem bağımlılıklarının 
+        yüklü olup olmadığını kontrol eder.
+
+        Returns:
+            bool: Tüm bağımlılıklar sağlanmışsa True, eksik varsa False.
+        """
+        # Python paketi kontrolü
+        python_deps = self.Requirements.get("python", [])
+        missing_python = []
+        for pkg in python_deps:
+            if importlib.util.find_spec(pkg) is None:
+                missing_python.append(pkg)
+
+        # Sistem komutu kontrolü
+        system_deps = self.Requirements.get("system", [])
+        missing_system = []
+        for cmd in system_deps:
+            if shutil.which(cmd) is None:
+                missing_system.append(cmd)
+
+        if missing_python:
+            print(f"[{self.Name}] Eksik Python paketleri: {', '.join(missing_python)} (pip ile kurun)")
+        if missing_system:
+            print(f"[{self.Name}] Eksik sistem araçları: {', '.join(missing_system)} (apt/brew ile kurun)")
+
+        return len(missing_python) == 0 and len(missing_system) == 0

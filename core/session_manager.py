@@ -3,6 +3,7 @@
 
 from typing import Dict, Any, Optional
 import threading
+import time
 
 class SessionManager:
     """
@@ -49,7 +50,10 @@ class SessionManager:
                 "handler": handler_instance, # Oturumu yöneten nesne (komut göndermek için kullanılır)
                 "info": connection_info,     # Bağlantı bilgileri (gösterim için)
                 "status": "Active",          # Oturum durumu
-                "type": connection_info.get("type", "Generic") # Oturum türü (Shell, Meterpreter vb.)
+                "type": connection_info.get("type", "Generic"), # Oturum türü
+                # Metadata
+                "connected_at": time.time(),
+                "last_active": time.time()
             }
             
             # Bir sonraki ID'yi hazırla
@@ -86,3 +90,26 @@ class SessionManager:
         'sessions' komutu tarafından listeleme yapmak için kullanılır.
         """
         return self.sessions
+
+    def update_session_activity(self, session_id: int):
+        """
+        Belirtilen oturumun son aktivite zamanını günceller.
+        """
+        with self.lock:
+            if session_id in self.sessions:
+                self.sessions[session_id]["last_active"] = time.time()
+
+    def shutdown_all(self):
+        """
+        Tüm aktif oturumları güvenli bir şekilde kapatır ve listeyi temizler.
+        Framework kapanırken çağrılır.
+        """
+        with self.lock:
+            # Iterasyon sırasında silme yapmamak için list() kullanılır
+            for session_id, session in list(self.sessions.items()):
+                try:
+                    if hasattr(session["handler"], "stop"):
+                        session["handler"].stop()
+                except Exception:
+                    pass
+            self.sessions.clear()

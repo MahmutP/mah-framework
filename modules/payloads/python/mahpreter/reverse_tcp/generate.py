@@ -18,7 +18,7 @@ class Payload(BaseModule):
         self.Options = {
             "LHOST": Option("LHOST", "127.0.0.1", True, "Bağlanılacak IP."),
             "LPORT": Option("LPORT", 4444, True, "Bağlanılacak Port."),
-            "ENCODE": Option("ENCODE", "None", False, "Payload'ı encode et (None, base64, xor).", choices=["None", "base64", "xor"]),
+            "ENCODE": Option("ENCODE", "None", False, "Payload'ı encode et (base64, xor, hex, rot13, unicode_escape veya zincir: base64,xor)"),
             "OUTPUT": Option("OUTPUT", "", False, "Payload'ı dosyaya kaydet (örn: /tmp/payload.py).", completion_dir=".")
         }
 
@@ -56,20 +56,8 @@ if __name__ == "__main__":
         pass
 """
         # Encoding Logic
-        # Encoding Logic
-        if encode_type:
-            if encode_type.lower() == 'base64':
-                from core.encoders.base64 import Base64Encoder
-                return Base64Encoder.encode(raw_payload)
-            
-            elif encode_type.lower() == 'xor':
-                from core.encoders.xor import XorEncoder
-                import random
-                # Her seferinde farklı bir key üret (1-255 arası)
-                random_key = random.randint(1, 255)
-                return XorEncoder.encode(raw_payload, key=random_key)
-
-        return raw_payload.strip()
+        from core.encoders.manager import apply_encoding
+        return apply_encoding(raw_payload.strip(), encode_type)
 
     def run(self, options: Dict[str, Any]):
         code = self.generate()

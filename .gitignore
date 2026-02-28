@@ -29,3 +29,7 @@ config/last_update_reminder.txt
 
 # macOS özel dosyalar
 .DS_Store
+
+# Uygulama çalışma kayıtları
+*.log
+paramiko.log

@@ -125,13 +125,14 @@ class TestAgentCloseSocket:
     """Agent.close_socket() fonksiyonu testleri."""
 
     def test_close_socket_closes_and_nullifies(self, agent):
-        """close_socket() hem kapatır hem None yapar."""
+        """close_socket() kanalı kapatır ve sock None yapar."""
         mock_sock = MagicMock()
         agent.sock = mock_sock
 
-        agent.close_socket()
-
-        mock_sock.close.assert_called_once()
+        # ChannelManager üzerinden kapanmalı
+        with patch.object(agent.channel_manager, 'close') as mock_close:
+            agent.close_socket()
+            mock_close.assert_called_once()
         assert agent.sock is None
 
     def test_close_socket_when_none(self, agent):
@@ -170,15 +171,18 @@ class TestAgentReconnect:
     """Agent.reconnect() fonksiyonu testleri."""
 
     def test_reconnect_calls_close_first(self, agent):
-        """reconnect() önce mevcut socket'i kapatır."""
+        """reconnect() önce mevcut kanalı kapatır."""
         mock_sock = MagicMock()
         agent.sock = mock_sock
         # İlk connect denemesi başarılı olsun
-        with patch.object(agent, "connect", return_value=True), \
-             patch.object(agent, "send_sysinfo"):
+        with patch.object(agent.channel_manager, 'close') as mock_ch_close, \
+             patch.object(agent.channel_manager, 'fallback', return_value=False), \
+             patch.object(agent, 'connect', return_value=True), \
+             patch.object(agent, 'send_sysinfo'), \
+             patch('time.sleep'):
             agent.reconnect()
 
-        mock_sock.close.assert_called()
+        mock_ch_close.assert_called()
         
     def test_reconnect_returns_true_on_success(self, agent):
         """Başarılı reconnect True döner."""

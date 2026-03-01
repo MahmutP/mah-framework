@@ -43,6 +43,7 @@ def _load_chimera_agent_class():
 
     module = types.ModuleType("chimera_agent_test")
     exec(compile(code, "<chimera_agent>", "exec"), module.__dict__)
+    sys.modules["chimera_agent_test"] = module  # Testlerin sınıfları bulabilmesi için
     return module.ChimeraAgent
 
 
@@ -146,3 +147,36 @@ def payload_generator():
     gen.set_option_value("LHOST", "192.168.1.100")
     gen.set_option_value("LPORT", 4444)
     return gen
+
+
+@pytest.fixture
+def mock_socket_data():
+    """HTTP response formatında veri dönen mock socket oluşturur.
+    
+    Kullanım:
+        mock_sock = mock_socket_data("hello")
+        # mock_sock.recv() çağrıları HTTP/1.1 200 OK + body döner
+    """
+    def _create(body_str: str):
+        body_bytes = body_str.encode('utf-8')
+        response = (
+            f"HTTP/1.1 200 OK\r\n"
+            f"Content-Length: {len(body_bytes)}\r\n"
+            f"\r\n"
+        ).encode('utf-8') + body_bytes
+        
+        pos = [0]
+        
+        def mock_recv(n=1):
+            if pos[0] >= len(response):
+                return b""
+            data = response[pos[0]:pos[0] + n]
+            pos[0] += n
+            return data
+        
+        mock_sock = MagicMock()
+        mock_sock.recv.side_effect = mock_recv
+        mock_sock.getpeername.return_value = ("127.0.0.1", 4444)
+        return mock_sock
+    
+    return _create

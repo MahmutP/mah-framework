@@ -1,7 +1,7 @@
 """
 Chimera Agent - İletişim Kanalları Testleri (test_comm_channels.py)
 
-Faz 3.1 kapsamında eklenen iletişim kanalı sınıflarını test eder:
+Eklenen iletişim kanalı sınıflarını test eder:
   - CommChannel (soyut temel sınıf)
   - HTTPSChannel
   - DNSTunnelChannel

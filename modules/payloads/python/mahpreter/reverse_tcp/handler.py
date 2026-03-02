@@ -9,8 +9,8 @@ class Handler(BaseHandler):
     Mahpreter için özel handler.
     Length-prefixed protokolü destekler.
     """
-    def handle_connection(self, client_sock):
-        print("[*] Mahpreter oturumu başlatılıyor...")
+    def handle_connection(self, client_sock, session_id=None):
+        print(f"[*] Shell oturumu başlatılıyor... (Session: {session_id})")
         
         # İlk olarak sistem bilgisini almayı bekle
         try:

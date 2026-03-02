@@ -9,8 +9,8 @@ class Handler(BaseHandler):
     """
     Standart Reverse Shell Handler (Netcat clone).
     """
-    def handle_connection(self, client_sock):
-        print("[*] Shell oturumu başlatılıyor...")
+    def handle_connection(self, client_sock, session_id=None):
+        print(f"[*] Shell oturumu başlatılıyor... (Session: {session_id})")
         print("-" * 50)
         
         try:

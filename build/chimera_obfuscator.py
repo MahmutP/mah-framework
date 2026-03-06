@@ -40,6 +40,8 @@ _PROTECTED_NAMES = frozenset({
     "locals", "exec", "eval", "compile", "importlib", "__import__",
     "staticmethod", "classmethod", "property", "any", "all", "divmod",
     "pow", "breakpoint", "memoryview", "slice", "complex",
+    # Standard kwargs for built-ins
+    "key", "reverse", "file", "flush", "end", "sep",
     # Sık kullanılan istisnalar
     "Exception", "ValueError", "TypeError", "KeyError", "IndexError",
     "AttributeError", "RuntimeError", "OSError", "IOError", "FileNotFoundError",
@@ -243,6 +245,12 @@ class _NameRenamer(ast.NodeTransformer):
 
     def visit_Attribute(self, node):
         # Attribute erişimlerinde (.attr) sadece değeri değiştirme
+        self.generic_visit(node)
+        return node
+
+    def visit_keyword(self, node):
+        if node.arg in self.mapping:
+            node.arg = self.mapping[node.arg]
         self.generic_visit(node)
         return node
 
@@ -480,6 +488,327 @@ def _inject_junk(source: str, density: float = 0.3) -> tuple:
 
 
 # ============================================================
+# Aşama 4: Control Flow Flattening (Kontrol Akışı Düzleştirme)
+# ============================================================
+
+class _ControlFlowFlattener(ast.NodeTransformer):
+    """Fonksiyon gövdelerini state-machine benzeri while-switch yapısına dönüştürür.
+
+    Basit (tek seviye, dallanmasız) fonksiyonlar için çalışır.
+    Karmaşık kontrol akışları atlanır (try/except, nested if vb.).
+    """
+
+    def __init__(self):
+        self.flattened_count = 0
+
+    def _is_flattenable(self, body: list) -> bool:
+        """Gövdenin düzleştirilebilir olup olmadığını kontrol eder."""
+        if len(body) < 3:
+            return False
+        for node in body:
+            if isinstance(node, (ast.Try, ast.With, ast.AsyncWith,
+                                 ast.For, ast.AsyncFor, ast.While)):
+                return False
+        return True
+
+    def visit_FunctionDef(self, node):
+        self.generic_visit(node)
+
+        if not self._is_flattenable(node.body):
+            return node
+
+        stmts = node.body
+        if len(stmts) < 3:
+            return node
+
+        # State numaraları oluştur ve karıştır
+        num_states = len(stmts)
+        state_ids = list(range(num_states))
+        random.shuffle(state_ids)
+
+        # State -> statement mapping
+        state_map = {}
+        for i, stmt in enumerate(stmts):
+            state_map[state_ids[i]] = stmt
+
+        state_var = _rand_name("_s", 6)
+        end_state = max(state_ids) + 1
+
+        # Her state için: if state_var == X: <stmt>; state_var = next_state
+        cases = []
+        for idx in range(num_states):
+            current_state = state_ids[idx]
+            next_state = state_ids[idx + 1] if idx + 1 < num_states else end_state
+
+            stmt = state_map[current_state]
+            body_stmts = [stmt]
+
+            if not isinstance(stmt, ast.Return):
+                assign = ast.Assign(
+                    targets=[ast.Name(id=state_var, ctx=ast.Store())],
+                    value=ast.Constant(value=next_state),
+                    lineno=0
+                )
+                body_stmts.append(assign)
+
+            if_node = ast.If(
+                test=ast.Compare(
+                    left=ast.Name(id=state_var, ctx=ast.Load()),
+                    ops=[ast.Eq()],
+                    comparators=[ast.Constant(value=current_state)]
+                ),
+                body=body_stmts,
+                orelse=[]
+            )
+            cases.append(if_node)
+
+        # Sırayı karıştır
+        random.shuffle(cases)
+
+        # state_var = ilk_state
+        init_assign = ast.Assign(
+            targets=[ast.Name(id=state_var, ctx=ast.Store())],
+            value=ast.Constant(value=state_ids[0]),
+            lineno=0
+        )
+
+        # while state_var != end_state:
+        while_node = ast.While(
+            test=ast.Compare(
+                left=ast.Name(id=state_var, ctx=ast.Load()),
+                ops=[ast.NotEq()],
+                comparators=[ast.Constant(value=end_state)]
+            ),
+            body=cases,
+            orelse=[]
+        )
+
+        node.body = [init_assign, while_node]
+        ast.fix_missing_locations(node)
+        self.flattened_count += 1
+        return node
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+
+
+def _control_flow_flatten(source: str) -> tuple:
+    """Fonksiyon gövdelerini state-machine yapısına dönüştürür.
+
+    Returns:
+        (obfuscated_source: str, flattened_count: int)
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as e:
+        raise ValueError(f"[!] Control flow flatten parse hatası: {e}")
+
+    flattener = _ControlFlowFlattener()
+    new_tree = flattener.visit(tree)
+    ast.fix_missing_locations(new_tree)
+
+    return ast.unparse(new_tree), flattener.flattened_count
+
+
+# ============================================================
+# Aşama 5: Opaque Predicates (Opak Yüklemler)
+# ============================================================
+
+# Her zaman True olan matematiksel ifadeler
+_OPAQUE_TRUE_TEMPLATES = [
+    # (x * x) >= 0 her zaman True
+    lambda var: ast.Compare(
+        left=ast.BinOp(
+            left=ast.Name(id=var, ctx=ast.Load()),
+            op=ast.Mult(),
+            right=ast.Name(id=var, ctx=ast.Load())
+        ),
+        ops=[ast.GtE()],
+        comparators=[ast.Constant(value=0)]
+    ),
+    # (x | 1) != 0 her zaman True
+    lambda var: ast.Compare(
+        left=ast.BinOp(
+            left=ast.Name(id=var, ctx=ast.Load()),
+            op=ast.BitOr(),
+            right=ast.Constant(value=1)
+        ),
+        ops=[ast.NotEq()],
+        comparators=[ast.Constant(value=0)]
+    ),
+    # (x + 1) != x her zaman True
+    lambda var: ast.Compare(
+        left=ast.BinOp(
+            left=ast.Name(id=var, ctx=ast.Load()),
+            op=ast.Add(),
+            right=ast.Constant(value=1)
+        ),
+        ops=[ast.NotEq()],
+        comparators=[ast.Name(id=var, ctx=ast.Load())]
+    ),
+]
+
+
+class _OpaquePredicateInjector(ast.NodeTransformer):
+    """Opak yüklemler ekleyerek statik analizi zorlaştırır."""
+
+    def __init__(self, density: float = 0.15):
+        self.density = density
+        self.injected_count = 0
+
+    def _make_opaque_if(self, stmt):
+        """Bir statement'ı opak yüklem ile sarar."""
+        pred_var = _rand_name("_p", 6)
+        pred_val = random.randint(2, 9999)
+
+        assign = ast.Assign(
+            targets=[ast.Name(id=pred_var, ctx=ast.Store())],
+            value=ast.Constant(value=pred_val),
+            lineno=0
+        )
+
+        template = random.choice(_OPAQUE_TRUE_TEMPLATES)
+        test = template(pred_var)
+
+        junk_var = _rand_name("_j", 6)
+        fake_body = [ast.Assign(
+            targets=[ast.Name(id=junk_var, ctx=ast.Store())],
+            value=ast.Constant(value=random.randint(0, 9999)),
+            lineno=0
+        )]
+
+        if_node = ast.If(
+            test=test,
+            body=[stmt],
+            orelse=fake_body
+        )
+
+        self.injected_count += 1
+        return [assign, if_node]
+
+    def visit_FunctionDef(self, node):
+        self.generic_visit(node)
+        new_body = []
+        for stmt in node.body:
+            if (isinstance(stmt, (ast.Assign, ast.Expr, ast.AugAssign)) and
+                    random.random() < self.density):
+                new_body.extend(self._make_opaque_if(stmt))
+            else:
+                new_body.append(stmt)
+        node.body = new_body
+        return node
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+
+
+def _inject_opaque_predicates(source: str, density: float = 0.15) -> tuple:
+    """Opak yüklemler ekler.
+
+    Returns:
+        (obfuscated_source: str, injected_count: int)
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as e:
+        raise ValueError(f"[!] Opaque predicate parse hatası: {e}")
+
+    injector = _OpaquePredicateInjector(density=density)
+    new_tree = injector.visit(tree)
+    ast.fix_missing_locations(new_tree)
+
+    try:
+        result = ast.unparse(new_tree)
+        ast.parse(result)
+        return result, injector.injected_count
+    except SyntaxError:
+        return source, 0
+
+
+# ============================================================
+# Aşama 6: Dead Code Insertion (Ölü Kod Enjeksiyonu)
+# ============================================================
+
+_DEAD_FUNC_TEMPLATES = [
+    'def {name}({p1}, {p2}):\n    {v1} = {p1} + {p2}\n    {v2} = [{p1}] * {n1}\n    for {v3} in range({n2}):\n        {v1} += {v3}\n    return {v1}',
+
+    'def {name}({p1}):\n    {v1} = str({p1})\n    {v2} = {v1}[::-1]\n    return len({v2}) * {n1}',
+
+    'def {name}({p1}, {p2}={n1}):\n    if {p1} > {p2}:\n        return {p1} - {p2}\n    return {p2} - {p1}',
+
+    'class {name}:\n    def __init__(self):\n        self.{v1} = {n1}\n        self.{v2} = \"{s1}\"\n    def {v3}(self):\n        return self.{v1} * {n2}',
+]
+
+
+def _generate_dead_code_block() -> str:
+    """Rastgele bir ölü kod bloğu üretir."""
+    template = random.choice(_DEAD_FUNC_TEMPLATES)
+    return template.format(
+        name=_rand_name("_D", 8),
+        p1=_rand_name("_a", 4),
+        p2=_rand_name("_b", 4),
+        v1=_rand_name("_v", 4),
+        v2=_rand_name("_w", 4),
+        v3=_rand_name("_x", 4),
+        n1=random.randint(2, 999),
+        n2=random.randint(2, 99),
+        s1="".join(random.choices(string.ascii_lowercase, k=random.randint(5, 12))),
+    )
+
+
+def _inject_dead_code(source: str, count: int = 5) -> tuple:
+    """Kaynak koda ölü (erişilmeyen) fonksiyon ve sınıf tanımları ekler.
+
+    Args:
+        source: Python kaynak kodu.
+        count:  Eklenecek ölü blok sayısı.
+
+    Returns:
+        (obfuscated_source: str, injected_count: int)
+    """
+    dead_blocks = []
+    for _ in range(count):
+        block = _generate_dead_code_block()
+        try:
+            ast.parse(block)
+            dead_blocks.append(block)
+        except SyntaxError:
+            continue
+
+    if not dead_blocks:
+        return source, 0
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return source, 0
+
+    new_body = list(tree.body)
+    inserted = 0
+    for block_src in dead_blocks:
+        try:
+            block_tree = ast.parse(block_src)
+            min_pos = 0
+            for i, node in enumerate(new_body):
+                if isinstance(node, (ast.Import, ast.ImportFrom)):
+                    min_pos = i + 1
+            pos = random.randint(min_pos, len(new_body))
+            for stmt in reversed(block_tree.body):
+                new_body.insert(pos, stmt)
+            inserted += 1
+        except Exception:
+            continue
+
+    tree.body = new_body
+    ast.fix_missing_locations(tree)
+
+    try:
+        result = ast.unparse(tree)
+        ast.parse(result)
+        return result, inserted
+    except SyntaxError:
+        return source, 0
+
+
+# ============================================================
 # Ana Pipeline
 # ============================================================
 
@@ -489,18 +818,26 @@ def obfuscate(
     encrypt_strings: bool = True,
     inject_junk: bool = True,
     junk_density: float = 0.25,
+    control_flow_flatten: bool = False,
+    opaque_predicates: bool = False,
+    dead_code: bool = False,
+    dead_code_count: int = 5,
     seed: Optional[int] = None,
 ) -> dict:
     """
-    Chimera agent kaynak koduna üç katmanlı obfuscation uygular.
+    Chimera agent kaynak koduna çok katmanlı obfuscation uygular.
 
     Args:
-        source:          Ham Python kaynak kodu.
-        rename:          AST rename aşamasını çalıştır.
-        encrypt_strings: String XOR şifreleme aşamasını çalıştır.
-        inject_junk:     Junk code enjeksiyonunu çalıştır.
-        junk_density:    Junk satır ekleme yoğunluğu (0.0-1.0).
-        seed:            Tekrarlanabilir sonuçlar için RNG seed.
+        source:                Ham Python kaynak kodu.
+        rename:                AST rename aşamasını çalıştır.
+        encrypt_strings:       String XOR şifreleme aşamasını çalıştır.
+        inject_junk:           Junk code enjeksiyonunu çalıştır.
+        junk_density:          Junk satır ekleme yoğunluğu (0.0-1.0).
+        control_flow_flatten:  Kontrol akışı düzleştirmeyi çalıştır.
+        opaque_predicates:     Opak yüklem enjeksiyonunu çalıştır.
+        dead_code:             Ölü kod enjeksiyonunu çalıştır.
+        dead_code_count:       Eklenecek ölü kod bloğu sayısı.
+        seed:                  Tekrarlanabilir sonuçlar için RNG seed.
 
     Returns:
         dict:
@@ -518,6 +855,9 @@ def obfuscate(
         "renamed_identifiers": 0,
         "encrypted_strings": 0,
         "injected_junk_lines": 0,
+        "flattened_functions": 0,
+        "opaque_predicates": 0,
+        "dead_code_blocks": 0,
         "final_lines": 0,
         "final_size": 0,
     }
@@ -554,6 +894,33 @@ def obfuscate(
         current, junk_count = _inject_junk(current, density=junk_density)
         stats["injected_junk_lines"] = junk_count
 
+    # --- Aşama 4: Control Flow Flattening ---
+    if control_flow_flatten:
+        try:
+            current, flat_count = _control_flow_flatten(current)
+            stats["flattened_functions"] = flat_count
+        except Exception as e:
+            result["error"] = f"[!] Control flow flatten hatası: {e}"
+            return result
+
+    # --- Aşama 5: Opaque Predicates ---
+    if opaque_predicates:
+        try:
+            current, opaque_count = _inject_opaque_predicates(current)
+            stats["opaque_predicates"] = opaque_count
+        except Exception as e:
+            result["error"] = f"[!] Opaque predicate hatası: {e}"
+            return result
+
+    # --- Aşama 6: Dead Code Insertion ---
+    if dead_code:
+        try:
+            current, dc_count = _inject_dead_code(current, count=dead_code_count)
+            stats["dead_code_blocks"] = dc_count
+        except Exception as e:
+            result["error"] = f"[!] Dead code insertion hatası: {e}"
+            return result
+
     stats["final_lines"] = current.count("\n") + 1
     stats["final_size"] = len(current.encode("utf-8"))
 
@@ -588,6 +955,9 @@ def print_obfuscation_report(result: dict):
     print(f"  ║  ├─ Rename edilen tanımlayıcı : {str(s['renamed_identifiers']):<25}║")
     print(f"  ║  ├─ Şifrelenen string         : {str(s['encrypted_strings']):<25}║")
     print(f"  ║  ├─ Eklenen junk satır        : {str(s['injected_junk_lines']):<25}║")
+    print(f"  ║  ├─ Düzleştirilen fonksiyon   : {str(s.get('flattened_functions', 0)):<25}║")
+    print(f"  ║  ├─ Opak yüklem               : {str(s.get('opaque_predicates', 0)):<25}║")
+    print(f"  ║  ├─ Ölü kod bloğu             : {str(s.get('dead_code_blocks', 0)):<25}║")
     print(f"  ╠{border}╣")
     print(f"  ║  📦 Boyut Bilgisi                                     ║")
     orig_str = f"{s['original_size']:,} B / {s['original_lines']} satır"

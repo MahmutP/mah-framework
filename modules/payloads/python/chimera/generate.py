@@ -51,6 +51,7 @@ class Payload(BaseModule):
             "FRONTING_DOMAIN": Option("FRONTING_DOMAIN",  "",          False, "Domain fronting CDN host'u (ör: cdn.example.com)."),
             "STRIP_COMMENTS":  Option("STRIP_COMMENTS",  False,       False, "Yorum satırlarını temizle.", choices=[True, False]),
             "OBFUSCATE":       Option("OBFUSCATE",       False,       False, "AST rename + XOR string şifreleme + junk code uygula.", choices=[True, False]),
+            "POLYMORPHIC":     Option("POLYMORPHIC",     False,       False, "Polimorfik engine uygula (her build farklı imza üretir).", choices=[True, False]),
             "BUILD":           Option("BUILD",           False,       False, "PyInstaller ile çalıştırılabilir ikili (binary) dosyaya dönüştür.", choices=[True, False]),
         }
 
@@ -81,6 +82,7 @@ class Payload(BaseModule):
         fronting_domain = str(self.Options["FRONTING_DOMAIN"].value or "")
         strip_comments  = self._to_bool(self.Options["STRIP_COMMENTS"].value)
         obfuscate       = self._to_bool(self.Options["OBFUSCATE"].value)
+        polymorphic     = self._to_bool(self.Options["POLYMORPHIC"].value)
         build_bin       = self._to_bool(self.Options["BUILD"].value)
 
         agent_path = os.path.join(
@@ -107,6 +109,7 @@ class Payload(BaseModule):
             agent_source_path=agent_path,
             strip_comments=strip_comments,
             obfuscate=obfuscate,
+            polymorphic=polymorphic,
             build_bin=build_bin,
             quiet=quiet,
         )

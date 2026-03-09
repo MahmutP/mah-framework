@@ -12,6 +12,75 @@ from core.cont import DEFAULT_TERMINAL_WIDTH, LEFT_PADDING, COL_SPACING
 from core import logger
 from core.banner import print_banner
 from rich import print as rprint
+import math
+
+# ==============================================================================
+#  GRADIENT BANNER YARDIMCI FONKSİYONLARI (%20 İhtimalle Devreye Girer)
+# ==============================================================================
+def rgb_to_ansi_fg(r, g, b):
+    return f"\033[38;2;{r};{g};{b}m"
+
+def hsl_to_rgb(h, s, l):
+    h = h % 360
+    c = (1 - abs(2 * l - 1)) * s
+    x = c * (1 - abs((h / 60) % 2 - 1))
+    m = l - c / 2
+    if h < 60: r1, g1, b1 = c, x, 0
+    elif h < 120: r1, g1, b1 = x, c, 0
+    elif h < 180: r1, g1, b1 = 0, c, x
+    elif h < 240: r1, g1, b1 = 0, x, c
+    elif h < 300: r1, g1, b1 = x, 0, c
+    else: r1, g1, b1 = c, 0, x
+    return (int((r1 + m) * 255), int((g1 + m) * 255), int((b1 + m) * 255))
+
+def interpolate_color(color1, color2, t):
+    t = max(0.0, min(1.0, t))
+    return (
+        int(color1[0] + (color2[0] - color1[0]) * t),
+        int(color1[1] + (color2[1] - color1[1]) * t),
+        int(color1[2] + (color2[2] - color1[2]) * t)
+    )
+
+def apply_two_color_lolcat(lines, color1, color2):
+    if not lines: return ""
+    result = []
+    phase = random.random() * math.pi * 2
+    for row_idx, line in enumerate(lines):
+        colored_line = ""
+        for col_idx, ch in enumerate(line):
+            wave = math.sin(col_idx * 0.08 + row_idx * 0.4 + phase)
+            t = (wave + 1) / 2
+            r, g, b = interpolate_color(color1, color2, t)
+            colored_line += rgb_to_ansi_fg(r, g, b) + ch
+        colored_line += "\033[0m"
+        result.append(colored_line)
+    return "\n".join(result)
+
+def print_inline_gradient_banner():
+    try:
+        import pyfiglet
+    except ImportError:
+        return False
+        
+    curated_fonts = ["slant", "standard", "doom", "big", "small", "cybermedium", "smslant", "block", "digital", "shadow", "speed", "lean", "mini", "script", "ivrit", "computer"]
+    font = random.choice(curated_fonts)
+    
+    try:
+        ascii_art = pyfiglet.figlet_format("Mah", font=font)
+    except Exception:
+        ascii_art = pyfiglet.figlet_format("Mah", font="slant")
+        
+    lines = ascii_art.rstrip("\n").split("\n")
+    
+    # İki kontrast rastgele renk oluştur
+    h1 = random.randint(0, 359)
+    color1 = hsl_to_rgb(h1, random.uniform(0.7, 1.0), random.uniform(0.45, 0.65))
+    color2 = hsl_to_rgb((h1 + random.randint(60, 180)) % 360, random.uniform(0.7, 1.0), random.uniform(0.45, 0.65))
+    
+    output = apply_two_color_lolcat(lines, color1, color2)
+    print(output)
+    return True
+# ==============================================================================
 
 def print_startup_info(command_manager: CommandManager, module_manager: ModuleManager, plugin_count: int = 0):
     """Startup bilgisi basmaya yarıyan fonksiyon (Metasploit tarzı).
@@ -25,9 +94,14 @@ def print_startup_info(command_manager: CommandManager, module_manager: ModuleMa
     
     console = Console()
     
-    # Banner'ı bas
+    # Banner'ı bas ( %20 ihtimalle gradient, değilse normal banner )
     try:
-        print_banner()
+        if random.random() < 0.20:
+            success = print_inline_gradient_banner()
+            if not success:  # Eğer pyfiglet vs yoksa normal bannera düş
+                print_banner()
+        else:
+            print_banner()
     except Exception as e:
         print(f"Banner basılırken hata oluştu: {e}")
         print("Mah Framework") 

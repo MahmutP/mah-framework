@@ -1,6 +1,6 @@
 """
 Chimera Evasion Techniques - Unit Tests
-Faz 3.2: Obfuscator pipeline iyileştirmeleri, polimorfik engine,
+Obfuscator pipeline iyileştirmeleri, polimorfik engine,
 sleep obfuscation ve sandbox tespit güncellemelerini test eder.
 """
 import unittest

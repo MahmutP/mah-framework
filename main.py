@@ -6,6 +6,7 @@ from core.command_manager import CommandManager
 from core.module_manager import ModuleManager
 from core.plugin_manager import PluginManager
 from core.session_manager import SessionManager
+from core.repo_manager import RepoManager
 from core.hooks import HookType
 from core.console import Console as AppConsole
 from core.cont import DEFAULT_TERMINAL_WIDTH, LEFT_PADDING, COL_SPACING
@@ -278,6 +279,10 @@ def main():
     # Session Manager'ı başlat
     session_manager = SessionManager()
     shared_state.session_manager = session_manager
+    
+    # Repo Manager'ı başlat (Uzak depo yönetimi)
+    repo_manager = RepoManager()
+    shared_state.repo_manager = repo_manager
     
     command_manager.load_commands()
     module_manager.load_modules()

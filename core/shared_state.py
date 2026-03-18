@@ -48,6 +48,9 @@ class SharedState:
         self.session_manager = None
         """Oturum (Session) yöneticisi referansı."""
         
+        self.repo_manager = None
+        """Uzak depo (Repository) yöneticisi referansı."""
+        
         # --- Makro ve Kayıt Özellikleri ---
         self.is_recording = False
         """Komut kaydının (makro) açık olup olmadığını belirtir."""

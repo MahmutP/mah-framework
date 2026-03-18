@@ -45,6 +45,13 @@ LOG_DIR = "config/logs"
 # Bu dosya, CommandManager tarafından okunur ve yazılır.
 ALIASES_FILE = "config/aliases.json"
 
+# Uzak modül depolarının kayıtlarını tutan JSON dosyasının yolu.
+# Bu dosya, RepoManager tarafından okunur ve yazılır.
+REPOS_FILE = "config/repos.json"
+
+# Uzak depoların klonlanacağı dizin yolu.
+REPOS_DIR = "config/repos"
+
 # ==============================================================================
 # KONSOL VE ÇIKTI BİÇİMLENDİRME SABİTLERİ
 # Terminal çıktılarının düzenlenmesi ve hizalanması için kullanılır.

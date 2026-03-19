@@ -33,3 +33,6 @@ config/last_update_reminder.txt
 # Uygulama çalışma kayıtları
 *.log
 paramiko.log
+
+# Local modül durumu
+config/installed_modules.json

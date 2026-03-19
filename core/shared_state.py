@@ -51,6 +51,9 @@ class SharedState:
         self.repo_manager = None
         """Uzak depo (Repository) yöneticisi referansı."""
         
+        self.module_downloader = None
+        """Modül indirici (Module Downloader) referansı."""
+        
         # --- Makro ve Kayıt Özellikleri ---
         self.is_recording = False
         """Komut kaydının (makro) açık olup olmadığını belirtir."""

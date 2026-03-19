@@ -7,6 +7,7 @@ from core.module_manager import ModuleManager
 from core.plugin_manager import PluginManager
 from core.session_manager import SessionManager
 from core.repo_manager import RepoManager
+from core.module_downloader import ModuleDownloader
 from core.hooks import HookType
 from core.console import Console as AppConsole
 from core.cont import DEFAULT_TERMINAL_WIDTH, LEFT_PADDING, COL_SPACING
@@ -283,6 +284,10 @@ def main():
     # Repo Manager'ı başlat (Uzak depo yönetimi)
     repo_manager = RepoManager()
     shared_state.repo_manager = repo_manager
+    
+    # Module Downloader'ı başlat (Modül indirme ve versiyon yönetimi)
+    module_downloader = ModuleDownloader(modules_dir=str(base_dir / "modules"))
+    shared_state.module_downloader = module_downloader
     
     command_manager.load_commands()
     module_manager.load_modules()

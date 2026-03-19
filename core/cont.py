@@ -52,6 +52,10 @@ REPOS_FILE = "config/repos.json"
 # Uzak depoların klonlanacağı dizin yolu.
 REPOS_DIR = "config/repos"
 
+# Uzak depolardan indirilen (kurulu) modüllerin kayıtlarını tutan JSON dosyasının yolu.
+# Bu dosya, ModuleDownloader tarafından okunur ve yazılır.
+INSTALLED_MODULES_FILE = "config/installed_modules.json"
+
 # ==============================================================================
 # KONSOL VE ÇIKTI BİÇİMLENDİRME SABİTLERİ
 # Terminal çıktılarının düzenlenmesi ve hizalanması için kullanılır.

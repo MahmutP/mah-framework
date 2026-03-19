@@ -33,7 +33,10 @@ class ssh_brute(BaseModule):
             setattr(self, option_name, option_obj.value)
         
         # Sadece auth loglarını bastırmak için
-        paramiko.util.log_to_file("paramiko.log", level="ERROR")
+        log_dir = os.path.join(os.getcwd(), "config", "logs")
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        paramiko.util.log_to_file(os.path.join(log_dir, "paramiko.log"), level="ERROR")
         self.stop_event = threading.Event()
         self.success_password = None
 

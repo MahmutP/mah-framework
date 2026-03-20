@@ -56,6 +56,12 @@ REPOS_DIR = "config/repos"
 # Bu dosya, ModuleDownloader tarafından okunur ve yazılır.
 INSTALLED_MODULES_FILE = "config/installed_modules.json"
 
+# Uzak depolardan indirilen (kurulu) eklentilerin kayıtlarını tutan JSON dosyasının yolu.
+INSTALLED_PLUGINS_FILE = "config/installed_plugins.json"
+
+# Eklentilerin (plugins) yükleneceği dizin.
+PLUGINS_DIR = "plugins"
+
 # ==============================================================================
 # KONSOL VE ÇIKTI BİÇİMLENDİRME SABİTLERİ
 # Terminal çıktılarının düzenlenmesi ve hizalanması için kullanılır.

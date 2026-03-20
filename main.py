@@ -289,6 +289,11 @@ def main():
     module_downloader = ModuleDownloader(modules_dir=str(base_dir / "modules"))
     shared_state.module_downloader = module_downloader
     
+    # Plugin Downloader'ı başlat (Eklenti indirme ve versiyon yönetimi)
+    from core.plugin_downloader import PluginDownloader
+    plugin_downloader = PluginDownloader(plugins_dir=str(base_dir / "plugins"))
+    shared_state.plugin_downloader = plugin_downloader
+    
     command_manager.load_commands()
     module_manager.load_modules()
     

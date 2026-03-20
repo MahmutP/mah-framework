@@ -59,6 +59,19 @@ class SessionManager:
             # Bir sonraki ID'yi hazırla
             self.next_session_id += 1
             
+            # Eklentilere (plugin) haber ver
+            try:
+                from core.shared_state import shared_state
+                from core.hooks import HookType
+                if shared_state.plugin_manager:
+                    shared_state.plugin_manager.trigger_hook(
+                        HookType.ON_SESSION_OPEN,
+                        session_id=session_id,
+                        info=connection_info
+                    )
+            except Exception:
+                pass
+            
             return session_id
 
     def remove_session(self, session_id: int):
@@ -77,6 +90,18 @@ class SessionManager:
                 
                 # Listeden kaydı sil
                 del self.sessions[session_id]
+                
+                # Eklentilere haber ver
+                try:
+                    from core.shared_state import shared_state
+                    from core.hooks import HookType
+                    if shared_state.plugin_manager:
+                        shared_state.plugin_manager.trigger_hook(
+                            HookType.ON_SESSION_CLOSE,
+                            session_id=session_id
+                        )
+                except Exception:
+                    pass
 
     def get_session(self, session_id: int) -> Optional[Dict[str, Any]]:
         """
@@ -110,6 +135,17 @@ class SessionManager:
                 try:
                     if hasattr(session["handler"], "stop"):
                         session["handler"].stop()
+                    
+                    try:
+                        from core.shared_state import shared_state
+                        from core.hooks import HookType
+                        if shared_state.plugin_manager:
+                            shared_state.plugin_manager.trigger_hook(
+                                HookType.ON_SESSION_CLOSE,
+                                session_id=session_id
+                            )
+                    except Exception:
+                        pass
                 except Exception:
                     pass
             self.sessions.clear()

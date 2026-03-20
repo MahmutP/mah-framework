@@ -44,6 +44,12 @@ class BasePlugin:
     Düşük sayı = Yüksek öncelik (Daha önce çalışır).
     """
     
+    DefaultConfig: dict = {}
+    """
+    Plugin'in varsayılan yapılandırma ayarları.
+    get_config() çağrıldığında dosya yoksa bu değer ile oluşturulur.
+    """
+    
     def __init__(self) -> None:
         """
         Plugin örneği oluşturulduğunda çalışan yapıcı metod.
@@ -87,3 +93,43 @@ class BasePlugin:
             }
         """
         return {}
+
+    def _get_config_path(self) -> str:
+        """Plugin config dosyasının konumu."""
+        from pathlib import Path
+        config_dir = Path("config") / "plugins"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        return str(config_dir / f"{self.Name.lower().replace(' ', '_')}.json")
+
+    def get_config(self) -> dict:
+        """
+        Plugin'in yapılandırma dosyasını okur.
+        Dosya yoksa DefaultConfig kullanılarak oluşturulur.
+        """
+        import json
+        config_file = self._get_config_path()
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            self.save_config(self.DefaultConfig)
+            return self.DefaultConfig
+        except json.JSONDecodeError:
+            from core import logger
+            logger.error(f"Plugin config okunamadı (JSON hatası): {config_file}")
+            return self.DefaultConfig
+
+    def save_config(self, config_data: dict) -> bool:
+        """
+        Plugin'in yapılandırma ayarlarını JSON dosyasına kaydeder.
+        """
+        import json
+        config_file = self._get_config_path()
+        try:
+            with open(config_file, 'w', encoding='utf-8') as f:
+                json.dump(config_data, f, indent=4, ensure_ascii=False)
+            return True
+        except Exception as e:
+            from core import logger
+            logger.error(f"Plugin config kaydedilemedi: {e}")
+            return False

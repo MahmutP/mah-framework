@@ -95,3 +95,35 @@ class HookType(Enum):
     - Girilen değerin formatını doğrulamak (örn: IP adresi kontrolü).
     - Bir seçenek değiştiğinde diğerini otomatik güncellemek (bağımlı seçenekler).
     """
+
+    # ==============================================================================
+    # Oturum Yönetimi (Session Management) Hook'ları
+    # ==============================================================================
+    
+    ON_SESSION_OPEN = "on_session_open"
+    """
+    Yeni bir oturum (bağlantı) başarıyla açıldığında tetiklenir.
+    Kullanım Alanları:
+    - Hedefe dair bilgileri (IP vb.) kaydetmek.
+    - Bağlantı açıldığında Telegram/Discord gibi yerlere bildirim göndermek.
+    """
+    
+    ON_SESSION_CLOSE = "on_session_close"
+    """
+    Bir oturum kapatıldığında (veya koptuğunda) tetiklenir.
+    Kullanım Alanları:
+    - Bağlantı kaybında uyarı vermek.
+    - Oturum bitiminde otomatik log yedeklemesi yapmak.
+    """
+    
+    # ==============================================================================
+    # Hata (Error) Hook'ları
+    # ==============================================================================
+    
+    ON_ERROR = "on_error"
+    """
+    Uygulama içinde bir HATA veya İSTİSNA oluştuğunda tetiklenir.
+    Kullanım Alanları:
+    - Kritik hataları dış servislere raporlamak.
+    - Sessiz hata izleme.
+    """

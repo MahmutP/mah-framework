@@ -54,6 +54,9 @@ class SharedState:
         self.module_downloader = None
         """Modül indirici (Module Downloader) referansı."""
         
+        self.plugin_downloader = None
+        """Eklenti indirici (Plugin Downloader) referansı."""
+        
         # --- Makro ve Kayıt Özellikleri ---
         self.is_recording = False
         """Komut kaydının (makro) açık olup olmadığını belirtir."""

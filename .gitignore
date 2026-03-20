@@ -36,3 +36,6 @@ paramiko.log
 
 # Local modül durumu
 config/installed_modules.json
+
+# Local eklenti durumu
+config/installed_plugins.json

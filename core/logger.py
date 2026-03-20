@@ -134,6 +134,13 @@ def error(message):
     """
     initialize_logging_if_needed()
     _logger.error(message)
+    try:
+        from core.shared_state import shared_state
+        from core.hooks import HookType
+        if hasattr(shared_state, 'plugin_manager') and shared_state.plugin_manager:
+            shared_state.plugin_manager.trigger_hook(HookType.ON_ERROR, message=message, level="error")
+    except Exception:
+        pass
 
 
 def critical(message):
@@ -153,3 +160,10 @@ def exception(message):
     """
     initialize_logging_if_needed()
     _logger.exception(message)
+    try:
+        from core.shared_state import shared_state
+        from core.hooks import HookType
+        if hasattr(shared_state, 'plugin_manager') and shared_state.plugin_manager:
+            shared_state.plugin_manager.trigger_hook(HookType.ON_ERROR, message=message, level="exception")
+    except Exception:
+        pass

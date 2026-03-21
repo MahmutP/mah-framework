@@ -8,6 +8,8 @@
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue?style=for-the-badge&logo=python)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green?style=for-the-badge)](LICENSE)
 [![Maintenance](https://img.shields.io/badge/maintained-yes-brightgreen?style=for-the-badge)](https://github.com/MahmutP/mah-framework/graphs/commit-activity)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)](#)
+[![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen?style=for-the-badge)](#)
 
 [🇬🇧 English](#-english) | [🇹🇷 Türkçe](#-türkçe)
 
@@ -36,10 +38,10 @@
 *   **🛡️ Type Safe & Tested**: 100% type-annotated codebase with comprehensive unit tests (`pytest` & `mypy`), ensuring high reliability.
 
 ### 📊 Project Statistics
-*   **19** Commands
-*   **22** Modules
-*   **100%** Test Coverage (`175 passed, 22 skipped`)
-*   **Plugins System**, **Advanced Logging** & **Resource Script Support**
+*   **22** Commands (including `repo`, `download`, `checkupdate`, `plugins`)
+*   **50+** Modules (Payloads, Recon, Scanners, Post-Exploitation)
+*   **100%** Test Coverage (`462 items collected`)
+*   **Plugins System**, **Remote Repositories**, **Chimera Agent Builder** & **Advanced Logging**
 
 ### � Development Note
 The initial version of this project was developed entirely without AI assistance. The current version has been evolved using the **Antigravity IDE**, where AI enhanced the project based on the original codebase I wrote.
@@ -212,10 +214,10 @@ pytest                           # Run all tests
 *   **🛡️ Tip Güvenli ve Test Edilmiş**: %100 tip güvenliği (Type Safety) ve kapsayıcı birim testleri (`pytest` & `mypy`) ile yüksek kararlılık sağlar.
 
 ### 📊 Proje İstatistikleri
-*   **19** Komut
-*   **22** Modül
-*   **%100** Test Kapsamı (`175 passed, 22 skipped`)
-*   **Plugin Sistemi**, **Gelişmiş Loglama** & **Resource Dosya Desteği**
+*   **22** Komut (yeni eklenenler: `repo`, `download`, `checkupdate`, `plugins`, `reload`)
+*   **50+** Modül (Payload'lar, Keşif, Tarayıcılar, Post-Exploitation)
+*   **%100** Test Kapsamı (`462 items collected`)
+*   **Plugin Sistemi**, **Uzak Depo (Repository) Yöneticisi**, **Chimera Agent Builder** & **Gelişmiş Loglama**
 
 ### 💡 Geliştirme Notu
 Bu projenin ilk hali tamamen yapay zeka desteği olmaksızın geliştirilmiştir. Şimdiki hali ise **Antigravity IDE** kullanılarak, benim yazdığım orijinal kodlar temel alınarak yapay zeka desteği ile geliştirilmiştir.

@@ -30,7 +30,13 @@ Plugins extend Mah Framework functionality through a **hook/event system**. Unli
 | `PRE_MODULE_RUN`   | Before module runs | Validation checks    |
 | `POST_MODULE_RUN`  | After module runs  | Result logging       |
 | `ON_MODULE_SELECT` | Module selected    | Context setup        |
+| `ON_SESSION_OPEN`  | Custom agent connects | Notify user, log IP |
+| `ON_SESSION_CLOSE` | Agent disconnects   | Update status board  |
 | `ON_ERROR`         | Error occurs       | Error reporting      |
+
+### Configuration Files
+
+Plugins can optionally use their own YAML/JSON configuration files. By defining a config inside the plugin class, the framework automatically loads it.
 
 ### Plugin Commands
 
@@ -95,7 +101,13 @@ Pluginler, Mah Framework işlevselliğini **hook/event sistemi** üzerinden geni
 | `PRE_MODULE_RUN`   | Modül çalışmadan önce   | Doğrulama kontrolleri |
 | `POST_MODULE_RUN`  | Modül çalıştıktan sonra | Sonuç loglama         |
 | `ON_MODULE_SELECT` | Modül seçildiğinde      | Bağlam kurulumu       |
+| `ON_SESSION_OPEN`  | Yeni ajan bağlandığında | Kullanıcıya bildirme  |
+| `ON_SESSION_CLOSE` | Ajan bağlantısı koptuğunda | Durumu güncelleme     |
 | `ON_ERROR`         | Hata oluştuğunda        | Hata raporlama        |
+
+### Yapılandırma Dosyaları (Configuration)
+
+Plugin'ler kendi YAML/JSON ayar (config) dosyalarını kullanabilirler. Bu sayede her plugin kendi bağımsız ayarlarına sahip olabilir. Sistem bu ayarları açılışta otomatik yükler.
 
 ### Plugin Komutları
 

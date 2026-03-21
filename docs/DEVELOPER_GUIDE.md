@@ -25,6 +25,8 @@ Mah Framework modules are `.py` files located under the `modules/` directory (or
 #### Example File Path
 `modules/exploit/my_new_exploit.py`
 
+> 💡 **Tip:** While developing your module, use the built-in `reload` command within the framework console to instantly apply changes without restarting the framework.
+
 ---
 
 ### 🚀 Step-by-Step Module Creation
@@ -196,6 +198,8 @@ Mah Framework modülleri, `modules/` dizini (veya alt dizinleri) altında buluna
 
 #### Örnek Dosya Yolu
 `modules/exploit/my_new_exploit.py`
+
+> 💡 **İpucu:** Modülünüzü geliştirirken framework konsolunda yer alan `reload` komutunu kullanarak, framework'ü yeniden başlatmaya gerek kalmadan değişikliklerinizi anında uygulayabilirsiniz (hot-reload).
 
 ---
 

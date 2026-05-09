@@ -1,8 +1,9 @@
 import os
 import subprocess
+import shlex
 from core.command import Command
 from typing import Any
-from rich import  print
+from rich import print
 class Shell(Command):
     """terminal komutları çalıştırmaya yarıyan komut
 
@@ -49,7 +50,8 @@ class Shell(Command):
         else:
             print(f"Sistem komutu çalıştırılıyor: {command_to_execute}")
             try:
-                result = subprocess.run(command_to_execute, shell=True, check=True,
+                cmd_list = shlex.split(command_to_execute)
+                result = subprocess.run(cmd_list, check=True,
                                         capture_output=True, text=True, encoding='utf-8')
                 if result.stdout:
                     print(result.stdout.strip())
@@ -61,6 +63,9 @@ class Shell(Command):
                 return False
             except FileNotFoundError:
                 print(f"Komut bulunamadı: '{command_to_execute}'. Sistem PATH'inde olduğundan emin olun.")
+                return False
+            except ValueError as e:
+                print(f"Komut ayrıştırma hatası: {e}")
                 return False
             except Exception as e:
                 print(f"Sistem komutu çalıştırılırken beklenmedik hata: {e}")

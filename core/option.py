@@ -65,15 +65,8 @@ class Option:
         """
         # Eğer regex kontrolü aktifse
         if self.regex_check:
-            # Girilen değer regex desenine tam uyuyor mu kontrol et
             if not re.fullmatch(self.regex, str(new_value)):
-                # Uymazsa değeri değiştirme ve (isteğe bağlı) hata bas, ama sessizce reddet.
-                # (Burada print logu comment out edilmiş, gerekirse açılabilir)
-                # self._value = new_value # Hatalı değeri atamak yerine reddetmek daha doğru olabilir, ancak kodda atanmış.
-                # Mevcut mantık: Uymazsa bile atama yapıyor gibi görünüyor (kodda self._value = new_value var if bloğu içinde).
-                # DÜZELTME NOTU: Orjinal kodda return ile çıkış var ama öncesinde _value = new_value var.
-                # Bu mantık "uyarı ver ama ata" şeklinde çalışıyor olabilir.
-                self._value = new_value
+                print(f"[bold red]Hata:[/bold red] '{new_value}' değeri '{self.name}' için geçersiz (regex: {self.regex})")
                 return
         
         # Regex kontrolü yoksa veya geçildiyse değeri güncelle

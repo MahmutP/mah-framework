@@ -62,15 +62,13 @@ class PluginManager:
             plugin_name = file_path.stem
             
             try:
-                # 1. AST tabanlı statik güvenlik taraması (kod çalıştırılmadan önce).
-                scan_result = scan_file(str(file_path))
+                # 1. AST tabanlı statik güvenlik taraması (plugin'ler framework içinde çalışır, strict=True).
+                scan_result = scan_file(str(file_path), strict=True)
                 if not scan_result.is_safe:
                     logger.warning(f"Plugin '{file_path.name}' tehlikeli kod içeriyor, yüklenmiyor.")
                     print(f"[bold red]✗ Güvenlik:[/bold red] '{file_path.name}' tehlikeli kod içerdiği için atlandı.")
                     print_scan_report(scan_result)
                     continue
-                elif scan_result.has_warnings():
-                    logger.info(f"Plugin '{file_path.name}' şüpheli import'lar içeriyor.")
 
                 # 2. Modül spesifikasyonu oluştur.
                 spec = importlib.util.spec_from_file_location(plugin_name, str(file_path))

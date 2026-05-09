@@ -2,11 +2,12 @@
 # Framework'ün genişletilebilirliğini sağlayan ana bileşendir.
 
 from pathlib import Path
-import importlib.util # Dosyalardan dinamik sınıf yüklemek için.
+import importlib.util
 from typing import Dict, List, Callable, Optional, Any, Tuple
 
-from core.plugin import BasePlugin # Plugin'lerin temel sınıfı.
-from core.hooks import HookType # Olay türleri (Enum).
+from core.plugin import BasePlugin
+from core.hooks import HookType
+from core.code_scanner import scan_file, print_scan_report
 from core import logger
 
 
@@ -61,13 +62,23 @@ class PluginManager:
             plugin_name = file_path.stem
             
             try:
-                # 1. Modül spesifikasyonu oluştur.
+                # 1. AST tabanlı statik güvenlik taraması (kod çalıştırılmadan önce).
+                scan_result = scan_file(str(file_path))
+                if not scan_result.is_safe:
+                    logger.warning(f"Plugin '{file_path.name}' tehlikeli kod içeriyor, yüklenmiyor.")
+                    print(f"[bold red]✗ Güvenlik:[/bold red] '{file_path.name}' tehlikeli kod içerdiği için atlandı.")
+                    print_scan_report(scan_result)
+                    continue
+                elif scan_result.has_warnings():
+                    logger.info(f"Plugin '{file_path.name}' şüpheli import'lar içeriyor.")
+
+                # 2. Modül spesifikasyonu oluştur.
                 spec = importlib.util.spec_from_file_location(plugin_name, str(file_path))
                 if spec is None or spec.loader is None:
                     logger.warning(f"Plugin spesifikasyonu alınamadı: {file_path}")
                     continue
                 
-                # 2. Modülü yükle.
+                # 3. Modülü yükle.
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
                 

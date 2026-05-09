@@ -3,11 +3,12 @@
 # yönetilmesini ve çalıştırılmasını sağlar. Ayrıca eklenti (plugin) sistemiyle entegre çalışır.
 
 from pathlib import Path
-import importlib.util # Modülleri dinamik olarak (çalışma zamanında) yüklemek için gerekli.
+import importlib.util
 from typing import Dict, Optional, Tuple
-from core.module import BaseModule # Modüllerin türetilmesi gereken temel sınıf.
+from core.module import BaseModule
 from core.hooks import HookType
 from core.shared_state import shared_state
+from core.code_scanner import scan_file, print_scan_report
 from rich import print
 from core import logger
 
@@ -73,16 +74,24 @@ class ModuleManager:
                 module_name_for_dict = f"uncategorized/{module_name_for_dict}"
             
             try:
-                # 1. Python'un import mekanizmasını kullanarak dosyadan modül spesifikasyonu oluştur.
+                # 1. AST tabanlı statik güvenlik taraması yap (kod çalıştırılmadan önce).
+                scan_result = scan_file(str(file_path))
+                if not scan_result.is_safe:
+                    print(f"[bold yellow]⚠ Güvenlik uyarısı:[/bold yellow] '{file_path.name}'")
+                    print_scan_report(scan_result)
+                elif scan_result.has_warnings():
+                    print(f"[dim]ℹ '{file_path.name}' şüpheli import'lar içeriyor.[/dim]")
+
+                # 2. Python'un import mekanizmasını kullanarak dosyadan modül spesifikasyonu oluştur.
                 spec = importlib.util.spec_from_file_location(module_name_for_dict, str(file_path))
                 if spec is None or spec.loader is None:
                     print(f"Modül spesifikasyonu alınamadı: {file_path}")
                     continue
                 
-                # 2. Modülü spesifikasyondan oluştur (Henüz kod çalıştırılmadı).
+                # 3. Modülü spesifikasyondan oluştur (Henüz kod çalıştırılmadı).
                 module = importlib.util.module_from_spec(spec)
                 
-                # 3. Modül kodunu çalıştır (Class tanımları belleğe yüklenir).
+                # 4. Modül kodunu çalıştır (Class tanımları belleğe yüklenir).
                 spec.loader.exec_module(module)
                 
                 # 4. Modül içindeki sınıfları tara ve BaseModule türevi olanı bul.

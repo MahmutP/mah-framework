@@ -550,7 +550,7 @@ class ModuleDownloader:
         Returns:
             List[Dict[str, Any]]: Güncellenebilir modüllerin listesi.
         """
-        updates_available = []
+        updates_available: list[Dict[str, Any]] = []
 
         if module_key:
             if module_key not in self.installed:

@@ -1,3 +1,4 @@
+from typing import Any
 import codecs
 
 class Rot13Encoder:
@@ -6,7 +7,7 @@ class Rot13Encoder:
     """
     
     @staticmethod
-    def encode(data: str, **kwargs) -> str:
+    def encode(data: str, **kwargs: Any) -> str:
         """
         Verilen kaynak kodunu ROT13 formatına çevirir.
         

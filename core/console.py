@@ -26,6 +26,7 @@ from prompt_toolkit.document import Document
 from core.cont import DEFAULT_TERMINAL_WIDTH
 from core.hooks import HookType
 from core import logger
+from typing import Any
 from rich import print
 
 class CLIValidator(Validator):
@@ -48,7 +49,7 @@ class CLIValidator(Validator):
         self.command_manager = command_manager 
         self.module_manager = module_manager 
 
-    def validate(self, document: Document):
+    def validate(self, document: Document) -> None:
         """
         Doğrulama işleminin yapıldığı ana metod.
         
@@ -144,7 +145,7 @@ class Console:
         
         # Ctrl+C tuş kombinasyonu için özel işlem
         @bindings.add('c-c')
-        def _(event):
+        def _(event: Any) -> None:
             """
             Kullanıcı Ctrl+C'ye bastığında çalışacak fonksiyon.
             Normal terminal davranışının aksine, uygulamayı kapatmak yerine

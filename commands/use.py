@@ -25,7 +25,7 @@ class Use(Command):
         "use example/hash_generator",
         "use uncategorized/systeminfo_uncategorized"
     ]
-    def __init__(self):
+    def __init__(self) -> None:
         """init fonksiyonu.
         """
         super().__init__()
@@ -42,13 +42,13 @@ class Use(Command):
         """
         parts = text.split()
         if len(parts) == 1 and text.endswith(' '): 
-            module_manager: ModuleManager = shared_state.module_manager
+            module_manager = shared_state.module_manager
             if module_manager:
                 return sorted(list(module_manager.get_all_modules().keys()))
             return []
         elif len(parts) == 2 and not text.endswith(' '): 
             current_arg = parts[1]
-            manager: ModuleManager = shared_state.module_manager
+            manager = shared_state.module_manager
             if manager:
                 all_module_paths = list(manager.get_all_modules().keys())
                 matches = sorted([path for path in all_module_paths if path.startswith(current_arg)])
@@ -67,7 +67,7 @@ class Use(Command):
             print("Kullanım: use <modül_yolu>")
             return False
         module_path = args[0]
-        module_manager: ModuleManager = shared_state.module_manager
+        module_manager = shared_state.module_manager
         if not module_manager:
             print("ModuleManager başlatılmamış.")
             return False

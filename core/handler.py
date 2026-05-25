@@ -1,7 +1,7 @@
 # Ağ bağlantılarını ve payload iletişimini yöneten temel sınıfın bulunduğu modül.
 # Reverse Shell veya Bind Shell bağlantılarını karşılamak için kullanılır.
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import socket
 import threading
 from rich import print
@@ -16,7 +16,7 @@ class BaseHandler:
     Her bağlantı kendi thread'inde çalışır ve `self.clients` sözlüğünde izlenir.
     """
     
-    def __init__(self, options: Dict[str, Any]):
+    def __init__(self, options: Dict[str, Any]) -> None:
         """
         Handler'ı başlatır ve ayarları yükler.
 
@@ -32,13 +32,13 @@ class BaseHandler:
         self.lport = int(options.get("LPORT", 4444))
         
         # Sunucu soketi (dinleyici)
-        self.sock = None
+        self.sock: Any = None
         
         # İstemci soketi (gelen bağlantı) — Geriye uyumluluk: son bağlanan istemciyi tutar
-        self.client_sock = None
+        self.client_sock: Any = None
         
         # İstemci adresi (IP, Port) — Geriye uyumluluk: son bağlanan istemciyi tutar
-        self.client_addr = None
+        self.client_addr: Any = None
         
         # Handler'ın çalışıp çalışmadığını kontrol eden bayrak
         self.running = False
@@ -46,7 +46,7 @@ class BaseHandler:
         # --- Multi-client desteği ---
         # Tüm bağlı client'ları tutan sözlük.
         # Key: session_id (veya socket id), Value: {"sock": socket, "addr": (ip, port), "thread": Thread}
-        self.clients: Dict[Any, Dict] = {}
+        self.clients: Dict[Any, Dict[str, Any]] = {}
         
         # clients sözlüğü için thread güvenliği kilidi
         self.clients_lock = threading.Lock()
@@ -54,7 +54,7 @@ class BaseHandler:
         # Accept timeout süresi (saniye). 0 = sınırsız bekle.
         self.accept_timeout = float(options.get("ACCEPT_TIMEOUT", 0))
 
-    def start(self):
+    def start(self) -> None:
         """
         Soketi oluşturur, bağlar (bind) ve dinlemeye (listen) başlar.
         Gelen bağlantıları kabul eder ve her birini kendi thread'inde çalıştırır.
@@ -139,7 +139,7 @@ class BaseHandler:
             # Her durumda temizlik yap ve kapat
             self.stop()
 
-    def _handle_client_thread(self, client_sock: socket.socket, client_addr: tuple, session_id: int = None):
+    def _handle_client_thread(self, client_sock: socket.socket, client_addr: tuple, session_id: Optional[int] = None) -> None:
         """
         Bağlantı thread'i wrapper'ı. handle_connection'ı çağırır ve
         thread sonlandığında clients sözlüğünden temizlik yapar.
@@ -165,7 +165,7 @@ class BaseHandler:
                 if shared_state.session_manager:
                     shared_state.session_manager.remove_session(session_id)
 
-    def stop(self):
+    def stop(self) -> None:
         """
         Dinleyiciyi durdurur ve açık olan tüm soketleri güvenli bir şekilde kapatır.
         Multi-client modda tüm bağlı client soketlerini de kapatır.
@@ -195,7 +195,7 @@ class BaseHandler:
             except:
                 pass
 
-    def handle_connection(self, client_sock: socket.socket, session_id: int = None):
+    def handle_connection(self, client_sock: socket.socket, session_id: Optional[int] = None) -> None:
         """
         Gelen bağlantıyı yönetecek soyut metod.
         Bu sınıf tek başına kullanılmaz, bir alt sınıf (örn: ShellHandler) tarafından
@@ -207,7 +207,7 @@ class BaseHandler:
         """
         raise NotImplementedError("Alt sınıflar handle_connection metodunu uygulamalıdır.")
 
-    def interact(self, session_id: int):
+    def interact(self, session_id: int) -> None:
         """
         Oturumla etkileşime geçen (Interactive Shell) soyut metod.
         Kullanıcı 'sessions -i ID' dediğinde burası çalışır.
@@ -231,7 +231,7 @@ class BindHandler(BaseHandler):
         handler.start()
     """
     
-    def start(self):
+    def start(self) -> None:
         """
         Bind handler için özel start metodu.
         Dinlemek yerine, hedefe (RHOST:RPORT) bağlanır.

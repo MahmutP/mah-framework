@@ -55,7 +55,7 @@ class Option:
         return self._value
 
     @value.setter
-    def value(self, new_value: Any):
+    def value(self, new_value: Any) -> None:
         """
         Seçeneğe yeni bir değer atayan setter metodu.
         Burada veri doğrulama (validation) işlemleri yapılır.
@@ -73,7 +73,7 @@ class Option:
         self._value = new_value
         # print(f"Option '{self.name}' set to '{self._value}'")
 
-    def __str__(self):
+    def __str__(self) -> str:
         """
         Nesnenin string temsili (Debugging için).
         print(option_obj) dendiğinde bu döner.
@@ -83,7 +83,7 @@ class Option:
         """
         return f"Option(Name='{self.name}', Value='{self.value}', Required={self.required}, Description='{self.description}', Regex_Check={self.regex_check}, Regex='{self.regex}')"
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         """
         Option nesnesini Python sözlüğüne (dictionary) çevirir.
         API yanıtları veya JSON serileştirme (kaydetme) işlemleri için kullanışlıdır.

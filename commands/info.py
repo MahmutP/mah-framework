@@ -51,7 +51,12 @@ class Info(Command):
             min_option_name_width = max(len(option_header), max_option_name_len)
             min_value_width = max(len(current_value_header), max_value_len)
             min_required_width = max(len(required_header), len("Evet"), len("Hayır"))
-            terminal_width = shared_state.console_instance.get_terminal_width() if hasattr(shared_state, 'console_instance') else 120
+            terminal_width = 120
+            if shared_state.console_instance:
+                try:
+                    terminal_width = shared_state.console_instance.get_terminal_width()
+                except AttributeError:
+                    pass
             fixed_width_part = (
                 4 + 
                 min_option_name_width + 4 + 

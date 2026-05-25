@@ -1,4 +1,5 @@
 import shutil
+from typing import Any
 from core.command import Command
 from core.shared_state import shared_state
 from core.cont import LEFT_PADDING, COL_SPACING, DEFAULT_TERMINAL_WIDTH
@@ -21,7 +22,7 @@ class SessionsCommand(Command):
         "sessions -k <id>         # Belirtilen ID'li oturumu sonlandırır"
     ]
 
-    def execute(self, *args) -> bool:
+    def execute(self, *args: str, **kwargs: Any) -> bool:
         if not shared_state.session_manager:
             print("[!] Session manager başlatılamadı.")
             return False
@@ -54,7 +55,7 @@ class SessionsCommand(Command):
             
         return True
 
-    def list_sessions(self, group_by_host: bool = False):
+    def list_sessions(self, group_by_host: bool = False) -> None:
         sessions = shared_state.session_manager.get_all_sessions()
         if not sessions:
             print("Aktif oturum yok.")
@@ -81,7 +82,7 @@ class SessionsCommand(Command):
 
         if group_by_host:
             # IP adresine göre gruplandır
-            groups = {}
+            groups: dict[str, list] = {}
             for row in rows:
                 groups.setdefault(row["host"], []).append(row)
             
@@ -95,7 +96,7 @@ class SessionsCommand(Command):
             print("===============")
             self._print_table(rows)
 
-    def _print_table(self, rows: list):
+    def _print_table(self, rows: list) -> None:
         if not rows:
             return
             
@@ -107,7 +108,7 @@ class SessionsCommand(Command):
         status_width = max(max(len(r["status"]) for r in rows), len(headers[3]))
         uptime_width = max(max(len(r["uptime"]) for r in rows), len(headers[4]))
 
-        def pad(text, width):
+        def pad(text: str, width: int) -> str:
             return text.ljust(width)
 
         header_line = (
@@ -142,7 +143,7 @@ class SessionsCommand(Command):
             print(line)
         print() 
 
-    def interact_session(self, session_id):
+    def interact_session(self, session_id: int) -> None:
         session = shared_state.session_manager.get_session(session_id)
         if not session:
             print(f"[!] {session_id} numaralı oturum bulunamadı.")
@@ -159,7 +160,7 @@ class SessionsCommand(Command):
         else:
              print("[!] Bu oturum türü interaktif modu desteklemiyor.")
 
-    def kill_session(self, session_id):
+    def kill_session(self, session_id: int) -> None:
         session = shared_state.session_manager.get_session(session_id)
         if not session:
              print(f"[!] {session_id} numaralı oturum bulunamadı.")

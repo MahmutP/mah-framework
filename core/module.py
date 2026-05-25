@@ -46,7 +46,7 @@ class BaseModule:
     # Sözlük formatındadır: {"SEÇENEK_ADI": Option(...)}
     Options: Dict[str, Option] = {} 
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Modül sınıfının başlatıcı metodu.
         Tanımlanan 'Options' sözlüğündeki varsayılan değerleri sınıf özelliklerine (attribute) dönüştürür.

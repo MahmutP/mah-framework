@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any, List, Optional
 from core.command import Command
 from core.shared_state import shared_state
 from core.module import BaseModule 
@@ -25,13 +25,13 @@ class Set(Command):
         "set TEXT \"test mesajı\"",
         "set ALGORITHM sha256"
     ]
-    def __init__(self):
+    def __init__(self) -> None:
         """init fonksiyon
         """
         super().__init__()
         self.completer_function = self._set_completer 
     
-    def _get_path_completions(self, current_input: str, default_dir: str = ".", extensions: list = None) -> List[str]:
+    def _get_path_completions(self, current_input: str, default_dir: str = ".", extensions: Optional[list] = None) -> List[str]:
         """Dosya yolu tamamlama mantığı.
         
         Args:

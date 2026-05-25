@@ -13,7 +13,7 @@ class SessionManager:
     Reverse shell, bind shell veya diğer iletişim kanalları birer 'oturum' olarak burada saklanır.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         """
         SessionManager başlatıcı.
         """
@@ -28,7 +28,7 @@ class SessionManager:
         # Birden fazla handler aynı anda oturum eklemeye çalışırsa veri karışıklığını önler.
         self.lock = threading.Lock()
 
-    def add_session(self, handler_instance, connection_info: Dict[str, Any]) -> int:
+    def add_session(self, handler_instance: Any, connection_info: Dict[str, Any]) -> int:
         """
         Yeni bir oturumu sisteme kaydeder.
         Bir handler (dinleyici) başarılı bir bağlantı aldığında bu metodu çağırır.
@@ -74,7 +74,7 @@ class SessionManager:
             
             return session_id
 
-    def remove_session(self, session_id: int):
+    def remove_session(self, session_id: int) -> None:
         """
         Belirtilen oturumu sonlandırır ve listeden siler.
         """
@@ -116,7 +116,7 @@ class SessionManager:
         """
         return self.sessions
 
-    def update_session_activity(self, session_id: int):
+    def update_session_activity(self, session_id: int) -> None:
         """
         Belirtilen oturumun son aktivite zamanını günceller.
         """
@@ -124,7 +124,7 @@ class SessionManager:
             if session_id in self.sessions:
                 self.sessions[session_id]["last_active"] = time.time()
 
-    def shutdown_all(self):
+    def shutdown_all(self) -> None:
         """
         Tüm aktif oturumları güvenli bir şekilde kapatır ve listeyi temizler.
         Framework kapanırken çağrılır.

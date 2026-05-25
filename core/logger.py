@@ -6,6 +6,7 @@ Loglama için 'loguru' kütüphanesi kullanılır, bu da standart logging modül
 daha kolay yapılandırma ve daha iyi performans sağlar.
 """
 
+from typing import Any
 from pathlib import Path
 from loguru import logger
 import sys
@@ -19,7 +20,7 @@ LOG_FILE = LOG_DIR / "app.log"
 # Loguru aslında tekil (singleton) bir logger sağlar ama uyumluluk ve kolay erişim için değişkene atıyoruz.
 _logger = logger
 
-def setup_logger():
+def setup_logger() -> Any:
     """
     Logger'ı yapılandırır ve başlatır.
     Bu fonksiyon uygulamanın en başında çalıştırılmalıdır.
@@ -68,7 +69,7 @@ def setup_logger():
     
     return _logger
 
-def get_logger():
+def get_logger() -> Any:
     """
     Mevcut ve yapılandırılmış logger nesnesini döndürür.
     Eğer logger henüz yapılandırılmamışsa, lazy initialization (talep anında başlatma) yapar.
@@ -83,7 +84,7 @@ def get_logger():
 # Modül seviyesinde global bir değişkendir.
 _initialized = False
 
-def initialize_logging_if_needed():
+def initialize_logging_if_needed() -> None:
     """
     Logger'ın daha önce yapılandırılıp yapılandırılmadığını kontrol eder.
     Eğer yapılandırılmamışsa setup_logger() fonksiyonunu çağırır.
@@ -100,7 +101,7 @@ def initialize_logging_if_needed():
 # Geliştiricilerin direkt `core.logger.debug("mesaj")` şeklinde kullanabilmesi için
 # Loguru metodlarını sarmalıyoruz (wrap). Ayrıca her çağrıda başlatma kontrolü yapıyoruz.
 
-def debug(message):
+def debug(message: str) -> None:
     """
     Debug seviyesinde (en detaylı) log kaydı oluşturur.
     Geliştirme aşamasında değişken değerlerini izlemek için kullanılır.
@@ -109,7 +110,7 @@ def debug(message):
     _logger.debug(message)
 
 
-def info(message):
+def info(message: str) -> None:
     """
     Info seviyesinde (bilgilendirme) log kaydı oluşturur.
     Uygulamanın normal akışını takip etmek için kullanılır (örn: Modül yüklendi).
@@ -118,7 +119,7 @@ def info(message):
     _logger.info(message)
 
 
-def warning(message):
+def warning(message: str) -> None:
     """
     Warning seviyesinde (uyarı) log kaydı oluşturur.
     Hata olmayan ama dikkat edilmesi gereken durumlar için (örn: Konfigürasyon eksik).
@@ -127,7 +128,7 @@ def warning(message):
     _logger.warning(message)
 
 
-def error(message):
+def error(message: str) -> None:
     """
     Error seviyesinde (hata) log kaydı oluşturur.
     İşlemin başarısız olduğu durumlarda kullanılır.
@@ -143,7 +144,7 @@ def error(message):
         pass
 
 
-def critical(message):
+def critical(message: str) -> None:
     """
     Critical seviyesinde (kritik hata) log kaydı oluşturur.
     Uygulamanın çökmesine neden olabilecek ciddi sorunlar için.
@@ -152,7 +153,7 @@ def critical(message):
     _logger.critical(message)
 
 
-def exception(message):
+def exception(message: str) -> None:
     """
     Bir Exception (Hata) yakalandığında kullanılır.
     Hata mesajıyla birlikte tam yığın izini (traceback) de loglar.

@@ -1,3 +1,4 @@
+from typing import Any
 from core.command import Command
 from core.shared_state import shared_state
 from rich import print
@@ -13,7 +14,7 @@ class ReloadCommand(Command):
         "reload exploit/x/y       # Sadece belirtilen modülü (örneğin exploit/x/y) baştan yükler"
     ]
 
-    def execute(self, *args) -> bool:
+    def execute(self, *args: str, **kwargs: Any) -> bool:
         if args and len(args) > 0:
             # Belirli modülü hot-reload yap
             module_path = args[0]

@@ -33,7 +33,7 @@ class CheckUpdateCommand(Command):
         "checkupdate -a -b        # Güncellemeyi uygulamadan önce projenin yedeğini alır"
     ]
     
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.completer_function = self._checkupdate_completer
 

@@ -25,7 +25,7 @@ class Resource(Command):
         "resource scripts/test.rc # Görece yol ile çalıştırır"
     ]
     
-    def __init__(self):
+    def __init__(self) -> None:
         """init fonksiyon"""
         super().__init__()
         self.completer_function = self._resource_completer

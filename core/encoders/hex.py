@@ -1,3 +1,4 @@
+from typing import Any
 import binascii
 
 class HexEncoder:
@@ -7,7 +8,7 @@ class HexEncoder:
     """
     
     @staticmethod
-    def encode(data: str, **kwargs) -> str:
+    def encode(data: str, **kwargs: Any) -> str:
         """
         Verilen kaynak kodunu Hex formatına çevirir.
         

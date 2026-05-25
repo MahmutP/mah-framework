@@ -3,7 +3,7 @@ from rich.text import Text
 import pyfiglet
 import random
 
-def print_banner():
+def print_banner() -> None:
     """Renders a colorful banner using a random font."""
     # Konsol çıktısı için Rich kütüphanesi başlatılıyor
     console = Console()

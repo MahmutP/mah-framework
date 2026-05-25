@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Any, List, Optional
 from rich.table import Table
 from rich import print
 from core.command import Command
@@ -11,7 +11,7 @@ class Plugins(Command):
     Description = "Plugin yönetim komutu"
     Category = "core"
     Usage = "plugins [list|enable|disable|info|search|install|update|remove] [argümanlar]"
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.completer_function = self.get_completions # Otomatik tamamlama aktif
     Examples = [
@@ -25,7 +25,7 @@ class Plugins(Command):
         "plugins remove name        # Kurulu bir eklentiyi sil"
     ]
 
-    def execute(self, *args, **kwargs) -> bool:
+    def execute(self, *args: str, **kwargs: Any) -> bool:
         if not shared_state.plugin_manager:
             print("[bold red]Hata:[/bold red] Plugin Manager yüklenemedi.")
             return False
@@ -205,7 +205,7 @@ class Plugins(Command):
         
         print("-" * 50)
 
-    def _search_plugins(self, search_term=None) -> None:
+    def _search_plugins(self, search_term: Optional[str] = None) -> None:
         """Uzak depolardaki eklentileri arar."""
         if not shared_state.plugin_downloader:
             return
@@ -221,7 +221,7 @@ class Plugins(Command):
             print("[dim]Eşleşen eklenti bulunamadı.[/dim]")
             return
 
-        by_repo = {}
+        by_repo: dict[str, list] = {}
         for mod in plugins:
             repo = mod["repo"]
             if repo not in by_repo:

@@ -21,7 +21,7 @@ class Unset(Command):
         "unset RHOSTS             # RHOSTS değerini sıfırlar",
         "unset TEXT               # TEXT değerini sıfırlar"
     ]
-    def __init__(self):
+    def __init__(self) -> None:
         """init fonksiyon
         """
         super().__init__()

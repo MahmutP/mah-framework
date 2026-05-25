@@ -3,7 +3,7 @@
 
 from prompt_toolkit.completion import Completer, Completion # Otomatik tamamlama için gerekli temel sınıflar
 from prompt_toolkit.document import Document # İmleç konumu ve mevcut metin hakkında bilgi sağlayan sınıf
-from typing import List, Iterable, Optional, Tuple
+from typing import Any, List, Iterable, Optional, Tuple
 from core.shared_state import shared_state
 from core.command import Command # Komutların temel sınıfı
 from core.module import BaseModule # Modüllerin temel sınıfı
@@ -14,7 +14,7 @@ class CLICompleter(Completer):
     Kullanıcının yazdığı metne göre komutları, aliasları ve modül seçeneklerini tamamlar.
     """
     
-    def __init__(self, command_manager, module_manager):
+    def __init__(self, command_manager: Any, module_manager: Any) -> None:
         """
         CLICompleter başlatıcı metod.
 
@@ -25,7 +25,7 @@ class CLICompleter(Completer):
         self.command_manager = command_manager 
         self.module_manager = module_manager 
 
-    def get_completions(self, document: Document, complete_event) -> Iterable[Completion]:
+    def get_completions(self, document: Document, complete_event: Any) -> Iterable[Completion]:
         """
         Kullanıcı 'Tab' tuşuna bastığında veya yazarken çağrılan ana metod.
         İmleçten önceki metne göre bağlama uygun otomatik tamamlama önerilerini üretir.

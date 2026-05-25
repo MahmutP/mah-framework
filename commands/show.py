@@ -25,7 +25,7 @@ class Show(Command):
         "show options           # Seçili modülün seçeneklerini gösterir",
         "show info              # Seçili modül hakkında detaylı bilgi verir"
     ]
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.completer_function = self._show_completer 
     def _show_completer(self, text: str, word_before_cursor: str) -> List[str]:
@@ -55,7 +55,7 @@ class Show(Command):
             print("Kullanım: show <modules|options|info>")
             return False
         subcommand = args[0].lower()
-        module_manager: ModuleManager = shared_state.module_manager 
+        module_manager: Optional[ModuleManager] = shared_state.module_manager 
         if not module_manager:
             print("ModuleManager başlatılmamış.")
             return False

@@ -2,7 +2,7 @@
 # Kullanıcının framework konsolundan uzak depoları eklemesini, güncellemesini,
 # listelemesini ve silmesini sağlar.
 
-from typing import List
+from typing import Any, List
 from rich import print
 from core.command import Command
 from core.shared_state import shared_state
@@ -29,11 +29,11 @@ class Repo(Command):
         "repo remove myrepo                           # Depoyu sil",
     ]
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.completer_function = self.get_completions
 
-    def execute(self, *args, **kwargs) -> bool:
+    def execute(self, *args: str, **kwargs: Any) -> bool:
         """
         repo komutunun ana yürütme metodu.
         Alt komutu belirler ve ilgili işlemi çağırır.

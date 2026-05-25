@@ -2,7 +2,7 @@
 # Kullanıcının framework konsolundan uzak depolardaki modülleri aramasını,
 # indirmesini, güncellemesini ve doğrulamasını sağlar.
 
-from typing import List
+from typing import Any, List, Optional
 from rich import print
 from core.command import Command
 from core.shared_state import shared_state
@@ -30,11 +30,11 @@ class Download(Command):
         "download verify auxiliary/scanner/x              # SHA256 doğrulama",
     ]
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.completer_function = self.get_completions
 
-    def execute(self, *args, **kwargs) -> bool:
+    def execute(self, *args: str, **kwargs: Any) -> bool:
         """
         download komutunun ana yürütme metodu.
         Alt komutu belirler ve ilgili işlemi çağırır.
@@ -87,7 +87,7 @@ class Download(Command):
             print("   Kullanılabilir alt komutlar: search, install, update, list, verify")
             return False
 
-    def _search_modules(self, search_term=None) -> None:
+    def _search_modules(self, search_term: Optional[str] = None) -> None:
         """Uzak depolardaki modülleri arar ve listeler."""
         if not shared_state.module_downloader:
             return
@@ -107,7 +107,7 @@ class Download(Command):
             return
 
         # Modülleri depoya göre grupla
-        by_repo = {}
+        by_repo: dict[str, list] = {}
         for mod in modules:
             repo = mod["repo"]
             if repo not in by_repo:

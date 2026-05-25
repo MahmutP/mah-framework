@@ -46,7 +46,7 @@ class Command:
     # Opsiyoneldir, her komut için tanımlanmak zorunda değildir.
     completer_function: Optional[Callable] = None 
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Komut sınıfının yapıcı metodudur (constructor).
         Komut örneği oluşturulduğunda çalışır ve paylaşılan durumu (shared_state) sınıfa bağlar.

@@ -71,7 +71,7 @@ class Search(Command):
         "search exploit           # exploit kategorisindeki modülleri bulur",
         "search Mahmut            # Yazar adına göre arar"
     ]
-    def __init__(self):
+    def __init__(self) -> None:
         """init fonksiyonu.
         """
         super().__init__()
@@ -100,7 +100,7 @@ class Search(Command):
             print("Kullanım: search <arama_terimi>")
             return False
         search_term = " ".join(args)
-        module_manager: ModuleManager = shared_state.module_manager
+        module_manager = shared_state.module_manager 
         if not module_manager:
             print("ModuleManager başlatılmamış.")
             return False
@@ -111,7 +111,7 @@ class Search(Command):
             return True
         self._display_search_results(results, search_term)
         return True
-    def _display_search_results(self, results: List[Dict[str, Any]], search_term: str):
+    def _display_search_results(self, results: List[Dict[str, Any]], search_term: str) -> None:
         """Aramanın çıktısını sağlayan fonksiyon.
 
         Args:

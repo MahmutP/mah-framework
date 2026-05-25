@@ -25,7 +25,7 @@ class Help(Command):
         "help use                 # 'use' komutu hakkında detaylı bilgi",
         "?                        # 'help' için alias"
     ]
-    def __init__(self):
+    def __init__(self) -> None:
         """İnit fonksiyon
         """
         super().__init__()
@@ -58,7 +58,7 @@ class Help(Command):
         Returns:
             bool: Komutun başarılı olup olmadığının kontrol sonucu
         """
-        command_manager: CommandManager = self.shared_state.command_manager 
+        command_manager = self.shared_state.command_manager 
         if not command_manager:
             print("CommandManager başlatılmamış.")
             return False
@@ -94,7 +94,7 @@ class Help(Command):
         else:
             self._display_general_help(command_manager)
             return True
-    def _display_general_help(self, command_manager: CommandManager):
+    def _display_general_help(self, command_manager: CommandManager) -> None:
         """Genel komutların yardım çıktısı
 
         Args:

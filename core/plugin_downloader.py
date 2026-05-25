@@ -464,7 +464,7 @@ class PluginDownloader:
         """
         Kurulu eklentilerin versiyon kontrolünü yapar.
         """
-        updates_available = []
+        updates_available: list[Dict[str, Any]] = []
 
         modules_to_check = {plugin_key: self.installed[plugin_key]} if plugin_key and plugin_key in self.installed else self.installed.copy()
 

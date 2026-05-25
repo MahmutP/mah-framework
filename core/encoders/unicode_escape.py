@@ -1,3 +1,5 @@
+from typing import Any
+
 class UnicodeEncoder:
     """
     Kodu Unicode Escape (\\uXXXX veya \\xXX) dizilerine çeviren encoder.
@@ -5,7 +7,7 @@ class UnicodeEncoder:
     """
     
     @staticmethod
-    def encode(data: str, **kwargs) -> str:
+    def encode(data: str, **kwargs: Any) -> str:
         """
         Verilen kaynak kodunu unicode_escape formatına çevirir.
         

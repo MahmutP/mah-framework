@@ -28,7 +28,7 @@ class Alias(Command):
         "alias add s search       # 's' yazınca 'search' çalışır",
         "alias remove h           # 'h' alias'ını siler"
     ]
-    def __init__(self):
+    def __init__(self) -> None:
         """init fonksiyon
         """
         super().__init__()
@@ -52,7 +52,7 @@ class Alias(Command):
         elif len(parts) == 3 and parts[1].lower() == "remove" and not text.endswith(' '): 
             current_alias_part = parts[2]
             if shared_state.command_manager:
-                all_aliases = shared_state.command_manager.get_aliases().keys()
+                all_aliases: list = shared_state.command_manager.get_aliases().keys()
             else:
                 all_aliases = []
             return sorted([alias for alias in all_aliases if alias.startswith(current_alias_part)])
@@ -63,7 +63,7 @@ class Alias(Command):
         Returns:
             bool: sonuç başarılı mı başarısız mı olduğunu belirten çıktı
         """
-        command_manager: CommandManager = shared_state.command_manager
+        command_manager = shared_state.command_manager
         if not command_manager:
             print("CommandManager başlatılmamış.")
             return False

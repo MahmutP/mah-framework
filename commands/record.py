@@ -20,7 +20,7 @@ class Record(Command):
         "record status            # Kayıt durumunu gösterir"
     ]
     
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.completer_function = self._record_completer
 

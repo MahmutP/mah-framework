@@ -1,25 +1,26 @@
-from typing import Any
 import binascii
+from typing import Any
+
 
 class HexEncoder:
     """
     Kodu Hexadecimal formata çeviren ve çalışma anında
     unhexlify ile decode edip çalıştıran encoder.
     """
-    
+
     @staticmethod
     def encode(data: str, **kwargs: Any) -> str:
         """
         Verilen kaynak kodunu Hex formatına çevirir.
-        
+
         Args:
             data (str): Şifrelenecek ham Python kodu.
-            
+
         Returns:
             str: Şifrelenmiş ve çalıştırılabilir stub kodu.
         """
-        encoded_hex = binascii.hexlify(data.encode('utf-8')).decode('utf-8')
-        
+        encoded_hex = binascii.hexlify(data.encode("utf-8")).decode("utf-8")
+
         stub = f"""
 import binascii
 try:

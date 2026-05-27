@@ -1,19 +1,20 @@
 # XOR (Exclusive OR) şifreleme algoritmasını kullanarak payload gizleyen modül.
 # XOR, tersine çevrilebilir (symmetric) ve hızlı bir işlemdir. Antivirüs imzalarını (signature) bozmak için sıkça kullanılır.
 
+
 class XorEncoder:
     """
     Basit XOR Encoder (Şifreleyici).
-    
+
     Verilen kodu bir anahtar (key) ile XOR işlemine tabi tutar.
     Oluşturulan stub kodu, çalışma anında aynı anahtarı kullanarak veriyi çözer ve çalıştırır.
     """
-    
+
     @staticmethod
     def encode(data: str, key: int = 123) -> str:
         """
         Verilen kaynak kodunu (string) XOR algoritması ile şifreler.
-        
+
         Args:
             data (str): Şifrelenecek Python kodu.
             key (int, optional): Şifreleme anahtarı (0-255 arası tam sayı). Varsayılan: 123.
@@ -26,7 +27,7 @@ class XorEncoder:
         for char in data:
             # Her karakterin ASCII değerini al (ord) ve key ile XORla (maskele).
             encoded.append(ord(char) ^ key)
-        
+
         # Decoder Stub (Çözücü Kod) Oluşturma:
         # Bu kod hedef sistemde çalışacak ve şifreli listeyi eski haline getirecektir.
         stub = f"""

@@ -1,50 +1,52 @@
 # Framework içindeki tüm modüllerin (exploit, scanner, auxiliary vb.) türetilmesi gereken temel sınıf.
 # Bu dosya, bir modülün sahip olması gereken standart yapıyı, özellikleri ve metodları tanımlar.
 
-from typing import Dict, Any, Union, List
 import importlib.util
 import shutil
+from typing import Any
+
 from core.option import Option
+
 
 class BaseModule:
     """
     Modüllerin Ana (Base) Sınıfı.
-    
+
     Her yeni modül bu sınıftan miras almalı ve gerekli özellikleri (Name, Description vb.) doldurmalıdır.
     Ayrıca 'run' metodunu kendi iş mantığına göre eze (override) etmelidir.
     """
-    
+
     # ==============================================================================
     # Modül Metadata (Kimlik) Bilgileri
     # ==============================================================================
-    
+
     # Modülün adı. 'search' ve 'list' komutlarında görünür.
-    Name: str = "Default Module Name" 
-    
+    Name: str = "Default Module Name"
+
     # Modülün ne işe yaradığını anlatan kısa açıklama. 'info' komutunda görünür.
-    Description: str = "description for module" 
-    
+    Description: str = "description for module"
+
     # Modülü geliştiren kişinin adı veya takma adı.
-    Author: str = "Unknown" 
-    
+    Author: str = "Unknown"
+
     # Modülün kategorisi (örn: exploit, scanner, auxiliary).
     # Eğer tanımlanmazsa 'uncategorized' olarak işaretlenir.
-    Category: str = "uncategorized" 
-    
+    Category: str = "uncategorized"
+
     # Modülün dosya sistemindeki yolu (örn: auxiliary/recon/github_tracker).
     # Bu değer ModuleManager tarafından otomatik atanır, manuel doldurulmasına gerek yoktur.
-    Path: str = "" 
-    
+    Path: str = ""
+
     # Modülün versiyon numarası.
     Version: str = "1.0"
-    
-    # Modülün çalışması için bağımlılıklar. 
+
+    # Modülün çalışması için bağımlılıklar.
     # {"python": ["requests", "beautifulsoup4"], "system": ["nmap", "curl"]}
-    Requirements: Dict[str, List[str]] = {}
+    Requirements: dict[str, list[str]] = {}
 
     # Modülün çalışması için gereken seçenekler (ayarlar).
     # Sözlük formatındadır: {"SEÇENEK_ADI": Option(...)}
-    Options: Dict[str, Option] = {} 
+    Options: dict[str, Option] = {}
 
     def __init__(self) -> None:
         """
@@ -56,7 +58,7 @@ class BaseModule:
             # Seçenek adını ve varsayılan değerini sınıf özelliği olarak ata.
             setattr(self, option_name, option_obj.value)
 
-    def run(self, options: Dict[str, Any]) -> Union[str, List[str], bool, None]:
+    def run(self, options: dict[str, Any]) -> str | list[str] | bool | None:
         """
         Modülün asıl işi yaptığı ana metod.
         Kullanıcı 'run' veya 'exploit' komutunu çalıştırdığında bu metod çağrılır.
@@ -71,7 +73,7 @@ class BaseModule:
         # Varsayılan davranış: Sadece bir mesaj döndür.
         return f"[{self.Name}] Modül çalışması tamamlandı (varsayılan)."
 
-    def get_options(self) -> Dict[str, Option]:
+    def get_options(self) -> dict[str, Option]:
         """
         Modülün sahip olduğu tüm seçenekleri (Options) ve bunların yapılandırmalarını döndürür.
         'show options' komutu tarafından kullanılır.
@@ -116,7 +118,7 @@ class BaseModule:
             setattr(self, option_name, value)
             print(f"[{self.Name}] Option '{option_name}' set to '{value}'.")
             return True
-        
+
         print(f"[{self.Name}] Option '{option_name}' bulunamadı.")
         return False
 
@@ -131,18 +133,17 @@ class BaseModule:
         missing_options = []
         for opt_name, opt_obj in self.Options.items():
             # Eğer seçenek zorunluysa VE (değeri yoksa VEYA boş string ise)
-            if opt_obj.required and (opt_obj.value is None or str(opt_obj.value).strip() == ""):
+            if opt_obj.required and (
+                opt_obj.value is None or str(opt_obj.value).strip() == ""
+            ):
                 missing_options.append(opt_name)
-        
+
         # Eksik seçenek varsa False dön
-        if missing_options:
-            return False
-            
-        return True
+        return not missing_options
 
     def check_dependencies(self) -> bool:
         """
-        Modülün tanımladığı Python ve sistem bağımlılıklarının 
+        Modülün tanımladığı Python ve sistem bağımlılıklarının
         yüklü olup olmadığını kontrol eder.
 
         Returns:
@@ -163,8 +164,12 @@ class BaseModule:
                 missing_system.append(cmd)
 
         if missing_python:
-            print(f"[{self.Name}] Eksik Python paketleri: {', '.join(missing_python)} (pip ile kurun)")
+            print(
+                f"[{self.Name}] Eksik Python paketleri: {', '.join(missing_python)} (pip ile kurun)"
+            )
         if missing_system:
-            print(f"[{self.Name}] Eksik sistem araçları: {', '.join(missing_system)} (apt/brew ile kurun)")
+            print(
+                f"[{self.Name}] Eksik sistem araçları: {', '.join(missing_system)} (apt/brew ile kurun)"
+            )
 
         return len(missing_python) == 0 and len(missing_system) == 0

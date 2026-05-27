@@ -1,19 +1,28 @@
 # Terminal arayüzünde otomatik tamamlama (autocomplete) işlevini sağlayan modül.
 # prompt_toolkit kütüphanesinin 'Completer' sınıfı temel alınarak geliştirilmiştir.
 
-from prompt_toolkit.completion import Completer, Completion # Otomatik tamamlama için gerekli temel sınıflar
-from prompt_toolkit.document import Document # İmleç konumu ve mevcut metin hakkında bilgi sağlayan sınıf
-from typing import Any, List, Iterable, Optional, Tuple
+from collections.abc import Iterable
+from typing import Any
+
+from prompt_toolkit.completion import (  # Otomatik tamamlama için gerekli temel sınıflar
+    Completer,
+    Completion,
+)
+from prompt_toolkit.document import (
+    Document,  # İmleç konumu ve mevcut metin hakkında bilgi sağlayan sınıf
+)
+
+from core.command import Command  # Komutların temel sınıfı
+from core.module import BaseModule  # Modüllerin temel sınıfı
 from core.shared_state import shared_state
-from core.command import Command # Komutların temel sınıfı
-from core.module import BaseModule # Modüllerin temel sınıfı
+
 
 class CLICompleter(Completer):
     """
     Komut satırı arayüzü (CLI) için özel otomatik tamamlama sınıfı.
     Kullanıcının yazdığı metne göre komutları, aliasları ve modül seçeneklerini tamamlar.
     """
-    
+
     def __init__(self, command_manager: Any, module_manager: Any) -> None:
         """
         CLICompleter başlatıcı metod.
@@ -22,10 +31,12 @@ class CLICompleter(Completer):
             command_manager: Sistemdeki komutları yöneten nesne. Komut listesine erişim sağlar.
             module_manager: Sistemdeki modülleri yöneten nesne. Modül yollarına erişim sağlar.
         """
-        self.command_manager = command_manager 
-        self.module_manager = module_manager 
+        self.command_manager = command_manager
+        self.module_manager = module_manager
 
-    def get_completions(self, document: Document, complete_event: Any) -> Iterable[Completion]:
+    def get_completions(
+        self, document: Document, complete_event: Any
+    ) -> Iterable[Completion]:
         """
         Kullanıcı 'Tab' tuşuna bastığında veya yazarken çağrılan ana metod.
         İmleçten önceki metne göre bağlama uygun otomatik tamamlama önerilerini üretir.
@@ -37,8 +48,8 @@ class CLICompleter(Completer):
         Yields:
             Completion: 'prompt_toolkit' tarafından gösterilecek tamamlama önerileri.
         """
-        text_before_cursor = document.text_before_cursor # İmleçten önceki metin
-        words = text_before_cursor.split() # Metni kelimelere böl
+        text_before_cursor = document.text_before_cursor  # İmleçten önceki metin
+        words = text_before_cursor.split()  # Metni kelimelere böl
 
         # Eğer henüz hiçbir şey yazılmamışsa veya sadece boşluk varsa, tüm komutları öner.
         if not text_before_cursor.strip():
@@ -46,34 +57,40 @@ class CLICompleter(Completer):
             return
 
         # Yorum satırı başlıyorsa (#), tamamlama yapma.
-        if text_before_cursor.strip().startswith('#'):
+        if text_before_cursor.strip().startswith("#"):
             return
 
         # Eğer kullanıcı tek bir kelime yazıyorsa ve henüz boşluk bırakmamışsa
         # (yani komut adını yazmaya çalışıyorsa), komut tamamlamalarını öner.
-        if len(words) == 1 and not text_before_cursor.endswith(' '):
+        if len(words) == 1 and not text_before_cursor.endswith(" "):
             current_word = words[0]
             yield from self._get_command_completions(current_word)
         else:
             # Kullanıcı komut adını yazmış ve bir argümana geçmiş olabilir.
             command_name = words[0].lower()
-            
+
             # Girilen ilk kelime bir komut mu yoksa alias mı kontrol et.
-            resolved_command_name, is_alias = self.command_manager.resolve_command(command_name)
-            
+            resolved_command_name, _is_alias = self.command_manager.resolve_command(
+                command_name
+            )
+
             if resolved_command_name:
                 # Komut nesnesini bul.
-                command_obj: Optional[Command] = self.command_manager.get_all_commands().get(resolved_command_name)
-                
+                command_obj: Command | None = (
+                    self.command_manager.get_all_commands().get(resolved_command_name)
+                )
+
                 if command_obj:
                     # Eğer komutun kendine ait özel bir tamamlama fonksiyonu varsa (completer_function),
                     # kontrolü o fonksiyona devret. (Örn: 'use' komutu modül yollarını tamamlar)
                     if command_obj.completer_function:
-                        completions = command_obj.get_completions(text_before_cursor, document.get_word_before_cursor())
+                        completions = command_obj.get_completions(
+                            text_before_cursor, document.get_word_before_cursor()
+                        )
                         for comp in completions:
                             if isinstance(comp, Completion):
                                 yield comp
-                            else: 
+                            else:
                                 # Eğer fonksiyon sadece string listesi döndürdüyse, Completion nesnesine çevir.
                                 word_len = len(document.get_word_before_cursor())
                                 yield Completion(comp, start_position=-word_len)
@@ -97,15 +114,15 @@ class CLICompleter(Completer):
         # Tüm komut isimlerini ve aliasları bir kümede topla.
         all_names = set(self.command_manager.get_all_commands().keys())
         all_aliases = self.command_manager.get_aliases()
-        
+
         for alias, target_cmd in all_aliases.items():
             all_names.add(alias)
-            
+
         # İsimleri alfabetik sıraya diz ve filtrele.
         for name in sorted(list(all_names)):
             if name.startswith(current_word):
                 display_meta = ""
-                
+
                 # Eğer alias ise, hangi komuta ait olduğunu göster (Örn: alias for execution).
                 if name in all_aliases:
                     display_meta = f"(alias for {all_aliases[name]})"
@@ -113,25 +130,29 @@ class CLICompleter(Completer):
                 elif name in self.command_manager.get_all_commands():
                     cmd_obj = self.command_manager.get_all_commands()[name]
                     display_meta = cmd_obj.Description
-                    
-                # start_position negative değeri, mevcut kelimenin başından itibaren değiştirileceğini belirtir.
-                yield Completion(name, start_position=-len(current_word), display_meta=display_meta)
 
-    def _get_module_paths_completions(self, current_word: str) -> List[str]:
+                # start_position negative değeri, mevcut kelimenin başından itibaren değiştirileceğini belirtir.
+                yield Completion(
+                    name, start_position=-len(current_word), display_meta=display_meta
+                )
+
+    def _get_module_paths_completions(self, current_word: str) -> list[str]:
         """
-        Modül yollarını tamamlamak için yardımcı metod. 
+        Modül yollarını tamamlamak için yardımcı metod.
         Genellikle 'use' gibi komutların özel tamamlama fonksiyonları tarafından kullanılır.
         """
         module_paths = list(self.module_manager.get_all_modules().keys())
         return sorted([path for path in module_paths if path.startswith(current_word)])
 
-    def _get_module_options_completions(self, current_word: str) -> List[str]:
+    def _get_module_options_completions(self, current_word: str) -> list[str]:
         """
         Aktif modülün seçeneklerini (options) tamamlamak için yardımcı metod.
         'set' komutu tarafından kullanılabilir.
         """
-        selected_module: Optional[BaseModule] = shared_state.get_selected_module()
+        selected_module: BaseModule | None = shared_state.get_selected_module()
         if selected_module:
             option_names = list(selected_module.get_options().keys())
-            return sorted([name for name in option_names if name.startswith(current_word)])
+            return sorted(
+                [name for name in option_names if name.startswith(current_word)]
+            )
         return []

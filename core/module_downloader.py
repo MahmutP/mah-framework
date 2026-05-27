@@ -2,18 +2,19 @@
 # Uzak depolardan modül indirme, imza doğrulama, bağımlılık kurma ve
 # versiyon kontrolü işlemlerini yöneten sınıf.
 
+import hashlib
+import importlib.util
 import json
 import shutil
-import hashlib
 import subprocess
-import importlib.util
-from pathlib import Path
 from datetime import datetime
-from typing import Dict, Optional, List, Any, Tuple
+from pathlib import Path
+from typing import Any
 
-from core.cont import REPOS_DIR, INSTALLED_MODULES_FILE
-from core import logger
 from rich import print
+
+from core import logger
+from core.cont import INSTALLED_MODULES_FILE, REPOS_DIR
 
 
 class ModuleDownloader:
@@ -38,7 +39,7 @@ class ModuleDownloader:
         self.repos_dir = Path(REPOS_DIR)
         self.modules_dir = Path(modules_dir)
         self.installed_file = Path(INSTALLED_MODULES_FILE)
-        self.installed: Dict[str, Dict[str, Any]] = {}
+        self.installed: dict[str, dict[str, Any]] = {}
 
         # Kurulum kayıt dosyasını hazırla ve yükle.
         self._ensure_installed_file()
@@ -51,16 +52,18 @@ class ModuleDownloader:
         """
         if not self.installed_file.exists():
             self.installed_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.installed_file, 'w', encoding='utf-8') as f:
+            with open(self.installed_file, "w", encoding="utf-8") as f:
                 json.dump({}, f, indent=4)
-            logger.info(f"Kurulu modül kayıt dosyası oluşturuldu: {INSTALLED_MODULES_FILE}")
+            logger.info(
+                f"Kurulu modül kayıt dosyası oluşturuldu: {INSTALLED_MODULES_FILE}"
+            )
 
     def load_installed(self) -> None:
         """
         Kurulu modül kayıtlarını JSON dosyasından belleğe yükler.
         """
         try:
-            with open(self.installed_file, 'r', encoding='utf-8') as f:
+            with open(self.installed_file, encoding="utf-8") as f:
                 self.installed = json.load(f)
             logger.info(f"{len(self.installed)} kurulu modül kaydı yüklendi")
         except FileNotFoundError:
@@ -68,7 +71,9 @@ class ModuleDownloader:
             self._ensure_installed_file()
             self.installed = {}
         except json.JSONDecodeError as e:
-            logger.error(f"Kurulu modül dosyası okunamadı '{INSTALLED_MODULES_FILE}': {e}")
+            logger.error(
+                f"Kurulu modül dosyası okunamadı '{INSTALLED_MODULES_FILE}': {e}"
+            )
             print(f"[bold red]Hata:[/bold red] Kurulu modül kayıt dosyası bozuk: {e}")
             self.installed = {}
 
@@ -77,12 +82,14 @@ class ModuleDownloader:
         Kurulu modül kayıtlarını JSON dosyasına kaydeder.
         """
         try:
-            with open(self.installed_file, 'w', encoding='utf-8') as f:
+            with open(self.installed_file, "w", encoding="utf-8") as f:
                 json.dump(self.installed, f, indent=4, ensure_ascii=False)
         except PermissionError:
-            print(f"[bold red]Hata:[/bold red] Kurulu modül dosyası yazma izni hatası: {INSTALLED_MODULES_FILE}")
+            print(
+                f"[bold red]Hata:[/bold red] Kurulu modül dosyası yazma izni hatası: {INSTALLED_MODULES_FILE}"
+            )
             logger.exception("Kurulu modül dosyası yazma izni hatası")
-        except IOError as e:
+        except OSError as e:
             print(f"[bold red]Hata:[/bold red] Kurulu modül dosyası yazma hatası: {e}")
             logger.exception("Kurulu modül dosyası yazma hatası")
 
@@ -90,7 +97,7 @@ class ModuleDownloader:
     # MODÜL TARAMA
     # =========================================================================
 
-    def scan_repos(self, search_term: Optional[str] = None) -> List[Dict[str, Any]]:
+    def scan_repos(self, search_term: str | None = None) -> list[dict[str, Any]]:
         """
         Klonlanmış depolardaki modülleri tarar ve listeler.
         BaseModule alt sınıfı içeren .py dosyalarını bulur.
@@ -101,7 +108,7 @@ class ModuleDownloader:
         Returns:
             List[Dict[str, Any]]: Bulunan modüllerin bilgi listesi.
         """
-        found_modules: List[Dict[str, Any]] = []
+        found_modules: list[dict[str, Any]] = []
 
         if not self.repos_dir.exists():
             logger.warning(f"Depo dizini bulunamadı: {self.repos_dir}")
@@ -140,7 +147,9 @@ class ModuleDownloader:
 
         return found_modules
 
-    def _extract_module_info(self, py_file: Path, repo_name: str, repo_path: Path) -> Optional[Dict[str, Any]]:
+    def _extract_module_info(
+        self, py_file: Path, repo_name: str, repo_path: Path
+    ) -> dict[str, Any] | None:
         """
         Bir Python dosyasından modül bilgilerini çıkarır.
         Dosyayı metin olarak okuyarak BaseModule alt sınıfı olup olmadığını kontrol eder.
@@ -154,16 +163,16 @@ class ModuleDownloader:
             Optional[Dict[str, Any]]: Modül bilgileri veya None.
         """
         try:
-            content = py_file.read_text(encoding='utf-8', errors='ignore')
+            content = py_file.read_text(encoding="utf-8", errors="ignore")
         except Exception:
             return None
 
         # BaseModule alt sınıfı değilse atla
-        if 'BaseModule' not in content:
+        if "BaseModule" not in content:
             return None
 
         # Template dosyalarını atla (şablon ama modül değil)
-        if '{{' in content and '}}' in content:
+        if "{{" in content and "}}" in content:
             return None
 
         relative_path = py_file.relative_to(repo_path).as_posix()
@@ -195,7 +204,7 @@ class ModuleDownloader:
             "has_signature": has_signature,
         }
 
-    def _extract_field(self, content: str, field_name: str) -> Optional[str]:
+    def _extract_field(self, content: str, field_name: str) -> str | None:
         """
         Python kaynak kodundan sınıf alanı değerini çıkarır.
         Basit regex-siz metin ayrıştırma kullanır.
@@ -241,7 +250,9 @@ class ModuleDownloader:
         # Tanımlayıcıyı ayrıştır
         parts = module_identifier.split("/", 1)
         if len(parts) < 2:
-            print("[bold red]Hata:[/bold red] Modül tanımlayıcı formatı: <depo_adı>/<modül_yolu>")
+            print(
+                "[bold red]Hata:[/bold red] Modül tanımlayıcı formatı: <depo_adı>/<modül_yolu>"
+            )
             print("   Örnek: download install myrepo/auxiliary/scanner/my_scanner.py")
             return False
 
@@ -256,14 +267,18 @@ class ModuleDownloader:
         source_file = self.repos_dir / repo_name / module_path
         if not source_file.exists():
             print(f"[bold red]Hata:[/bold red] Modül dosyası bulunamadı: {source_file}")
-            print(f"   Mevcut modülleri aramak için: [bold]download search <terim>[/bold]")
+            print(
+                "   Mevcut modülleri aramak için: [bold]download search <terim>[/bold]"
+            )
             return False
 
         # BaseModule kontrol
         try:
-            content = source_file.read_text(encoding='utf-8', errors='ignore')
-            if 'BaseModule' not in content:
-                print(f"[bold red]Hata:[/bold red] Dosya geçerli bir Mah Framework modülü değil (BaseModule bulunamadı).")
+            content = source_file.read_text(encoding="utf-8", errors="ignore")
+            if "BaseModule" not in content:
+                print(
+                    "[bold red]Hata:[/bold red] Dosya geçerli bir Mah Framework modülü değil (BaseModule bulunamadı)."
+                )
                 return False
         except Exception as e:
             print(f"[bold red]Hata:[/bold red] Dosya okunamadı: {e}")
@@ -273,7 +288,9 @@ class ModuleDownloader:
         sha256_file = source_file.with_suffix(".sha256")
         if sha256_file.exists():
             if not self._verify_sha256(source_file, sha256_file):
-                print("[bold red]✗ İmza doğrulama başarısız![/bold red] Modül bütünlüğü tehlikede olabilir.")
+                print(
+                    "[bold red]✗ İmza doğrulama başarısız![/bold red] Modül bütünlüğü tehlikede olabilir."
+                )
                 print("   Yine de kurmak isterseniz: Öncelikle kaynağı doğrulayın.")
                 return False
             print("[bold green]✓[/bold green] SHA256 imza doğrulandı.")
@@ -286,11 +303,17 @@ class ModuleDownloader:
         if dest_file.exists() and not force:
             if module_key in self.installed:
                 print(f"[bold yellow]⚠[/bold yellow] Modül zaten kurulu: {module_key}")
-                print(f"   Üzerine yazmak için: [bold]download install {module_identifier} --force[/bold]")
+                print(
+                    f"   Üzerine yazmak için: [bold]download install {module_identifier} --force[/bold]"
+                )
                 return False
             else:
-                print(f"[bold yellow]⚠[/bold yellow] Hedef dosya zaten mevcut: {dest_file}")
-                print(f"   Üzerine yazmak için: [bold]download install {module_identifier} --force[/bold]")
+                print(
+                    f"[bold yellow]⚠[/bold yellow] Hedef dosya zaten mevcut: {dest_file}"
+                )
+                print(
+                    f"   Üzerine yazmak için: [bold]download install {module_identifier} --force[/bold]"
+                )
                 return False
 
         # Hedef dizini oluştur
@@ -304,7 +327,9 @@ class ModuleDownloader:
             return False
 
         # Modül bilgilerini çıkar
-        module_info = self._extract_module_info(source_file, repo_name, self.repos_dir / repo_name)
+        module_info = self._extract_module_info(
+            source_file, repo_name, self.repos_dir / repo_name
+        )
         version = module_info.get("version", "1.0") if module_info else "1.0"
 
         # SHA256 hesapla
@@ -324,13 +349,17 @@ class ModuleDownloader:
         }
         self.save_installed()
 
-        logger.info(f"Modül kuruldu: {module_key} (repo: {repo_name}, version: {version})")
-        print(f"[bold green]✓[/bold green] Modül başarıyla kuruldu: [bold]{module_key}[/bold]")
+        logger.info(
+            f"Modül kuruldu: {module_key} (repo: {repo_name}, version: {version})"
+        )
+        print(
+            f"[bold green]✓[/bold green] Modül başarıyla kuruldu: [bold]{module_key}[/bold]"
+        )
         print(f"   Kaynak: {repo_name}/{module_path}")
         print(f"   Versiyon: {version}")
 
         if deps_installed:
-            print(f"   Bağımlılıklar kuruldu.")
+            print("   Bağımlılıklar kuruldu.")
 
         print(f"\n   Kullanmak için: [bold]use {module_key}[/bold]")
         return True
@@ -350,8 +379,8 @@ class ModuleDownloader:
             str: Hexadecimal SHA256 hash değeri.
         """
         sha256_hash = hashlib.sha256()
-        with open(file_path, 'rb') as f:
-            for chunk in iter(lambda: f.read(8192), b''):
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
                 sha256_hash.update(chunk)
         return sha256_hash.hexdigest()
 
@@ -367,14 +396,16 @@ class ModuleDownloader:
             bool: Hash'ler eşleşirse True.
         """
         try:
-            expected_hash = sha256_file.read_text(encoding='utf-8').strip().split()[0].lower()
+            expected_hash = (
+                sha256_file.read_text(encoding="utf-8").strip().split()[0].lower()
+            )
             actual_hash = self._compute_sha256(file_path)
             return actual_hash == expected_hash
         except Exception as e:
             logger.error(f"SHA256 doğrulama hatası: {e}")
             return False
 
-    def verify_module(self, module_key: str) -> Optional[bool]:
+    def verify_module(self, module_key: str) -> bool | None:
         """
         Kurulu bir modülün SHA256 bütünlük kontrolünü yapar.
 
@@ -385,7 +416,9 @@ class ModuleDownloader:
             Optional[bool]: True=geçerli, False=geçersiz, None=kayıt bulunamadı.
         """
         if module_key not in self.installed:
-            print(f"[bold red]Hata:[/bold red] '{module_key}' kurulu modüller arasında bulunamadı.")
+            print(
+                f"[bold red]Hata:[/bold red] '{module_key}' kurulu modüller arasında bulunamadı."
+            )
             return None
 
         record = self.installed[module_key]
@@ -397,17 +430,21 @@ class ModuleDownloader:
 
         stored_hash = record.get("sha256")
         if not stored_hash:
-            print(f"[bold yellow]⚠[/bold yellow] Kayıtlı SHA256 hash değeri bulunamadı.")
+            print("[bold yellow]⚠[/bold yellow] Kayıtlı SHA256 hash değeri bulunamadı.")
             return None
 
         actual_hash = self._compute_sha256(module_file)
         is_valid = actual_hash == stored_hash
 
         if is_valid:
-            print(f"[bold green]✓[/bold green] Modül bütünlüğü doğrulandı: [bold]{module_key}[/bold]")
+            print(
+                f"[bold green]✓[/bold green] Modül bütünlüğü doğrulandı: [bold]{module_key}[/bold]"
+            )
             print(f"   SHA256: {actual_hash}")
         else:
-            print(f"[bold red]✗ Modül bütünlüğü BOZULMUŞ![/bold red] [bold]{module_key}[/bold]")
+            print(
+                f"[bold red]✗ Modül bütünlüğü BOZULMUŞ![/bold red] [bold]{module_key}[/bold]"
+            )
             print(f"   Beklenen: {stored_hash}")
             print(f"   Mevcut:   {actual_hash}")
 
@@ -429,7 +466,7 @@ class ModuleDownloader:
             bool: Bağımlılık kurulduysa True.
         """
         try:
-            content = module_file.read_text(encoding='utf-8', errors='ignore')
+            content = module_file.read_text(encoding="utf-8", errors="ignore")
         except Exception:
             return False
 
@@ -447,38 +484,50 @@ class ModuleDownloader:
         if not missing:
             return False
 
-        print(f"[bold cyan]📦 Bağımlılıklar kuruluyor:[/bold cyan] {', '.join(missing)}")
+        print(
+            f"[bold cyan]📦 Bağımlılıklar kuruluyor:[/bold cyan] {', '.join(missing)}"
+        )
 
         try:
             result = subprocess.run(
-                ["pip", "install"] + missing,
+                ["pip", "install", *missing],
                 capture_output=True,
                 text=True,
-                timeout=120
+                timeout=120,
             )
 
             if result.returncode == 0:
-                print(f"[bold green]✓[/bold green] Bağımlılıklar başarıyla kuruldu.")
+                print("[bold green]✓[/bold green] Bağımlılıklar başarıyla kuruldu.")
                 logger.info(f"Bağımlılıklar kuruldu: {', '.join(missing)}")
                 return True
             else:
-                error_msg = result.stderr.strip() if result.stderr else "Bilinmeyen hata"
-                print(f"[bold red]✗[/bold red] Bağımlılık kurulumu başarısız: {error_msg}")
+                error_msg = (
+                    result.stderr.strip() if result.stderr else "Bilinmeyen hata"
+                )
+                print(
+                    f"[bold red]✗[/bold red] Bağımlılık kurulumu başarısız: {error_msg}"
+                )
                 logger.error(f"Bağımlılık kurulum hatası: {error_msg}")
                 return False
 
         except subprocess.TimeoutExpired:
-            print("[bold yellow]⚠[/bold yellow] Bağımlılık kurulumu zaman aşımına uğradı.")
+            print(
+                "[bold yellow]⚠[/bold yellow] Bağımlılık kurulumu zaman aşımına uğradı."
+            )
             return False
         except FileNotFoundError:
-            print("[bold red]✗[/bold red] pip bulunamadı. Lütfen pip'in kurulu olduğundan emin olun.")
+            print(
+                "[bold red]✗[/bold red] pip bulunamadı. Lütfen pip'in kurulu olduğundan emin olun."
+            )
             return False
         except Exception as e:
-            print(f"[bold red]✗[/bold red] Bağımlılık kurulumunda beklenmeyen hata: {e}")
+            print(
+                f"[bold red]✗[/bold red] Bağımlılık kurulumunda beklenmeyen hata: {e}"
+            )
             logger.exception("Bağımlılık kurulumu hatası")
             return False
 
-    def _extract_requirements(self, content: str) -> List[str]:
+    def _extract_requirements(self, content: str) -> list[str]:
         """
         Modül kaynak kodundan Requirements dict'indeki python bağımlılıklarını çıkarır.
         Basit metin ayrıştırma kullanır.
@@ -505,7 +554,11 @@ class ModuleDownloader:
                     in_python = True
                     # Aynı satırda liste varsa çıkar
                     if "[" in stripped:
-                        bracket_content = stripped[stripped.index("["):stripped.index("]") + 1] if "]" in stripped else ""
+                        bracket_content = (
+                            stripped[stripped.index("[") : stripped.index("]") + 1]
+                            if "]" in stripped
+                            else ""
+                        )
                         for item in bracket_content.strip("[]").split(","):
                             item = item.strip().strip("'\"")
                             if item:
@@ -538,7 +591,7 @@ class ModuleDownloader:
     # VERSİYON KONTROLÜ VE GÜNCELLEME
     # =========================================================================
 
-    def check_updates(self, module_key: Optional[str] = None) -> List[Dict[str, Any]]:
+    def check_updates(self, module_key: str | None = None) -> list[dict[str, Any]]:
         """
         Kurulu modüllerin versiyon kontrolünü yapar.
         Depodaki modülle karşılaştırarak güncellenebilir olanları bulur.
@@ -550,11 +603,13 @@ class ModuleDownloader:
         Returns:
             List[Dict[str, Any]]: Güncellenebilir modüllerin listesi.
         """
-        updates_available: list[Dict[str, Any]] = []
+        updates_available: list[dict[str, Any]] = []
 
         if module_key:
             if module_key not in self.installed:
-                print(f"[bold red]Hata:[/bold red] '{module_key}' kurulu modüller arasında bulunamadı.")
+                print(
+                    f"[bold red]Hata:[/bold red] '{module_key}' kurulu modüller arasında bulunamadı."
+                )
                 return updates_available
             modules_to_check = {module_key: self.installed[module_key]}
         else:
@@ -587,13 +642,15 @@ class ModuleDownloader:
 
             # Basit versiyon karşılaştırması
             if self._is_newer_version(repo_version, installed_version):
-                updates_available.append({
-                    "module": mod_key,
-                    "repo": repo_name,
-                    "installed_version": installed_version,
-                    "available_version": repo_version,
-                    "source_path": source_path,
-                })
+                updates_available.append(
+                    {
+                        "module": mod_key,
+                        "repo": repo_name,
+                        "installed_version": installed_version,
+                        "available_version": repo_version,
+                        "source_path": source_path,
+                    }
+                )
 
         return updates_available
 
@@ -632,7 +689,9 @@ class ModuleDownloader:
             bool: Güncelleme başarılı ise True.
         """
         if module_key not in self.installed:
-            print(f"[bold red]Hata:[/bold red] '{module_key}' kurulu modüller arasında bulunamadı.")
+            print(
+                f"[bold red]Hata:[/bold red] '{module_key}' kurulu modüller arasında bulunamadı."
+            )
             return False
 
         record = self.installed[module_key]
@@ -640,7 +699,7 @@ class ModuleDownloader:
         source_path = record.get("source_path", "")
 
         if not repo_name or not source_path:
-            print(f"[bold red]Hata:[/bold red] Modül kaynak bilgisi eksik.")
+            print("[bold red]Hata:[/bold red] Modül kaynak bilgisi eksik.")
             return False
 
         # Mevcut kaydı sil ve yeniden kur (force)
@@ -654,7 +713,9 @@ class ModuleDownloader:
                 self.save_installed()
 
             new_version = self.installed.get(module_key, {}).get("version", "?")
-            print(f"[bold cyan]📦 Güncelleme:[/bold cyan] {old_version} → {new_version}")
+            print(
+                f"[bold cyan]📦 Güncelleme:[/bold cyan] {old_version} → {new_version}"
+            )
             return True
 
         return False
@@ -663,7 +724,7 @@ class ModuleDownloader:
     # KURULU MODÜL LİSTELEME
     # =========================================================================
 
-    def list_installed(self) -> Dict[str, Dict[str, Any]]:
+    def list_installed(self) -> dict[str, dict[str, Any]]:
         """
         Kurulu tüm modüllerin kayıtlarını döndürür.
 
@@ -672,7 +733,7 @@ class ModuleDownloader:
         """
         return self.installed
 
-    def get_installed_module_keys(self) -> List[str]:
+    def get_installed_module_keys(self) -> list[str]:
         """
         Kurulu tüm modüllerin anahtar (yol) listesini döndürür.
 

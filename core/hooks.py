@@ -8,15 +8,15 @@ from enum import Enum
 class HookType(Enum):
     """
     Plugin (Eklenti) Hook Türleri.
-    
+
     Bu enum sınıfı, eklentilerin hangi olayları dinleyebileceğini tanımlar.
     Her bir eleman, framework içinde gerçekleşen belirli bir ana veya olaya karşılık gelir.
     """
-    
+
     # ==============================================================================
     # Framework Yaşam Döngüsü (Lifecycle) Hook'ları
     # ==============================================================================
-    
+
     ON_STARTUP = "on_startup"
     """
     Framework tamamen başlatıldığında, ancak kullanıcı etkileşimine girmeden hemen önce tetiklenir.
@@ -25,7 +25,7 @@ class HookType(Enum):
     - Otomatik bağlantı kontrolleri yapmak.
     - Arka plan servislerini başlatmak.
     """
-    
+
     ON_SHUTDOWN = "on_shutdown"
     """
     Framework kapatılma sürecine girdiğinde tetiklenir.
@@ -34,11 +34,11 @@ class HookType(Enum):
     - Geçici dosyaları silmek.
     - Oturum raporlarını kaydetmek.
     """
-    
+
     # ==============================================================================
     # Komut Çalıştırma (Command Execution) Hook'ları
     # ==============================================================================
-    
+
     PRE_COMMAND = "pre_command"
     """
     Kullanıcının girdiği herhangi bir komut çalıştırılmadan HEMEN ÖNCE tetiklenir.
@@ -47,7 +47,7 @@ class HookType(Enum):
     - Komut yetkilendirmesi veya kısıtlaması uygulamak.
     - Komut parametrelerini manipüle etmek (gelişmiş senaryolar).
     """
-    
+
     POST_COMMAND = "post_command"
     """
     Komut çalıştırılıp işi bittikten SONRA (başarılı veya başarısız) tetiklenir.
@@ -55,11 +55,11 @@ class HookType(Enum):
     - Komut sonucunu bildirmek.
     - Başarısız komutlarda hata analizi veya öneri sunmak.
     """
-    
+
     # ==============================================================================
     # Modül Çalıştırma (Module Execution) Hook'ları
     # ==============================================================================
-    
+
     PRE_MODULE_RUN = "pre_module_run"
     """
     Seçili bir modül 'run' veya 'exploit' komutuyla çalıştırılmadan önce tetiklenir.
@@ -67,7 +67,7 @@ class HookType(Enum):
     - Gerekli seçeneklerin (options) doluluğunu son kez kontrol etmek.
     - Hedef sistemin erişilebilirliğini doğrulamak.
     """
-    
+
     POST_MODULE_RUN = "post_module_run"
     """
     Modül çalışmasını tamamladıktan sonra tetiklenir.
@@ -75,7 +75,7 @@ class HookType(Enum):
     - Elde edilen sonuçları (başarı/başarısızlık) raporlamak.
     - Modül çıktısını ayrıştırıp veritabanına kaydetmek.
     """
-    
+
     ON_MODULE_SELECT = "on_module_select"
     """
     Kullanıcı 'use' komutuyla yeni bir modül seçtiğinde tetiklenir.
@@ -83,11 +83,11 @@ class HookType(Enum):
     - Modüle özgü yardım metnini otomatik göstermek.
     - Modül için varsayılan ayarları yüklemek.
     """
-    
+
     # ==============================================================================
     # Seçenek Yönetimi (Option Management) Hook'ları
     # ==============================================================================
-    
+
     ON_OPTION_SET = "on_option_set"
     """
     Kullanıcı 'set' komutuyla bir modül seçeneğini değiştirdiğinde tetiklenir.
@@ -99,7 +99,7 @@ class HookType(Enum):
     # ==============================================================================
     # Oturum Yönetimi (Session Management) Hook'ları
     # ==============================================================================
-    
+
     ON_SESSION_OPEN = "on_session_open"
     """
     Yeni bir oturum (bağlantı) başarıyla açıldığında tetiklenir.
@@ -107,7 +107,7 @@ class HookType(Enum):
     - Hedefe dair bilgileri (IP vb.) kaydetmek.
     - Bağlantı açıldığında Telegram/Discord gibi yerlere bildirim göndermek.
     """
-    
+
     ON_SESSION_CLOSE = "on_session_close"
     """
     Bir oturum kapatıldığında (veya koptuğunda) tetiklenir.
@@ -115,11 +115,11 @@ class HookType(Enum):
     - Bağlantı kaybında uyarı vermek.
     - Oturum bitiminde otomatik log yedeklemesi yapmak.
     """
-    
+
     # ==============================================================================
     # Hata (Error) Hook'ları
     # ==============================================================================
-    
+
     ON_ERROR = "on_error"
     """
     Uygulama içinde bir HATA veya İSTİSNA oluştuğunda tetiklenir.

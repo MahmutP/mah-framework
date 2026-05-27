@@ -1,50 +1,52 @@
 # Bu dosya, tüm komutların türetileceği temel 'Command' sınıfını tanımlar.
 # Type hinting (tür ipuçları) için gerekli kütüphaneler içe aktarılıyor.
-from typing import List, Dict, Any, Callable, Optional 
+from collections.abc import Callable
+from typing import Any
 
-# Uygulamanın genel durumunu (shared state) paylaşmak için kullanılan modül.
-# Bu sayede komutlar arasında veya komutlar ile ana uygulama arasında veri paylaşımı yapılabilir.
-from core.shared_state import shared_state 
+# Konsol çıktılarını renklendirmek ve biçimlendirmek için 'rich' kütüphanesi kullanılıyor.
+from rich import print
 
 # Komut kategorilerini tanımlayan sabit sözlük.
 # Bu sözlük, komutların kullanıcı arayüzünde gruplandırılmasına yardımcı olur.
 from core.cont import COMMAND_CATEGORIES
 
-# Konsol çıktılarını renklendirmek ve biçimlendirmek için 'rich' kütüphanesi kullanılıyor.
-from rich import print
+# Uygulamanın genel durumunu (shared state) paylaşmak için kullanılan modül.
+# Bu sayede komutlar arasında veya komutlar ile ana uygulama arasında veri paylaşımı yapılabilir.
+from core.shared_state import shared_state
+
 
 class Command:
     """
     Tüm komutların miras alacağı temel (base) sınıf.
     Her yeni komut bu sınıftan türetilmeli ve gerekli özellikleri/metodları eze (override) etmelidir.
     """
-    
+
     # Komutun adı. Konsolda bu isim yazılarak komut çalıştırılır.
-    Name: str = "COMMAND" 
-    
+    Name: str = "COMMAND"
+
     # Komutun ne işe yaradığını açıklayan kısa bir metin. Yardım çıktılarında görünür.
-    Description: str = "Description for command" 
-    
+    Description: str = "Description for command"
+
     # Komutun ait olduğu kategori (örn: 'core', 'module', 'network').
     # Bu kategori, help komutunda komutların gruplanmasını sağlar.
-    Category: str = "core" 
-    
+    Category: str = "core"
+
     # Komut için alternatif isimler (takma adlar).
     # Örneğin 'list' komutu için ['ls', 'dir'] gibi alias'lar tanımlanabilir.
     # Bu özellik, aliases.json dosyasından bağımsız olarak kod içinde alias tanımlamaya olanak tanır.
-    Aliases: List[str] = [] 
-    
+    Aliases: list[str] = []
+
     # Komutun nasıl kullanılacağını gösteren sözdizimi (syntax).
     # Örn: "set <option> <değer>"
-    Usage: str = "" 
-    
+    Usage: str = ""
+
     # Komutun örnek kullanım senaryoları. Kullanıcıya rehberlik etmek için listelenir.
-    Examples: List[str] = [] 
-    
+    Examples: list[str] = []
+
     # Otomatik tamamlama (tab completion) fonksiyonu.
     # prompt_toolkit veya benzeri kütüphanelerle entegre çalışarak komut argümanlarını tamamlar.
     # Opsiyoneldir, her komut için tanımlanmak zorunda değildir.
-    completer_function: Optional[Callable] = None 
+    completer_function: Callable | None = None
 
     def __init__(self) -> None:
         """
@@ -58,11 +60,11 @@ class Command:
         """
         Komutun asıl işlevini yerine getiren metod.
         Her alt sınıf bu metodu eze (override) etmeli ve kendi mantığını buraya yazmalıdır.
-        
+
         Args:
             *args: Komuta verilen pozisyonel argümanlar.
             **kwargs: Komuta verilen isimlendirilmiş argümanlar (anahtar-değer çiftleri).
-            
+
         Returns:
             bool: Komut başarıyla çalıştıysa True, hata varsa veya başarısızsa False döner.
         """
@@ -72,9 +74,9 @@ class Command:
     def get_category_display_name(self) -> str:
         """
         Komutun kategorisinin kullanıcı dostu (görünen) adını döndürür.
-        core.cont.COMMAND_CATEGORIES sözlüğünü kullanarak kategori kodunu (örn: 'core') 
+        core.cont.COMMAND_CATEGORIES sözlüğünü kullanarak kategori kodunu (örn: 'core')
         okunabilir bir isme çevirir.
-        
+
         Returns:
             str: Kategorinin görünen adı. Eğer kategori bulunamazsa varsayılan olarak "Diğer Komutlar" döner.
         """
@@ -82,15 +84,15 @@ class Command:
         # Eğer sözlükte karşılığı yoksa ikinci argüman olan "Diğer Komutlar" döndürülür.
         return COMMAND_CATEGORIES.get(self.Category.lower(), "Diğer Komutlar")
 
-    def get_completions(self, text: str, word_before_cursor: str) -> List[str]:
+    def get_completions(self, text: str, word_before_cursor: str) -> list[str]:
         """
         Komut argümanları için otomatik tamamlama önerileri sunar.
         Eğer bu komut için özel bir 'completer_function' tanımlanmışsa, onu çağırır.
-        
+
         Args:
             text (str): Kullanıcının o ana kadar yazdığı tüm metin.
             word_before_cursor (str): İmlecin hemen öncesindeki kelime (tamamlanacak kısım).
-            
+
         Returns:
             List[str]: Önerilen tamamlamaların listesi.
         """
@@ -104,6 +106,6 @@ class Command:
                 # Bu sayede bir komutun tamamlama hatası tüm programı çökertmez.
                 print(f"Komut '{self.Name}' tamamlama fonksiyonunda hata: {e}")
                 return []
-        
+
         # Eğer tamamlama fonksiyonu yoksa boş liste dön.
         return []

@@ -10,22 +10,18 @@ LOG_LEVELS = {
     # Hata ayıklama seviyesi: Geliştirme sırasında detaylı bilgileri loglamak için kullanılır.
     # Değişken değerleri, fonksiyon giriş-çıkışları gibi detaylar buradadır.
     "DEBUG": 10,
-    
     # Bilgi seviyesi: Uygulamanın normal çalışması sırasındaki önemli olayları loglar.
     # Örn: "Sunucu başlatıldı", "Bağlantı kabul edildi".
     "INFO": 20,
-    
     # Uyarı seviyesi: Potansiyel sorunlara işaret eden ancak uygulamayı durdurmayan olayları loglar.
     # Örn: "Disk alanı azalıyor", "Bilinmeyen yapılandırma parametresi".
     "WARNING": 30,
-    
     # Hata seviyesi: Bir işlevin düzgün çalışmasını engelleyen hataları loglar.
     # Örn: "Dosya bulunamadı", "Bağlantı koptu".
     "ERROR": 40,
-    
     # Kritik seviye: Uygulamanın tamamen durmasına neden olabilecek çok ciddi hataları loglar.
     # Örn: "Bellek doldu", "Çekirdek modül yüklenemedi".
-    "CRITICAL": 50
+    "CRITICAL": 50,
 }
 
 # Varsayılan loglama seviyesi. Bu seviyedeki ve bu seviyeden daha yüksek
@@ -88,13 +84,13 @@ TAB_SPING = 8
 # Komutların kategorilerini ve bunların kullanıcıya gösterilecek başlıklarını
 # tanımlayan sözlük. Bu, 'help' komutunun çıktısını düzenler ve gruplar.
 COMMAND_CATEGORIES = {
-    "core": "Core Commands",      # Uygulamanın temel komutları (help, exit, vb.)
+    "core": "Core Commands",  # Uygulamanın temel komutları (help, exit, vb.)
     "module": "Module Commands",  # Modüllerle etkileşim komutları (use, set, run, vb.)
-    "system": "System Commands"   # Sistemle ilgili komutlar (alias, clear, shell, vb.)
+    "system": "System Commands",  # Sistemle ilgili komutlar (alias, clear, shell, vb.)
 }
 
 # Modül seçenekleri (Option) için varsayılan regex deseni.
-# Bir seçenek için özel bir doğrulama kuralı (regex) tanımlanmadığında, 
+# Bir seçenek için özel bir doğrulama kuralı (regex) tanımlanmadığında,
 # bu desen (herhangi bir karakter dizisi) kullanılır.
 DEFAULT_REGEX = r".*"
 

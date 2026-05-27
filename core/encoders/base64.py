@@ -3,15 +3,16 @@
 
 import base64
 
+
 class Base64Encoder:
     """
     Basit Base64 Encoder (Şifreleyici).
-    
+
     Bu sınıf, özellikle statik analiz araçlarını yanıltmak veya kodu okunamaz hale getirmek için kullanılır.
     Ancak Base64 tersine çevrilebilir bir işlem olduğundan güçlü bir kriptografi sağlamaz,
     sadece obfuscation (gizleme) sağlar.
     """
-    
+
     @staticmethod
     def encode(data: str) -> str:
         """
@@ -26,11 +27,11 @@ class Base64Encoder:
         """
         # 1. Veriyi UTF-8 bayt dizisine çevir.
         # 2. Base64 ile kodla (b'...' formatında bytes döner).
-        encoded_bytes = base64.b64encode(data.encode('utf-8'))
-        
+        encoded_bytes = base64.b64encode(data.encode("utf-8"))
+
         # 3. Kodlanmış baytları tekrar string formatına çevir (stub içine gömmek için).
-        encoded_str = encoded_bytes.decode('utf-8')
-        
+        encoded_str = encoded_bytes.decode("utf-8")
+
         # Stub (Koçbaşı) Kodu:
         # Bu kod hedef sistemde çalışacak olan kısımdır.
         # Şifreli veriyi alır, decode eder ve 'exec()' fonksiyonu ile çalıştırır.

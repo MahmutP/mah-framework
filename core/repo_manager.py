@@ -3,21 +3,22 @@
 # GitHub/GitLab gibi uzak kaynaklardan depo ekleme, güncelleme, listeleme ve silme işlemlerini sağlar.
 
 import json
-import subprocess
 import shutil
-from pathlib import Path
+import subprocess
 from datetime import datetime
-from typing import Dict, Optional, List, Any
+from pathlib import Path
+from typing import Any
 
-from core.cont import REPOS_FILE, REPOS_DIR
-from core import logger
 from rich import print
+
+from core import logger
+from core.cont import REPOS_DIR, REPOS_FILE
 
 
 class RepoManager:
     """
     Uzak Modül Deposu Yönetim Sınıfı (RepoManager).
-    
+
     Görevleri:
     1. Uzak depoları (GitHub/GitLab) kayıt altına almak.
     2. Depoları yerel diske klonlamak ve güncellemek.
@@ -32,7 +33,7 @@ class RepoManager:
         """
         self.repos_file = Path(REPOS_FILE)
         self.repos_dir = Path(REPOS_DIR)
-        self.repos: Dict[str, Dict[str, Any]] = {}
+        self.repos: dict[str, dict[str, Any]] = {}
 
         # Gerekli dosya ve dizinleri oluştur.
         self._ensure_repos_file()
@@ -48,7 +49,7 @@ class RepoManager:
         """
         if not self.repos_file.exists():
             self.repos_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.repos_file, 'w', encoding='utf-8') as f:
+            with open(self.repos_file, "w", encoding="utf-8") as f:
                 json.dump({}, f, indent=4)
             logger.info(f"Depo yapılandırma dosyası oluşturuldu: {REPOS_FILE}")
 
@@ -66,11 +67,13 @@ class RepoManager:
         Depo yapılandırma dosyasını okur ve belleğe yükler.
         """
         try:
-            with open(self.repos_file, 'r', encoding='utf-8') as f:
+            with open(self.repos_file, encoding="utf-8") as f:
                 self.repos = json.load(f)
             logger.info(f"{len(self.repos)} depo kaydı yüklendi")
         except FileNotFoundError:
-            logger.warning(f"Depo dosyası bulunamadı: {REPOS_FILE}. Yeni dosya oluşturuluyor.")
+            logger.warning(
+                f"Depo dosyası bulunamadı: {REPOS_FILE}. Yeni dosya oluşturuluyor."
+            )
             self._ensure_repos_file()
             self.repos = {}
         except json.JSONDecodeError as e:
@@ -83,12 +86,14 @@ class RepoManager:
         Mevcut depo kayıtlarını JSON dosyasına kaydeder.
         """
         try:
-            with open(self.repos_file, 'w', encoding='utf-8') as f:
+            with open(self.repos_file, "w", encoding="utf-8") as f:
                 json.dump(self.repos, f, indent=4, ensure_ascii=False)
         except PermissionError:
-            print(f"[bold red]Hata:[/bold red] Depo dosyası yazma izni hatası: {REPOS_FILE}")
+            print(
+                f"[bold red]Hata:[/bold red] Depo dosyası yazma izni hatası: {REPOS_FILE}"
+            )
             logger.exception("Depo dosyası yazma izni hatası")
-        except IOError as e:
+        except OSError as e:
             print(f"[bold red]Hata:[/bold red] Depo dosyası yazma hatası: {e}")
             logger.exception("Depo dosyası yazma hatası")
 
@@ -142,7 +147,9 @@ class RepoManager:
         # URL doğrulama
         if not self._validate_url(url):
             print(f"[bold red]Hata:[/bold red] Geçersiz depo URL'si: {url}")
-            print("   Desteklenen formatlar: https://github.com/..., git@github.com:...")
+            print(
+                "   Desteklenen formatlar: https://github.com/..., git@github.com:..."
+            )
             return False
 
         # Depo kaydını oluştur
@@ -150,7 +157,7 @@ class RepoManager:
             "url": url,
             "added_at": datetime.now().isoformat(),
             "updated_at": None,
-            "status": "added"
+            "status": "added",
         }
 
         self.save_repos()
@@ -174,7 +181,9 @@ class RepoManager:
         name = name.strip().lower()
 
         if name not in self.repos:
-            print(f"[bold red]Hata:[/bold red] '{name}' adında kayıtlı bir depo bulunamadı.")
+            print(
+                f"[bold red]Hata:[/bold red] '{name}' adında kayıtlı bir depo bulunamadı."
+            )
             return False
 
         # Klonlanmış dizini temizle
@@ -195,7 +204,7 @@ class RepoManager:
         print(f"[bold green]✓[/bold green] Depo silindi: [bold]{name}[/bold]")
         return True
 
-    def list_repos(self) -> Dict[str, Dict[str, Any]]:
+    def list_repos(self) -> dict[str, dict[str, Any]]:
         """
         Kayıtlı tüm depoları döndürür.
 
@@ -204,14 +213,14 @@ class RepoManager:
         """
         return self.repos
 
-    def update_repo(self, name: Optional[str] = None) -> bool:
+    def update_repo(self, name: str | None = None) -> bool:
         """
         Bir depoyu veya tüm depoları günceller (klonla / pull).
-        
+
         Eğer depo henüz klonlanmamışsa `git clone`, zaten mevcutsa `git pull` yapar.
 
         Args:
-            name (str, optional): Güncellenecek deponun adı. 
+            name (str, optional): Güncellenecek deponun adı.
                                    None ise tüm depolar güncellenir.
 
         Returns:
@@ -220,7 +229,9 @@ class RepoManager:
         if name:
             name = name.strip().lower()
             if name not in self.repos:
-                print(f"[bold red]Hata:[/bold red] '{name}' adında kayıtlı bir depo bulunamadı.")
+                print(
+                    f"[bold red]Hata:[/bold red] '{name}' adında kayıtlı bir depo bulunamadı."
+                )
                 return False
             return self._update_single_repo(name)
         else:
@@ -229,7 +240,9 @@ class RepoManager:
                 print("[bold yellow]⚠[/bold yellow] Kayıtlı depo bulunamadı.")
                 return False
 
-            print(f"[bold cyan]🔄 {len(self.repos)} depo güncelleniyor...[/bold cyan]\n")
+            print(
+                f"[bold cyan]🔄 {len(self.repos)} depo güncelleniyor...[/bold cyan]\n"
+            )
             all_success = True
             for repo_name in self.repos:
                 if not self._update_single_repo(repo_name):
@@ -278,18 +291,22 @@ class RepoManager:
                 ["git", "clone", "--depth", "1", url, str(dest)],
                 capture_output=True,
                 text=True,
-                timeout=120
+                timeout=120,
             )
 
             if result.returncode == 0:
                 self.repos[name]["status"] = "cloned"
                 self.repos[name]["updated_at"] = datetime.now().isoformat()
                 self.save_repos()
-                print(f"[bold green]✓[/bold green] Başarıyla klonlandı: [bold]{name}[/bold]")
+                print(
+                    f"[bold green]✓[/bold green] Başarıyla klonlandı: [bold]{name}[/bold]"
+                )
                 logger.info(f"Depo klonlandı: {name} -> {dest}")
                 return True
             else:
-                error_msg = result.stderr.strip() if result.stderr else "Bilinmeyen hata"
+                error_msg = (
+                    result.stderr.strip() if result.stderr else "Bilinmeyen hata"
+                )
                 print(f"[bold red]✗[/bold red] Klonlama başarısız: {error_msg}")
                 self.repos[name]["status"] = "error"
                 self.save_repos()
@@ -301,7 +318,9 @@ class RepoManager:
             logger.warning(f"Depo klonlama zaman aşımı: {name}")
             return False
         except FileNotFoundError:
-            print("[bold red]✗[/bold red] Git bulunamadı. Lütfen Git'in kurulu olduğundan emin olun.")
+            print(
+                "[bold red]✗[/bold red] Git bulunamadı. Lütfen Git'in kurulu olduğundan emin olun."
+            )
             logger.error("Git komutu bulunamadı")
             return False
         except Exception as e:
@@ -328,7 +347,7 @@ class RepoManager:
                 capture_output=True,
                 text=True,
                 cwd=str(repo_path),
-                timeout=60
+                timeout=60,
             )
 
             if result.returncode == 0:
@@ -338,14 +357,20 @@ class RepoManager:
                 self.save_repos()
 
                 if "Already up to date" in output or "Already up-to-date" in output:
-                    print(f"[bold green]✓[/bold green] Zaten güncel: [bold]{name}[/bold]")
+                    print(
+                        f"[bold green]✓[/bold green] Zaten güncel: [bold]{name}[/bold]"
+                    )
                 else:
-                    print(f"[bold green]✓[/bold green] Güncellendi: [bold]{name}[/bold]")
+                    print(
+                        f"[bold green]✓[/bold green] Güncellendi: [bold]{name}[/bold]"
+                    )
 
                 logger.info(f"Depo güncellendi: {name}")
                 return True
             else:
-                error_msg = result.stderr.strip() if result.stderr else "Bilinmeyen hata"
+                error_msg = (
+                    result.stderr.strip() if result.stderr else "Bilinmeyen hata"
+                )
                 print(f"[bold red]✗[/bold red] Güncelleme başarısız: {error_msg}")
                 self.repos[name]["status"] = "error"
                 self.save_repos()
@@ -361,7 +386,7 @@ class RepoManager:
             logger.exception(f"Depo güncelleme hatası: {name}")
             return False
 
-    def get_repo(self, name: str) -> Optional[Dict[str, Any]]:
+    def get_repo(self, name: str) -> dict[str, Any] | None:
         """
         Belirtilen depo bilgilerini döndürür.
 
@@ -373,7 +398,7 @@ class RepoManager:
         """
         return self.repos.get(name.strip().lower())
 
-    def get_repo_names(self) -> List[str]:
+    def get_repo_names(self) -> list[str]:
         """
         Kayıtlı tüm depo isimlerini döndürür.
 

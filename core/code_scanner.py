@@ -1,31 +1,30 @@
 import ast
-from typing import List, Tuple, Optional
 
-EXECUTION_PATTERNS: List[Tuple[str, str, str]] = [
-    ("eval",        "execution",  "eval() çağrısı tespit edildi"),
-    ("exec",        "execution",  "exec() çağrısı tespit edildi"),
-    ("compile",     "execution",  "compile() çağrısı tespit edildi"),
-    ("__import__",  "execution",  "__import__() çağrısı tespit edildi"),
+EXECUTION_PATTERNS: list[tuple[str, str, str]] = [
+    ("eval", "execution", "eval() çağrısı tespit edildi"),
+    ("exec", "execution", "exec() çağrısı tespit edildi"),
+    ("compile", "execution", "compile() çağrısı tespit edildi"),
+    ("__import__", "execution", "__import__() çağrısı tespit edildi"),
 ]
 
-SHELL_PATTERNS: List[Tuple[str, str, str]] = [
-    ("os.system",   "subprocess", "os.system() çağrısı tespit edildi"),
-    ("os.popen",    "subprocess", "os.popen() çağrısı tespit edildi"),
-    ("os.execl",    "subprocess", "os.execl/p/pe/le() çağrısı tespit edildi"),
+SHELL_PATTERNS: list[tuple[str, str, str]] = [
+    ("os.system", "subprocess", "os.system() çağrısı tespit edildi"),
+    ("os.popen", "subprocess", "os.popen() çağrısı tespit edildi"),
+    ("os.execl", "subprocess", "os.execl/p/pe/le() çağrısı tespit edildi"),
 ]
 
-NATIVE_PATTERNS: List[Tuple[str, str, str]] = [
-    ("ctypes.CDLL",     "native",  "ctypes.CDLL() çağrısı tespit edildi"),
+NATIVE_PATTERNS: list[tuple[str, str, str]] = [
+    ("ctypes.CDLL", "native", "ctypes.CDLL() çağrısı tespit edildi"),
     ("ctypes.LoadLibrary", "native", "ctypes.LoadLibrary() çağrısı tespit edildi"),
-    ("ctypes.WinDLL",   "native",  "ctypes.WinDLL() çağrısı tespit edildi"),
+    ("ctypes.WinDLL", "native", "ctypes.WinDLL() çağrısı tespit edildi"),
 ]
 
 
 class ScanResult:
     def __init__(self, file_path: str):
         self.file_path = file_path
-        self.dangerous: List[Tuple[str, str, str, int]] = []
-        self.errors: List[str] = []
+        self.dangerous: list[tuple[str, str, str, int]] = []
+        self.errors: list[str] = []
 
     @property
     def is_safe(self) -> bool:
@@ -43,7 +42,7 @@ class ScanResult:
 def scan_file(file_path: str, strict: bool = False) -> ScanResult:
     result = ScanResult(file_path)
     try:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(file_path, encoding="utf-8", errors="ignore") as f:
             source = f.read()
     except Exception as e:
         result.errors.append(f"Dosya okunamadı: {e}")
@@ -75,15 +74,25 @@ def scan_file(file_path: str, strict: bool = False) -> ScanResult:
             if func_name == pattern or func_name.endswith("." + pattern):
                 result.dangerous.append((pattern, category, desc, node.lineno))
 
-        if strict and isinstance(node.func, ast.Attribute) and node.func.attr in ("Popen", "run", "call", "check_call", "check_output"):
+        if (
+            strict
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in ("Popen", "run", "call", "check_call", "check_output")
+        ):
             for kw in node.keywords:
-                if kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True:
-                    result.dangerous.append((
-                        f"subprocess.{node.func.attr}(shell=True)",
-                        "subprocess",
-                        f"subprocess.{node.func.attr}() shell=True ile çağrılmış",
-                        node.lineno
-                    ))
+                if (
+                    kw.arg == "shell"
+                    and isinstance(kw.value, ast.Constant)
+                    and kw.value.value is True
+                ):
+                    result.dangerous.append(
+                        (
+                            f"subprocess.{node.func.attr}(shell=True)",
+                            "subprocess",
+                            f"subprocess.{node.func.attr}() shell=True ile çağrılmış",
+                            node.lineno,
+                        )
+                    )
 
     deduped = []
     seen = set()
@@ -97,7 +106,7 @@ def scan_file(file_path: str, strict: bool = False) -> ScanResult:
     return result
 
 
-def _get_full_func_name(node: ast.AST) -> Optional[str]:
+def _get_full_func_name(node: ast.AST) -> str | None:
     if isinstance(node, ast.Name):
         return node.id
     elif isinstance(node, ast.Attribute):
@@ -116,6 +125,7 @@ def _get_full_func_name(node: ast.AST) -> Optional[str]:
 
 def print_scan_report(result: ScanResult) -> None:
     from rich import print
+
     if result.errors:
         for err in result.errors:
             print(f"  [bold red]✗ Tarama hatası:[/bold red] {err}")

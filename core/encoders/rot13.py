@@ -1,24 +1,25 @@
-from typing import Any
 import codecs
+from typing import Any
+
 
 class Rot13Encoder:
     """
     Kodu ROT13 şifreleme algoritmasıyla maskeleyen encoder.
     """
-    
+
     @staticmethod
     def encode(data: str, **kwargs: Any) -> str:
         """
         Verilen kaynak kodunu ROT13 formatına çevirir.
-        
+
         Args:
             data (str): Şifrelenecek ham Python kodu.
-            
+
         Returns:
             str: Şifrelenmiş ve çalıştırılabilir stub kodu.
         """
-        encoded_str = codecs.encode(data, 'rot13')
-        
+        encoded_str = codecs.encode(data, "rot13")
+
         # Orijinal koddaki escape karakterlerinin (örn \n) rot13 sonrası decode
         # edilirken sorun yaratmaması için raw string veya üçlü tırnak kullanıyoruz.
         stub = f'''

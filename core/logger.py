@@ -2,87 +2,92 @@
 
 Bu modül, uygulamanın tüm olaylarını, komut yürütmelerini ve hataları
 'config/logs/' dizinine kaydeder.
-Loglama için 'loguru' kütüphanesi kullanılır, bu da standart logging modülüne göre 
+Loglama için 'loguru' kütüphanesi kullanılır, bu da standart logging modülüne göre
 daha kolay yapılandırma ve daha iyi performans sağlar.
 """
 
-from typing import Any
-from pathlib import Path
-from loguru import logger
 import sys
+from pathlib import Path
+from typing import Any
+
+from loguru import logger
 
 # Log dosyalarının saklanacağı ana dizin ve dosya yolu belirleniyor.
 # __file__ ile bu dosyanın bulunduğu konumu alıp, iki üst dizine (framework köküne) çıkarız.
 LOG_DIR = Path(__file__).parent.parent / "config" / "logs"
 LOG_FILE = LOG_DIR / "app.log"
 
-# Logger instance'ı (örneği). 
+# Logger instance'ı (örneği).
 # Loguru aslında tekil (singleton) bir logger sağlar ama uyumluluk ve kolay erişim için değişkene atıyoruz.
 _logger = logger
+
 
 def setup_logger() -> Any:
     """
     Logger'ı yapılandırır ve başlatır.
     Bu fonksiyon uygulamanın en başında çalıştırılmalıdır.
-    
+
     Yapılandırma detayları:
     1. Log dizini yoksa oluşturur.
     2. Konsola (stderr) sadece ERROR seviyesindeki kritik mesajları basar.
     3. Dosyaya (app.log) tüm detayları (DEBUG seviyesi dahil) yazar.
     4. Dosya boyutuna göre otomatik döndürme (rotation) ve eski dosyaları silme (retention) yapar.
-    
+
     Returns:
         loguru.logger: Yapılandırılmış logger nesnesi.
     """
     global _logger
-    
+
     # Log dizinini oluştur (parents=True: aradaki eksik klasörleri de oluşturur)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
-    
+
     # Mevcut tüm handler'ları (işleyicileri) temizle.
     # Loguru varsayılan olarak stderr'e her şeyi basar, bunu istemiyoruz.
     _logger.remove()
-    
+
     # ==============================================================================
     # 1. Konsol Çıktısı (Handler)
     # ==============================================================================
     # Konsola sadece hataları basacağız, böylece kullanıcının ekranı debug mesajlarıyla dolmaz.
     _logger.add(
-        sys.stderr, # Çıktı hedefi (Standard Error Stream)
-        format="<level>{level: <8}</level> | <level>{message}</level>", # Basit format
-        level="ERROR" # Sadece ERROR ve üzeri (CRITICAL) mesajları göster
+        sys.stderr,  # Çıktı hedefi (Standard Error Stream)
+        format="<level>{level: <8}</level> | <level>{message}</level>",  # Basit format
+        level="ERROR",  # Sadece ERROR ve üzeri (CRITICAL) mesajları göster
     )
-    
+
     # ==============================================================================
     # 2. Dosya Çıktısı (Handler)
     # ==============================================================================
     # Dosyaya her şeyi (DEBUG dahil) detaylı bir şekilde yazacağız.
     _logger.add(
-        LOG_FILE, # Hedef dosya yolu
-        rotation="500 MB", # Dosya 500 MB olunca yeni dosyaya geç (app.log.1, app.log.2...)
-        retention="10 days", # 10 günden eski log dosyalarını otomatik sil
-        encoding="utf-8", # Türkçe karakter sorunu olmaması için UTF-8
+        LOG_FILE,  # Hedef dosya yolu
+        rotation="500 MB",  # Dosya 500 MB olunca yeni dosyaya geç (app.log.1, app.log.2...)
+        retention="10 days",  # 10 günden eski log dosyalarını otomatik sil
+        encoding="utf-8",  # Türkçe karakter sorunu olmaması için UTF-8
         # Detaylı format: Tarih | Seviye | Dosya:Fonksiyon:Satır - Mesaj
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
-        level="DEBUG" # En düşük seviye, yani her şeyi kaydet
+        level="DEBUG",  # En düşük seviye, yani her şeyi kaydet
     )
-    
+
     return _logger
+
 
 def get_logger() -> Any:
     """
     Mevcut ve yapılandırılmış logger nesnesini döndürür.
     Eğer logger henüz yapılandırılmamışsa, lazy initialization (talep anında başlatma) yapar.
-    
+
     Returns:
         loguru.logger: Kullanıma hazır logger nesnesi.
     """
     # Aşağıdaki yardımcı fonksiyon sayesinde, logger yapılandırılmamışsa bile otomatik yapılandırılır.
     return _logger
 
+
 # Logger'ın başlatılıp başlatılmadığını takip eden bayrak (flag).
 # Modül seviyesinde global bir değişkendir.
 _initialized = False
+
 
 def initialize_logging_if_needed() -> None:
     """
@@ -95,11 +100,13 @@ def initialize_logging_if_needed() -> None:
         setup_logger()
         _initialized = True
 
+
 # ==============================================================================
 # Kolaylık Fonksiyonları (Wrapper Functions)
 # ==============================================================================
 # Geliştiricilerin direkt `core.logger.debug("mesaj")` şeklinde kullanabilmesi için
 # Loguru metodlarını sarmalıyoruz (wrap). Ayrıca her çağrıda başlatma kontrolü yapıyoruz.
+
 
 def debug(message: str) -> None:
     """
@@ -136,10 +143,13 @@ def error(message: str) -> None:
     initialize_logging_if_needed()
     _logger.error(message)
     try:
-        from core.shared_state import shared_state
         from core.hooks import HookType
-        if hasattr(shared_state, 'plugin_manager') and shared_state.plugin_manager:
-            shared_state.plugin_manager.trigger_hook(HookType.ON_ERROR, message=message, level="error")
+        from core.shared_state import shared_state
+
+        if hasattr(shared_state, "plugin_manager") and shared_state.plugin_manager:
+            shared_state.plugin_manager.trigger_hook(
+                HookType.ON_ERROR, message=message, level="error"
+            )
     except Exception:
         pass
 
@@ -162,9 +172,12 @@ def exception(message: str) -> None:
     initialize_logging_if_needed()
     _logger.exception(message)
     try:
-        from core.shared_state import shared_state
         from core.hooks import HookType
-        if hasattr(shared_state, 'plugin_manager') and shared_state.plugin_manager:
-            shared_state.plugin_manager.trigger_hook(HookType.ON_ERROR, message=message, level="exception")
+        from core.shared_state import shared_state
+
+        if hasattr(shared_state, "plugin_manager") and shared_state.plugin_manager:
+            shared_state.plugin_manager.trigger_hook(
+                HookType.ON_ERROR, message=message, level="exception"
+            )
     except Exception:
         pass

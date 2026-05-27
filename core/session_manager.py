@@ -1,34 +1,37 @@
 # Framework'ün oturum (session) yönetiminden sorumlu modül.
 # Bağlantı kurulan hedef sistemlerle (exploit sonrası) olan etkileşimleri merkezi olarak yönetir.
 
-from typing import Dict, Any, Optional
 import threading
 import time
+from typing import Any
+
 
 class SessionManager:
     """
     Oturum (Session) Yönetim Sınıfı.
-    
+
     Bu sınıf, framework tarafından açılan tüm aktif bağlantıları izler.
     Reverse shell, bind shell veya diğer iletişim kanalları birer 'oturum' olarak burada saklanır.
     """
-    
+
     def __init__(self) -> None:
         """
         SessionManager başlatıcı.
         """
         # Aktif oturumları tutan sözlük.
         # Key: Session ID (int), Value: Oturum bilgilerini içeren sözlük.
-        self.sessions: Dict[int, Any] = {}
-        
+        self.sessions: dict[int, Any] = {}
+
         # Bir sonraki oturuma verilecek ID numarası. 1'den başlar.
         self.next_session_id = 1
-        
+
         # Thread güvenliği (Thread Safety) için kilit mekanizması.
         # Birden fazla handler aynı anda oturum eklemeye çalışırsa veri karışıklığını önler.
         self.lock = threading.Lock()
 
-    def add_session(self, handler_instance: Any, connection_info: Dict[str, Any]) -> int:
+    def add_session(
+        self, handler_instance: Any, connection_info: dict[str, Any]
+    ) -> int:
         """
         Yeni bir oturumu sisteme kaydeder.
         Bir handler (dinleyici) başarılı bir bağlantı aldığında bu metodu çağırır.
@@ -43,35 +46,36 @@ class SessionManager:
         # Kilidi al (başka thread'lerin araya girmesini engelle)
         with self.lock:
             session_id = self.next_session_id
-            
+
             # Oturum bilgilerini sözlüğe kaydet
             self.sessions[session_id] = {
                 "id": session_id,
-                "handler": handler_instance, # Oturumu yöneten nesne (komut göndermek için kullanılır)
-                "info": connection_info,     # Bağlantı bilgileri (gösterim için)
-                "status": "Active",          # Oturum durumu
-                "type": connection_info.get("type", "Generic"), # Oturum türü
+                "handler": handler_instance,  # Oturumu yöneten nesne (komut göndermek için kullanılır)
+                "info": connection_info,  # Bağlantı bilgileri (gösterim için)
+                "status": "Active",  # Oturum durumu
+                "type": connection_info.get("type", "Generic"),  # Oturum türü
                 # Metadata
                 "connected_at": time.time(),
-                "last_active": time.time()
+                "last_active": time.time(),
             }
-            
+
             # Bir sonraki ID'yi hazırla
             self.next_session_id += 1
-            
+
             # Eklentilere (plugin) haber ver
             try:
-                from core.shared_state import shared_state
                 from core.hooks import HookType
+                from core.shared_state import shared_state
+
                 if shared_state.plugin_manager:
                     shared_state.plugin_manager.trigger_hook(
                         HookType.ON_SESSION_OPEN,
                         session_id=session_id,
-                        info=connection_info
+                        info=connection_info,
                     )
             except Exception:
                 pass
-            
+
             return session_id
 
     def remove_session(self, session_id: int) -> None:
@@ -81,35 +85,35 @@ class SessionManager:
         with self.lock:
             if session_id in self.sessions:
                 session = self.sessions[session_id]
-                
+
                 # Handler'ın bağlantıyı düzgün kapatması için stop() metodunu çağır.
                 try:
                     session["handler"].stop()
                 except:
-                    pass # Zaten kapanmışsa hata verme
-                
+                    pass  # Zaten kapanmışsa hata verme
+
                 # Listeden kaydı sil
                 del self.sessions[session_id]
-                
+
                 # Eklentilere haber ver
                 try:
-                    from core.shared_state import shared_state
                     from core.hooks import HookType
+                    from core.shared_state import shared_state
+
                     if shared_state.plugin_manager:
                         shared_state.plugin_manager.trigger_hook(
-                            HookType.ON_SESSION_CLOSE,
-                            session_id=session_id
+                            HookType.ON_SESSION_CLOSE, session_id=session_id
                         )
                 except Exception:
                     pass
 
-    def get_session(self, session_id: int) -> Optional[Dict[str, Any]]:
+    def get_session(self, session_id: int) -> dict[str, Any] | None:
         """
         ID'si verilen oturumun bilgilerini döndürür.
         """
         return self.sessions.get(session_id)
 
-    def get_all_sessions(self) -> Dict[int, Any]:
+    def get_all_sessions(self) -> dict[int, Any]:
         """
         Aktif tüm oturumları döndürür.
         'sessions' komutu tarafından listeleme yapmak için kullanılır.
@@ -135,14 +139,14 @@ class SessionManager:
                 try:
                     if hasattr(session["handler"], "stop"):
                         session["handler"].stop()
-                    
+
                     try:
-                        from core.shared_state import shared_state
                         from core.hooks import HookType
+                        from core.shared_state import shared_state
+
                         if shared_state.plugin_manager:
                             shared_state.plugin_manager.trigger_hook(
-                                HookType.ON_SESSION_CLOSE,
-                                session_id=session_id
+                                HookType.ON_SESSION_CLOSE, session_id=session_id
                             )
                     except Exception:
                         pass

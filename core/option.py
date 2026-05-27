@@ -2,24 +2,34 @@
 # Modüllerin kullanıcıdan alacağı parametreleri (IP, Port, Dosya Yolu vb.) standartlaştırmak
 # ve doğrulamak (validation) için kullanılır.
 
-import re # Regular Expression (Düzenli İfade) modülü, girdi doğrulaması için.
-from typing import Any, Optional, List
-from core.cont import DEFAULT_REGEX # Varsayılan (her şeyi kabul eden) regex deseni.
+import re  # Regular Expression (Düzenli İfade) modülü, girdi doğrulaması için.
+from typing import Any
+
 from rich import print
+
+from core.cont import DEFAULT_REGEX  # Varsayılan (her şeyi kabul eden) regex deseni.
+
 
 class Option:
     """
     Modül Seçenek Sınıfı.
-    
+
     Her bir Option nesnesi, modülün çalışması için gereken bir parametreyi temsil eder.
     Örn: RHOST (Hedef IP), LPORT (Dinlenecek Port) vb.
     """
-    
-    def __init__(self, name: str, value: Any, required: bool, description: str, 
-                 regex_check: bool = False, regex: str = DEFAULT_REGEX,
-                 choices: Optional[List[Any]] = None,
-                 completion_dir: Optional[str] = None,
-                 completion_extensions: Optional[List[str]] = None):
+
+    def __init__(
+        self,
+        name: str,
+        value: Any,
+        required: bool,
+        description: str,
+        regex_check: bool = False,
+        regex: str = DEFAULT_REGEX,
+        choices: list[Any] | None = None,
+        completion_dir: str | None = None,
+        completion_extensions: list[str] | None = None,
+    ):
         """
         Option nesnesini başlatır.
 
@@ -34,21 +44,21 @@ class Option:
             completion_dir (str, optional): Dosya yolu tamamlaması için varsayılan dizin.
             completion_extensions (list, optional): Dosya tamamlamada sadece bu uzantıları göster (örn: ['.txt']).
         """
-        self.name = name 
-        self._value = value # Asıl değeri tutan gizli değişken
-        self.required = required 
-        self.description = description 
-        self.regex_check = regex_check 
-        self.regex = regex 
+        self.name = name
+        self._value = value  # Asıl değeri tutan gizli değişken
+        self.required = required
+        self.description = description
+        self.regex_check = regex_check
+        self.regex = regex
         self.choices = choices or []  # Otomatik tamamlama için seçenek listesi
-        self.completion_dir = completion_dir 
-        self.completion_extensions = completion_extensions 
+        self.completion_dir = completion_dir
+        self.completion_extensions = completion_extensions
 
     @property
     def value(self) -> Any:
         """
         Seçeneğin o anki değerini döndüren özellik (property).
-        
+
         Returns:
             Any: Seçeneğin değeri.
         """
@@ -66,9 +76,11 @@ class Option:
         # Eğer regex kontrolü aktifse
         if self.regex_check:
             if not re.fullmatch(self.regex, str(new_value)):
-                print(f"[bold red]Hata:[/bold red] '{new_value}' değeri '{self.name}' için geçersiz (regex: {self.regex})")
+                print(
+                    f"[bold red]Hata:[/bold red] '{new_value}' değeri '{self.name}' için geçersiz (regex: {self.regex})"
+                )
                 return
-        
+
         # Regex kontrolü yoksa veya geçildiyse değeri güncelle
         self._value = new_value
         # print(f"Option '{self.name}' set to '{self._value}'")
@@ -98,5 +110,5 @@ class Option:
             "description": self.description,
             "regex_check": self.regex_check,
             "regex": self.regex,
-            "choices": self.choices
+            "choices": self.choices,
         }

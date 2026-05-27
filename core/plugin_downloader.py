@@ -2,18 +2,19 @@
 # Uzak depolardan eklenti (plugin) indirme, imza doğrulama, bağımlılık kurma ve
 # versiyon kontrolü işlemlerini yöneten sınıf.
 
+import hashlib
+import importlib.util
 import json
 import shutil
-import hashlib
 import subprocess
-import importlib.util
-from pathlib import Path
 from datetime import datetime
-from typing import Dict, Optional, List, Any, Tuple
+from pathlib import Path
+from typing import Any
 
-from core.cont import REPOS_DIR, INSTALLED_PLUGINS_FILE, PLUGINS_DIR
-from core import logger
 from rich import print
+
+from core import logger
+from core.cont import INSTALLED_PLUGINS_FILE, PLUGINS_DIR, REPOS_DIR
 
 
 class PluginDownloader:
@@ -38,7 +39,7 @@ class PluginDownloader:
         self.repos_dir = Path(REPOS_DIR)
         self.plugins_dir = Path(plugins_dir)
         self.installed_file = Path(INSTALLED_PLUGINS_FILE)
-        self.installed: Dict[str, Dict[str, Any]] = {}
+        self.installed: dict[str, dict[str, Any]] = {}
 
         # Kurulum kayıt dosyasını hazırla ve yükle.
         self._ensure_installed_file()
@@ -51,24 +52,30 @@ class PluginDownloader:
         """
         if not self.installed_file.exists():
             self.installed_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.installed_file, 'w', encoding='utf-8') as f:
+            with open(self.installed_file, "w", encoding="utf-8") as f:
                 json.dump({}, f, indent=4)
-            logger.info(f"Kurulu eklenti kayıt dosyası oluşturuldu: {INSTALLED_PLUGINS_FILE}")
+            logger.info(
+                f"Kurulu eklenti kayıt dosyası oluşturuldu: {INSTALLED_PLUGINS_FILE}"
+            )
 
     def load_installed(self) -> None:
         """
         Kurulu eklenti kayıtlarını JSON dosyasından belleğe yükler.
         """
         try:
-            with open(self.installed_file, 'r', encoding='utf-8') as f:
+            with open(self.installed_file, encoding="utf-8") as f:
                 self.installed = json.load(f)
             logger.info(f"{len(self.installed)} kurulu eklenti kaydı yüklendi")
         except FileNotFoundError:
-            logger.warning(f"Kurulu eklenti dosyası bulunamadı: {INSTALLED_PLUGINS_FILE}")
+            logger.warning(
+                f"Kurulu eklenti dosyası bulunamadı: {INSTALLED_PLUGINS_FILE}"
+            )
             self._ensure_installed_file()
             self.installed = {}
         except json.JSONDecodeError as e:
-            logger.error(f"Kurulu eklenti dosyası okunamadı '{INSTALLED_PLUGINS_FILE}': {e}")
+            logger.error(
+                f"Kurulu eklenti dosyası okunamadı '{INSTALLED_PLUGINS_FILE}': {e}"
+            )
             print(f"[bold red]Hata:[/bold red] Kurulu eklenti kayıt dosyası bozuk: {e}")
             self.installed = {}
 
@@ -77,20 +84,24 @@ class PluginDownloader:
         Kurulu eklenti kayıtlarını JSON dosyasına kaydeder.
         """
         try:
-            with open(self.installed_file, 'w', encoding='utf-8') as f:
+            with open(self.installed_file, "w", encoding="utf-8") as f:
                 json.dump(self.installed, f, indent=4, ensure_ascii=False)
         except PermissionError:
-            print(f"[bold red]Hata:[/bold red] Kurulu eklenti dosyası yazma izni hatası: {INSTALLED_PLUGINS_FILE}")
+            print(
+                f"[bold red]Hata:[/bold red] Kurulu eklenti dosyası yazma izni hatası: {INSTALLED_PLUGINS_FILE}"
+            )
             logger.exception("Kurulu eklenti dosyası yazma izni hatası")
-        except IOError as e:
-            print(f"[bold red]Hata:[/bold red] Kurulu eklenti dosyası yazma hatası: {e}")
+        except OSError as e:
+            print(
+                f"[bold red]Hata:[/bold red] Kurulu eklenti dosyası yazma hatası: {e}"
+            )
             logger.exception("Kurulu eklenti dosyası yazma hatası")
 
     # =========================================================================
     # EKLENTİ TARAMA
     # =========================================================================
 
-    def scan_repos(self, search_term: Optional[str] = None) -> List[Dict[str, Any]]:
+    def scan_repos(self, search_term: str | None = None) -> list[dict[str, Any]]:
         """
         Klonlanmış depolardaki eklentileri tarar ve listeler.
         BasePlugin alt sınıfı içeren .py dosyalarını bulur.
@@ -101,7 +112,7 @@ class PluginDownloader:
         Returns:
             List[Dict[str, Any]]: Bulunan eklentilerin bilgi listesi.
         """
-        found_plugins: List[Dict[str, Any]] = []
+        found_plugins: list[dict[str, Any]] = []
 
         if not self.repos_dir.exists():
             logger.warning(f"Depo dizini bulunamadı: {self.repos_dir}")
@@ -140,7 +151,9 @@ class PluginDownloader:
 
         return found_plugins
 
-    def _extract_plugin_info(self, py_file: Path, repo_name: str, repo_path: Path) -> Optional[Dict[str, Any]]:
+    def _extract_plugin_info(
+        self, py_file: Path, repo_name: str, repo_path: Path
+    ) -> dict[str, Any] | None:
         """
         Bir Python dosyasından eklenti bilgilerini çıkarır.
         Dosyayı metin olarak okuyarak BasePlugin alt sınıfı olup olmadığını kontrol eder.
@@ -154,16 +167,16 @@ class PluginDownloader:
             Optional[Dict[str, Any]]: Eklenti bilgileri veya None.
         """
         try:
-            content = py_file.read_text(encoding='utf-8', errors='ignore')
+            content = py_file.read_text(encoding="utf-8", errors="ignore")
         except Exception:
             return None
 
         # BasePlugin alt sınıfı değilse atla
-        if 'BasePlugin' not in content:
+        if "BasePlugin" not in content:
             return None
 
         # Template dosyalarını atla
-        if '{{' in content and '}}' in content:
+        if "{{" in content and "}}" in content:
             return None
 
         relative_path = py_file.relative_to(repo_path).as_posix()
@@ -192,7 +205,7 @@ class PluginDownloader:
             "has_signature": has_signature,
         }
 
-    def _extract_field(self, content: str, field_name: str) -> Optional[str]:
+    def _extract_field(self, content: str, field_name: str) -> str | None:
         """
         Python kaynak kodundan sınıf alanı değerini çıkarır.
         """
@@ -225,7 +238,9 @@ class PluginDownloader:
         """
         parts = plugin_identifier.split("/", 1)
         if len(parts) < 2:
-            print("[bold red]Hata:[/bold red] Eklenti tanımlayıcı formatı: <depo_adı>/<eklenti_yolu>")
+            print(
+                "[bold red]Hata:[/bold red] Eklenti tanımlayıcı formatı: <depo_adı>/<eklenti_yolu>"
+            )
             print("   Örnek: plugins install myrepo/plugins/my_plugin.py")
             return False
 
@@ -237,14 +252,20 @@ class PluginDownloader:
 
         source_file = self.repos_dir / repo_name / plugin_path
         if not source_file.exists():
-            print(f"[bold red]Hata:[/bold red] Eklenti dosyası bulunamadı: {source_file}")
-            print(f"   Mevcut eklentileri aramak için: [bold]plugins search <terim>[/bold]")
+            print(
+                f"[bold red]Hata:[/bold red] Eklenti dosyası bulunamadı: {source_file}"
+            )
+            print(
+                "   Mevcut eklentileri aramak için: [bold]plugins search <terim>[/bold]"
+            )
             return False
 
         try:
-            content = source_file.read_text(encoding='utf-8', errors='ignore')
-            if 'BasePlugin' not in content:
-                print(f"[bold red]Hata:[/bold red] Dosya geçerli bir Mah Framework eklentisi değil (BasePlugin bulunamadı).")
+            content = source_file.read_text(encoding="utf-8", errors="ignore")
+            if "BasePlugin" not in content:
+                print(
+                    "[bold red]Hata:[/bold red] Dosya geçerli bir Mah Framework eklentisi değil (BasePlugin bulunamadı)."
+                )
                 return False
         except Exception as e:
             print(f"[bold red]Hata:[/bold red] Dosya okunamadı: {e}")
@@ -253,7 +274,9 @@ class PluginDownloader:
         sha256_file = source_file.with_suffix(".sha256")
         if sha256_file.exists():
             if not self._verify_sha256(source_file, sha256_file):
-                print("[bold red]✗ İmza doğrulama başarısız![/bold red] Eklenti bütünlüğü tehlikede olabilir.")
+                print(
+                    "[bold red]✗ İmza doğrulama başarısız![/bold red] Eklenti bütünlüğü tehlikede olabilir."
+                )
                 return False
             print("[bold green]✓[/bold green] SHA256 imza doğrulandı.")
 
@@ -264,12 +287,20 @@ class PluginDownloader:
 
         if dest_file.exists() and not force:
             if plugin_key in self.installed:
-                print(f"[bold yellow]⚠[/bold yellow] Eklenti zaten kurulu: {plugin_key}")
-                print(f"   Üzerine yazmak için: [bold]plugins install {plugin_identifier} --force[/bold]")
+                print(
+                    f"[bold yellow]⚠[/bold yellow] Eklenti zaten kurulu: {plugin_key}"
+                )
+                print(
+                    f"   Üzerine yazmak için: [bold]plugins install {plugin_identifier} --force[/bold]"
+                )
                 return False
             else:
-                print(f"[bold yellow]⚠[/bold yellow] Hedef dosya zaten mevcut: {dest_file}")
-                print(f"   Üzerine yazmak için: [bold]plugins install {plugin_identifier} --force[/bold]")
+                print(
+                    f"[bold yellow]⚠[/bold yellow] Hedef dosya zaten mevcut: {dest_file}"
+                )
+                print(
+                    f"   Üzerine yazmak için: [bold]plugins install {plugin_identifier} --force[/bold]"
+                )
                 return False
 
         dest_file.parent.mkdir(parents=True, exist_ok=True)
@@ -280,7 +311,9 @@ class PluginDownloader:
             print(f"[bold red]Hata:[/bold red] Dosya kopyalama hatası: {e}")
             return False
 
-        plugin_info = self._extract_plugin_info(source_file, repo_name, self.repos_dir / repo_name)
+        plugin_info = self._extract_plugin_info(
+            source_file, repo_name, self.repos_dir / repo_name
+        )
         version = plugin_info.get("version", "1.0") if plugin_info else "1.0"
 
         file_hash = self._compute_sha256(dest_file)
@@ -296,13 +329,17 @@ class PluginDownloader:
         }
         self.save_installed()
 
-        logger.info(f"Eklenti kuruldu: {plugin_key} (repo: {repo_name}, version: {version})")
-        print(f"[bold green]✓[/bold green] Eklenti başarıyla kuruldu: [bold]{plugin_key}[/bold]")
+        logger.info(
+            f"Eklenti kuruldu: {plugin_key} (repo: {repo_name}, version: {version})"
+        )
+        print(
+            f"[bold green]✓[/bold green] Eklenti başarıyla kuruldu: [bold]{plugin_key}[/bold]"
+        )
         print(f"   Kaynak: {repo_name}/{plugin_path}")
         print(f"   Versiyon: {version}")
 
         if deps_installed:
-            print(f"   Bağımlılıklar kuruldu.")
+            print("   Bağımlılıklar kuruldu.")
 
         print(f"\n   Aktifleştirmek için: [bold]plugins enable {plugin_key}[/bold]")
         return True
@@ -313,47 +350,57 @@ class PluginDownloader:
 
     def _compute_sha256(self, file_path: Path) -> str:
         sha256_hash = hashlib.sha256()
-        with open(file_path, 'rb') as f:
-            for chunk in iter(lambda: f.read(8192), b''):
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
                 sha256_hash.update(chunk)
         return sha256_hash.hexdigest()
 
     def _verify_sha256(self, file_path: Path, sha256_file: Path) -> bool:
         try:
-            expected_hash = sha256_file.read_text(encoding='utf-8').strip().split()[0].lower()
+            expected_hash = (
+                sha256_file.read_text(encoding="utf-8").strip().split()[0].lower()
+            )
             actual_hash = self._compute_sha256(file_path)
             return actual_hash == expected_hash
         except Exception as e:
             logger.error(f"SHA256 doğrulama hatası: {e}")
             return False
 
-    def verify_plugin(self, plugin_key: str) -> Optional[bool]:
+    def verify_plugin(self, plugin_key: str) -> bool | None:
         """
         Kurulu bir eklentinin SHA256 bütünlük kontrolünü yapar.
         """
         if plugin_key not in self.installed:
-            print(f"[bold red]Hata:[/bold red] '{plugin_key}' kurulu eklentiler arasında bulunamadı.")
+            print(
+                f"[bold red]Hata:[/bold red] '{plugin_key}' kurulu eklentiler arasında bulunamadı."
+            )
             return None
 
         record = self.installed[plugin_key]
         plugin_file = self.plugins_dir / f"{plugin_key}.py"
 
         if not plugin_file.exists():
-            print(f"[bold red]Hata:[/bold red] Eklenti dosyası bulunamadı: {plugin_file}")
+            print(
+                f"[bold red]Hata:[/bold red] Eklenti dosyası bulunamadı: {plugin_file}"
+            )
             return None
 
         stored_hash = record.get("sha256")
         if not stored_hash:
-            print(f"[bold yellow]⚠[/bold yellow] Kayıtlı SHA256 hash değeri bulunamadı.")
+            print("[bold yellow]⚠[/bold yellow] Kayıtlı SHA256 hash değeri bulunamadı.")
             return None
 
         actual_hash = self._compute_sha256(plugin_file)
         is_valid = actual_hash == stored_hash
 
         if is_valid:
-            print(f"[bold green]✓[/bold green] Eklenti bütünlüğü doğrulandı: [bold]{plugin_key}[/bold]")
+            print(
+                f"[bold green]✓[/bold green] Eklenti bütünlüğü doğrulandı: [bold]{plugin_key}[/bold]"
+            )
         else:
-            print(f"[bold red]✗ Eklenti bütünlüğü BOZULMUŞ![/bold red] [bold]{plugin_key}[/bold]")
+            print(
+                f"[bold red]✗ Eklenti bütünlüğü BOZULMUŞ![/bold red] [bold]{plugin_key}[/bold]"
+            )
 
         return is_valid
 
@@ -366,7 +413,7 @@ class PluginDownloader:
         Eklenti dosyasındaki Requirements alanından Python bağımlılıklarını kurar.
         """
         try:
-            content = plugin_file.read_text(encoding='utf-8', errors='ignore')
+            content = plugin_file.read_text(encoding="utf-8", errors="ignore")
         except Exception:
             return False
 
@@ -382,38 +429,50 @@ class PluginDownloader:
         if not missing:
             return False
 
-        print(f"[bold cyan]📦 Eklenti bağımlılıkları kuruluyor:[/bold cyan] {', '.join(missing)}")
+        print(
+            f"[bold cyan]📦 Eklenti bağımlılıkları kuruluyor:[/bold cyan] {', '.join(missing)}"
+        )
 
         try:
             result = subprocess.run(
-                ["pip", "install"] + missing,
+                ["pip", "install", *missing],
                 capture_output=True,
                 text=True,
-                timeout=120
+                timeout=120,
             )
 
             if result.returncode == 0:
-                print(f"[bold green]✓[/bold green] Bağımlılıklar başarıyla kuruldu.")
+                print("[bold green]✓[/bold green] Bağımlılıklar başarıyla kuruldu.")
                 logger.info(f"Eklenti bağımlılıkları kuruldu: {', '.join(missing)}")
                 return True
             else:
-                error_msg = result.stderr.strip() if result.stderr else "Bilinmeyen hata"
-                print(f"[bold red]✗[/bold red] Bağımlılık kurulumu başarısız: {error_msg}")
+                error_msg = (
+                    result.stderr.strip() if result.stderr else "Bilinmeyen hata"
+                )
+                print(
+                    f"[bold red]✗[/bold red] Bağımlılık kurulumu başarısız: {error_msg}"
+                )
                 logger.error(f"Bağımlılık kurulum hatası: {error_msg}")
                 return False
 
         except subprocess.TimeoutExpired:
-            print("[bold yellow]⚠[/bold yellow] Bağımlılık kurulumu zaman aşımına uğradı.")
+            print(
+                "[bold yellow]⚠[/bold yellow] Bağımlılık kurulumu zaman aşımına uğradı."
+            )
             return False
         except FileNotFoundError:
-            print("[bold red]✗[/bold red] pip bulunamadı. Lütfen pip'in kurulu olduğundan emin olun.")
+            print(
+                "[bold red]✗[/bold red] pip bulunamadı. Lütfen pip'in kurulu olduğundan emin olun."
+            )
             return False
         except Exception as e:
-            print(f"[bold red]✗[/bold red] Bağımlılık kurulumunda beklenmeyen hata: {e}")
+            print(
+                f"[bold red]✗[/bold red] Bağımlılık kurulumunda beklenmeyen hata: {e}"
+            )
             logger.exception("Bağımlılık kurulumu hatası")
             return False
 
-    def _extract_requirements(self, content: str) -> List[str]:
+    def _extract_requirements(self, content: str) -> list[str]:
         deps = []
         in_requirements = False
         in_python = False
@@ -429,7 +488,11 @@ class PluginDownloader:
                 if '"python"' in stripped or "'python'" in stripped:
                     in_python = True
                     if "[" in stripped:
-                        bracket_content = stripped[stripped.index("["):stripped.index("]") + 1] if "]" in stripped else ""
+                        bracket_content = (
+                            stripped[stripped.index("[") : stripped.index("]") + 1]
+                            if "]" in stripped
+                            else ""
+                        )
                         for item in bracket_content.strip("[]").split(","):
                             item = item.strip().strip("'\"")
                             if item:
@@ -460,19 +523,25 @@ class PluginDownloader:
     # VERSİYON KONTROLÜ VE GÜNCELLEME
     # =========================================================================
 
-    def check_updates(self, plugin_key: Optional[str] = None) -> List[Dict[str, Any]]:
+    def check_updates(self, plugin_key: str | None = None) -> list[dict[str, Any]]:
         """
         Kurulu eklentilerin versiyon kontrolünü yapar.
         """
-        updates_available: list[Dict[str, Any]] = []
+        updates_available: list[dict[str, Any]] = []
 
-        modules_to_check = {plugin_key: self.installed[plugin_key]} if plugin_key and plugin_key in self.installed else self.installed.copy()
+        modules_to_check = (
+            {plugin_key: self.installed[plugin_key]}
+            if plugin_key and plugin_key in self.installed
+            else self.installed.copy()
+        )
 
         if not modules_to_check:
             if plugin_key:
-                print(f"[bold red]Hata:[/bold red] '{plugin_key}' kurulu eklentiler arasında bulunamadı.")
+                print(
+                    f"[bold red]Hata:[/bold red] '{plugin_key}' kurulu eklentiler arasında bulunamadı."
+                )
             else:
-                 print("[dim]Kurulu eklenti bulunamadı.[/dim]")
+                print("[dim]Kurulu eklenti bulunamadı.[/dim]")
             return updates_available
 
         for mod_key, record in modules_to_check.items():
@@ -496,13 +565,15 @@ class PluginDownloader:
             repo_version = repo_module_info.get("version", "1.0")
 
             if self._is_newer_version(repo_version, installed_version):
-                updates_available.append({
-                    "plugin": mod_key,
-                    "repo": repo_name,
-                    "installed_version": installed_version,
-                    "available_version": repo_version,
-                    "source_path": source_path,
-                })
+                updates_available.append(
+                    {
+                        "plugin": mod_key,
+                        "repo": repo_name,
+                        "installed_version": installed_version,
+                        "available_version": repo_version,
+                        "source_path": source_path,
+                    }
+                )
 
         return updates_available
 
@@ -524,7 +595,9 @@ class PluginDownloader:
         Kurulu bir eklentiyi günceller.
         """
         if plugin_key not in self.installed:
-            print(f"[bold red]Hata:[/bold red] '{plugin_key}' kurulu eklentiler arasında bulunamadı.")
+            print(
+                f"[bold red]Hata:[/bold red] '{plugin_key}' kurulu eklentiler arasında bulunamadı."
+            )
             return False
 
         record = self.installed[plugin_key]
@@ -532,7 +605,7 @@ class PluginDownloader:
         source_path = record.get("source_path", "")
 
         if not repo_name or not source_path:
-            print(f"[bold red]Hata:[/bold red] Eklenti kaynak bilgisi eksik.")
+            print("[bold red]Hata:[/bold red] Eklenti kaynak bilgisi eksik.")
             return False
 
         identifier = f"{repo_name}/{source_path}"
@@ -544,7 +617,9 @@ class PluginDownloader:
                 self.save_installed()
 
             new_version = self.installed.get(plugin_key, {}).get("version", "?")
-            print(f"[bold cyan]📦 Güncelleme:[/bold cyan] {old_version} → {new_version}")
+            print(
+                f"[bold cyan]📦 Güncelleme:[/bold cyan] {old_version} → {new_version}"
+            )
             return True
 
         return False
@@ -553,17 +628,19 @@ class PluginDownloader:
     # KURULU EKLENTİ LİSTELEME
     # =========================================================================
 
-    def list_installed(self) -> Dict[str, Dict[str, Any]]:
+    def list_installed(self) -> dict[str, dict[str, Any]]:
         return self.installed
 
-    def get_installed_plugin_keys(self) -> List[str]:
+    def get_installed_plugin_keys(self) -> list[str]:
         return list(self.installed.keys())
 
     def remove_plugin(self, plugin_key: str) -> bool:
         if plugin_key not in self.installed:
-            print(f"[bold red]Hata:[/bold red] '{plugin_key}' kurulu eklentiler arasında bulunamadı.")
+            print(
+                f"[bold red]Hata:[/bold red] '{plugin_key}' kurulu eklentiler arasında bulunamadı."
+            )
             return False
-            
+
         plugin_file = self.plugins_dir / f"{plugin_key}.py"
         if plugin_file.exists():
             try:
@@ -571,12 +648,13 @@ class PluginDownloader:
             except Exception as e:
                 print(f"[bold red]Hata:[/bold red] Dosya silinemedi: {e}")
                 return False
-                
+
         # Disable from plugin manager if it is running
         from core.shared_state import shared_state
+
         if hasattr(shared_state, "plugin_manager") and shared_state.plugin_manager:
             shared_state.plugin_manager.unload_plugin(plugin_key)
-            
+
         del self.installed[plugin_key]
         self.save_installed()
         print(f"[bold green]✓[/bold green] Eklenti silindi: [bold]{plugin_key}[/bold]")

@@ -15,25 +15,28 @@
 #
 # =============================================================================
 
-from typing import Dict, Any
-from core.module import BaseModule
-from core.option import Option
-from core import logger
+import os
+import shutil
+from typing import Any
+
 from rich import print
 from rich.table import Table
 
-import os
-import shutil
+from core import logger
+from core.module import BaseModule
+from core.option import Option
 
 try:
     from PIL import Image
     from PIL.ExifTags import TAGS
+
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
 
 try:
     import piexif
+
     PIEXIF_AVAILABLE = True
 except ImportError:
     PIEXIF_AVAILABLE = False
@@ -58,7 +61,16 @@ class MetadataCleaner(BaseModule):
     Author = "Mahmut P."
     Category = "auxiliary/forensics"
 
-    SUPPORTED_FORMATS = {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.gif', '.webp'}
+    SUPPORTED_FORMATS = {
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".tiff",
+        ".tif",
+        ".bmp",
+        ".gif",
+        ".webp",
+    }
 
     def __init__(self):
         """Modül başlatıcı."""
@@ -71,21 +83,30 @@ class MetadataCleaner(BaseModule):
                 required=True,
                 description="Hedef görsel dosya yolu",
                 completion_dir=".",
-                completion_extensions=['.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.gif', '.webp']
+                completion_extensions=[
+                    ".jpg",
+                    ".jpeg",
+                    ".png",
+                    ".tiff",
+                    ".tif",
+                    ".bmp",
+                    ".gif",
+                    ".webp",
+                ],
             ),
             "OUTPUT": Option(
                 name="OUTPUT",
                 value="",
                 required=False,
                 description="Çıktı dosya yolu (boşsa üzerine yazar)",
-                completion_dir="."
+                completion_dir=".",
             ),
             "BACKUP": Option(
                 name="BACKUP",
                 value="true",
                 required=False,
                 description="Orijinal dosyanın yedeğini al (true/false)",
-                choices=["true", "false"]
+                choices=["true", "false"],
             ),
         }
 
@@ -111,12 +132,14 @@ class MetadataCleaner(BaseModule):
         """
         try:
             img = Image.open(file_path)
-            exif_data = img._getexif() if hasattr(img, '_getexif') and img._getexif() else None
+            exif_data = (
+                img._getexif() if hasattr(img, "_getexif") and img._getexif() else None
+            )
             count = 0
             if exif_data:
                 count = len(exif_data)
             # PNG text chunks
-            if hasattr(img, 'info') and img.info:
+            if hasattr(img, "info") and img.info:
                 count += len(img.info)
             img.close()
             return count
@@ -138,12 +161,14 @@ class MetadataCleaner(BaseModule):
             "has_camera": False,
             "has_datetime": False,
             "has_thumbnail": False,
-            "file_size": os.path.getsize(file_path)
+            "file_size": os.path.getsize(file_path),
         }
 
         try:
             img = Image.open(file_path)
-            exif_data = img._getexif() if hasattr(img, '_getexif') and img._getexif() else None
+            exif_data = (
+                img._getexif() if hasattr(img, "_getexif") and img._getexif() else None
+            )
 
             if exif_data:
                 summary["field_count"] = len(exif_data)
@@ -157,16 +182,16 @@ class MetadataCleaner(BaseModule):
                         summary["has_datetime"] = True
 
             # PNG info
-            if hasattr(img, 'info') and img.info:
+            if hasattr(img, "info") and img.info:
                 summary["field_count"] += len(img.info)
 
             # piexif ile thumbnail kontrolü
             if PIEXIF_AVAILABLE:
                 try:
                     ext = os.path.splitext(file_path)[1].lower()
-                    if ext in {'.jpg', '.jpeg', '.tiff', '.tif'}:
+                    if ext in {".jpg", ".jpeg", ".tiff", ".tif"}:
                         exif_dict = piexif.load(file_path)
-                        if "thumbnail" in exif_dict and exif_dict["thumbnail"]:
+                        if exif_dict.get("thumbnail"):
                             summary["has_thumbnail"] = True
                 except Exception:
                     pass
@@ -198,18 +223,23 @@ class MetadataCleaner(BaseModule):
         save_format = img.format or "JPEG"
 
         format_map = {
-            '.jpg': 'JPEG', '.jpeg': 'JPEG',
-            '.png': 'PNG', '.tiff': 'TIFF', '.tif': 'TIFF',
-            '.bmp': 'BMP', '.gif': 'GIF', '.webp': 'WEBP'
+            ".jpg": "JPEG",
+            ".jpeg": "JPEG",
+            ".png": "PNG",
+            ".tiff": "TIFF",
+            ".tif": "TIFF",
+            ".bmp": "BMP",
+            ".gif": "GIF",
+            ".webp": "WEBP",
         }
         save_format = format_map.get(ext, save_format)
 
         # Kaydet (exif parametresi olmadan)
         save_kwargs = {}
-        if save_format == 'JPEG':
-            save_kwargs['quality'] = 95
-        elif save_format == 'PNG':
-            save_kwargs['optimize'] = True
+        if save_format == "JPEG":
+            save_kwargs["quality"] = 95
+        elif save_format == "PNG":
+            save_kwargs["optimize"] = True
 
         clean_img.save(output_path, format=save_format, **save_kwargs)
 
@@ -217,7 +247,7 @@ class MetadataCleaner(BaseModule):
         clean_img.close()
         return True
 
-    def run(self, options: Dict[str, Any]) -> bool:
+    def run(self, options: dict[str, Any]) -> bool:
         """Modülün ana çalıştırma metodu.
 
         Args:
@@ -256,7 +286,7 @@ class MetadataCleaner(BaseModule):
         logger.info(f"Metadata temizleniyor: {file_path}")
 
         try:
-            print(f"\n[bold cyan]🧹 Metadata Cleaner[/bold cyan]\n")
+            print("\n[bold cyan]🧹 Metadata Cleaner[/bold cyan]\n")
             print(f"[dim]Kaynak:[/dim] {file_path}")
             if output_path != file_path:
                 print(f"[dim]Çıktı:[/dim] {output_path}")
@@ -271,16 +301,26 @@ class MetadataCleaner(BaseModule):
             before_table.add_column("Durum", style="white")
 
             before_table.add_row("Metadata Alan Sayısı", str(before["field_count"]))
-            before_table.add_row("GPS Verisi", "✅ Var" if before["has_gps"] else "❌ Yok")
-            before_table.add_row("Kamera Bilgisi", "✅ Var" if before["has_camera"] else "❌ Yok")
-            before_table.add_row("Tarih Bilgisi", "✅ Var" if before["has_datetime"] else "❌ Yok")
-            before_table.add_row("Thumbnail", "✅ Var" if before["has_thumbnail"] else "❌ Yok")
+            before_table.add_row(
+                "GPS Verisi", "✅ Var" if before["has_gps"] else "❌ Yok"
+            )
+            before_table.add_row(
+                "Kamera Bilgisi", "✅ Var" if before["has_camera"] else "❌ Yok"
+            )
+            before_table.add_row(
+                "Tarih Bilgisi", "✅ Var" if before["has_datetime"] else "❌ Yok"
+            )
+            before_table.add_row(
+                "Thumbnail", "✅ Var" if before["has_thumbnail"] else "❌ Yok"
+            )
             before_table.add_row("Dosya Boyutu", f"{before['file_size']:,} byte")
 
             print(before_table)
 
             if before["field_count"] == 0:
-                print("\n[yellow]⚠ Bu dosyada temizlenecek metadata bulunamadı.[/yellow]")
+                print(
+                    "\n[yellow]⚠ Bu dosyada temizlenecek metadata bulunamadı.[/yellow]"
+                )
                 return True
 
             # --- Yedek Al ---
@@ -303,27 +343,27 @@ class MetadataCleaner(BaseModule):
             after_table.add_row(
                 "Metadata Alan Sayısı",
                 str(before["field_count"]),
-                str(after["field_count"])
+                str(after["field_count"]),
             )
             after_table.add_row(
                 "GPS Verisi",
                 "✅ Var" if before["has_gps"] else "❌ Yok",
-                "✅ Var" if after["has_gps"] else "❌ Yok"
+                "✅ Var" if after["has_gps"] else "❌ Yok",
             )
             after_table.add_row(
                 "Kamera Bilgisi",
                 "✅ Var" if before["has_camera"] else "❌ Yok",
-                "✅ Var" if after["has_camera"] else "❌ Yok"
+                "✅ Var" if after["has_camera"] else "❌ Yok",
             )
             after_table.add_row(
                 "Tarih Bilgisi",
                 "✅ Var" if before["has_datetime"] else "❌ Yok",
-                "✅ Var" if after["has_datetime"] else "❌ Yok"
+                "✅ Var" if after["has_datetime"] else "❌ Yok",
             )
             after_table.add_row(
                 "Dosya Boyutu",
                 f"{before['file_size']:,} byte",
-                f"{after['file_size']:,} byte"
+                f"{after['file_size']:,} byte",
             )
 
             size_diff = before["file_size"] - after["file_size"]
@@ -331,22 +371,28 @@ class MetadataCleaner(BaseModule):
                 after_table.add_row(
                     "Kazanılan Alan",
                     "",
-                    f"[bold green]{size_diff:,} byte ({size_diff/1024:.1f} KB)[/bold green]"
+                    f"[bold green]{size_diff:,} byte ({size_diff / 1024:.1f} KB)[/bold green]",
                 )
 
             print(after_table)
 
             # Sonuç
             cleaned_fields = before["field_count"] - after["field_count"]
-            print(f"\n[bold green]✓[/bold green] {cleaned_fields} metadata alanı başarıyla temizlendi.")
+            print(
+                f"\n[bold green]✓[/bold green] {cleaned_fields} metadata alanı başarıyla temizlendi."
+            )
 
             if before["has_gps"] and not after["has_gps"]:
                 print("[bold green]✓[/bold green] GPS konum verisi kaldırıldı.")
 
-            logger.info(f"Metadata temizlendi: {file_path} -> {output_path} ({cleaned_fields} alan)")
+            logger.info(
+                f"Metadata temizlendi: {file_path} -> {output_path} ({cleaned_fields} alan)"
+            )
             return True
 
         except Exception as e:
-            print(f"[bold red]Hata:[/bold red] Metadata temizlenirken sorun oluştu: {e}")
+            print(
+                f"[bold red]Hata:[/bold red] Metadata temizlenirken sorun oluştu: {e}"
+            )
             logger.exception(f"Metadata temizleme hatası: {file_path}")
             return False

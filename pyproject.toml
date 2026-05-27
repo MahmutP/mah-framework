@@ -10,7 +10,7 @@ disallow_any_unimported = false
 ignore_missing_imports = true
 exclude = [
     "build/",
-    "modules/payloads/",
+    "modules/",
 ]
 
 [[tool.mypy.overrides]]

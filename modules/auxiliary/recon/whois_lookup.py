@@ -1,32 +1,41 @@
 import subprocess
-from typing import Dict, Any
+from typing import Any
+
+from rich import print
+
 from core.module import BaseModule
 from core.option import Option
-from rich import print
+
 
 class whois_lookup(BaseModule):
     """
     Domain veya IP adresi için WHOIS sorgusu yapan keşif modülü.
     """
+
     Name = "WHOIS Lookup"
     Description = "Perform a WHOIS lookup for a given domain or IP address."
     Author = "Mahmut P."
     Category = "auxiliary/recon"
     Version = "1.0"
-    
+
     # 'whois' komutuna ihtiyaç duyar.
     Requirements = {"system": ["whois"]}
 
     def __init__(self):
         super().__init__()
         self.Options = {
-            "DOMAIN": Option("DOMAIN", "", True, "Sorgulanacak hedef domain veya IP (örn: example.com)"),
+            "DOMAIN": Option(
+                "DOMAIN",
+                "",
+                True,
+                "Sorgulanacak hedef domain veya IP (örn: example.com)",
+            ),
         }
         # Varsayılan değerleri class attribute olarak ayarla (BaseModule yapısı gereği)
         for option_name, option_obj in self.Options.items():
             setattr(self, option_name, option_obj.value)
 
-    def run(self, options: Dict[str, Any]):
+    def run(self, options: dict[str, Any]):
         domain = options.get("DOMAIN")
         if not domain:
             print("[bold red][-] Lütfen sorgulanacak bir DOMAIN giriniz.[/bold red]")
@@ -40,7 +49,7 @@ class whois_lookup(BaseModule):
                 ["whois", domain],
                 capture_output=True,
                 text=True,
-                check=False # Hata döndürse bile capture_output aldığımız için biz işleyeceğiz
+                check=False,  # Hata döndürse bile capture_output aldığımız için biz işleyeceğiz
             )
 
             if result.returncode == 0:
@@ -48,13 +57,17 @@ class whois_lookup(BaseModule):
                 print(result.stdout)
                 return True
             else:
-                print(f"[bold red][-] WHOIS sorgusu başarısız oldu (Return Code: {result.returncode}).[/bold red]")
+                print(
+                    f"[bold red][-] WHOIS sorgusu başarısız oldu (Return Code: {result.returncode}).[/bold red]"
+                )
                 print(result.stderr)
                 return False
 
         except FileNotFoundError:
-            print("[bold red][-] 'whois' komutu sistemde bulunamadı. Lütfen kurunuz.[/bold red]")
+            print(
+                "[bold red][-] 'whois' komutu sistemde bulunamadı. Lütfen kurunuz.[/bold red]"
+            )
             return False
         except Exception as e:
-            print(f"[bold red][-] Beklenmeyen bir hata oluştu: {str(e)}[/bold red]")
+            print(f"[bold red][-] Beklenmeyen bir hata oluştu: {e!s}[/bold red]")
             return False

@@ -15,25 +15,27 @@
 #
 # =============================================================================
 
-from typing import Dict, Any
-from core.module import BaseModule
-from core.option import Option
-from core import logger
+import os
+from typing import Any
+
 from rich import print
 from rich.table import Table
-from rich.panel import Panel
 
-import os
+from core import logger
+from core.module import BaseModule
+from core.option import Option
 
 try:
     from PIL import Image
-    from PIL.ExifTags import TAGS, GPSTAGS
+    from PIL.ExifTags import GPSTAGS, TAGS
+
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
 
 try:
     import piexif
+
     PIEXIF_AVAILABLE = True
 except ImportError:
     PIEXIF_AVAILABLE = False
@@ -59,7 +61,16 @@ class MetadataExtractor(BaseModule):
     Author = "Mahmut P."
     Category = "auxiliary/forensics"
 
-    SUPPORTED_FORMATS = {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.gif', '.webp'}
+    SUPPORTED_FORMATS = {
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".tiff",
+        ".tif",
+        ".bmp",
+        ".gif",
+        ".webp",
+    }
 
     def __init__(self):
         """Modül başlatıcı."""
@@ -72,14 +83,23 @@ class MetadataExtractor(BaseModule):
                 required=True,
                 description="Hedef görsel dosya yolu",
                 completion_dir=".",
-                completion_extensions=['.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.gif', '.webp']
+                completion_extensions=[
+                    ".jpg",
+                    ".jpeg",
+                    ".png",
+                    ".tiff",
+                    ".tif",
+                    ".bmp",
+                    ".gif",
+                    ".webp",
+                ],
             ),
             "VERBOSE": Option(
                 name="VERBOSE",
                 value="false",
                 required=False,
                 description="Tüm raw EXIF tag'lerini göster (true/false)",
-                choices=["true", "false"]
+                choices=["true", "false"],
             ),
         }
 
@@ -104,6 +124,7 @@ class MetadataExtractor(BaseModule):
             (latitude, longitude) tuple veya (None, None)
         """
         try:
+
             def _convert_to_degrees(value):
                 """GPS koordinatını dereceye çevirir."""
                 d = float(value[0])
@@ -111,15 +132,15 @@ class MetadataExtractor(BaseModule):
                 s = float(value[2])
                 return d + (m / 60.0) + (s / 3600.0)
 
-            lat = _convert_to_degrees(gps_info.get('GPSLatitude', [0, 0, 0]))
-            lon = _convert_to_degrees(gps_info.get('GPSLongitude', [0, 0, 0]))
+            lat = _convert_to_degrees(gps_info.get("GPSLatitude", [0, 0, 0]))
+            lon = _convert_to_degrees(gps_info.get("GPSLongitude", [0, 0, 0]))
 
-            lat_ref = gps_info.get('GPSLatitudeRef', 'N')
-            lon_ref = gps_info.get('GPSLongitudeRef', 'E')
+            lat_ref = gps_info.get("GPSLatitudeRef", "N")
+            lon_ref = gps_info.get("GPSLongitudeRef", "E")
 
-            if lat_ref == 'S':
+            if lat_ref == "S":
                 lat = -lat
-            if lon_ref == 'W':
+            if lon_ref == "W":
                 lon = -lon
 
             return (lat, lon)
@@ -164,17 +185,17 @@ class MetadataExtractor(BaseModule):
             lat = _convert_gps(gps_data[GPS_LAT])
             lon = _convert_gps(gps_data[GPS_LON])
 
-            lat_ref = gps_data.get(GPS_LAT_REF, b'N')
-            lon_ref = gps_data.get(GPS_LON_REF, b'E')
+            lat_ref = gps_data.get(GPS_LAT_REF, b"N")
+            lon_ref = gps_data.get(GPS_LON_REF, b"E")
 
             if isinstance(lat_ref, bytes):
-                lat_ref = lat_ref.decode('ascii')
+                lat_ref = lat_ref.decode("ascii")
             if isinstance(lon_ref, bytes):
-                lon_ref = lon_ref.decode('ascii')
+                lon_ref = lon_ref.decode("ascii")
 
-            if lat_ref == 'S':
+            if lat_ref == "S":
                 lat = -lat
-            if lon_ref == 'W':
+            if lon_ref == "W":
                 lon = -lon
 
             return (lat, lon)
@@ -191,12 +212,7 @@ class MetadataExtractor(BaseModule):
         Returns:
             Metadata sözlüğü
         """
-        result = {
-            "basic": {},
-            "exif": {},
-            "gps": None,
-            "raw_tags": {}
-        }
+        result = {"basic": {}, "exif": {}, "gps": None, "raw_tags": {}}
 
         img = Image.open(file_path)
 
@@ -205,11 +221,13 @@ class MetadataExtractor(BaseModule):
             "Format": img.format or "Bilinmiyor",
             "Boyut": f"{img.size[0]}x{img.size[1]} piksel",
             "Renk Modu": img.mode,
-            "Dosya Boyutu": f"{os.path.getsize(file_path):,} byte"
+            "Dosya Boyutu": f"{os.path.getsize(file_path):,} byte",
         }
 
         # EXIF verisi
-        exif_data = img._getexif() if hasattr(img, '_getexif') and img._getexif() else None
+        exif_data = (
+            img._getexif() if hasattr(img, "_getexif") and img._getexif() else None
+        )
 
         if exif_data:
             gps_info = {}
@@ -288,15 +306,17 @@ class MetadataExtractor(BaseModule):
                     result["gps"] = (lat, lon)
 
             # Thumbnail bilgisi
-            if "thumbnail" in exif_dict and exif_dict["thumbnail"]:
-                result["exif"]["Thumbnail"] = f"Mevcut ({len(exif_dict['thumbnail'])} byte)"
+            if exif_dict.get("thumbnail"):
+                result["exif"]["Thumbnail"] = (
+                    f"Mevcut ({len(exif_dict['thumbnail'])} byte)"
+                )
 
         except Exception as e:
             logger.warning(f"piexif ile ek veri çekilemedi: {e}")
 
         return result
 
-    def run(self, options: Dict[str, Any]) -> bool:
+    def run(self, options: dict[str, Any]) -> bool:
         """Modülün ana çalıştırma metodu.
 
         Args:
@@ -330,14 +350,14 @@ class MetadataExtractor(BaseModule):
         logger.info(f"Metadata çekiliyor: {file_path}")
 
         try:
-            print(f"\n[bold cyan]🔍 Metadata Extractor[/bold cyan]\n")
+            print("\n[bold cyan]🔍 Metadata Extractor[/bold cyan]\n")
             print(f"[dim]Dosya:[/dim] {file_path}\n")
 
             # Pillow ile metadata çek
             result = self._extract_with_pillow(file_path, verbose)
 
             # piexif ile ek veri çek
-            if PIEXIF_AVAILABLE and ext.lower() in {'.jpg', '.jpeg', '.tiff', '.tif'}:
+            if PIEXIF_AVAILABLE and ext.lower() in {".jpg", ".jpeg", ".tiff", ".tif"}:
                 result = self._extract_with_piexif(file_path, result)
 
             # --- Temel Bilgiler Tablosu ---
@@ -372,10 +392,14 @@ class MetadataExtractor(BaseModule):
 
                 gps_table.add_row("Enlem (Latitude)", f"{lat:.6f}")
                 gps_table.add_row("Boylam (Longitude)", f"{lon:.6f}")
-                gps_table.add_row("Google Maps", f"https://maps.google.com/?q={lat},{lon}")
+                gps_table.add_row(
+                    "Google Maps", f"https://maps.google.com/?q={lat},{lon}"
+                )
 
                 print(gps_table)
-                print(f"\n[bold red]⚠ DİKKAT:[/bold red] Bu dosya GPS konum bilgisi içeriyor!")
+                print(
+                    "\n[bold red]⚠ DİKKAT:[/bold red] Bu dosya GPS konum bilgisi içeriyor!"
+                )
 
             # --- Raw Tags (Verbose) ---
             if verbose and result["raw_tags"]:
@@ -391,9 +415,13 @@ class MetadataExtractor(BaseModule):
             # --- Özet ---
             total_fields = len(result["exif"]) + len(result["basic"])
             has_gps = "✅ Evet" if result["gps"] else "❌ Hayır"
-            print(f"\n[bold green]✓[/bold green] Toplam {total_fields} alan çıkarıldı. GPS: {has_gps}")
+            print(
+                f"\n[bold green]✓[/bold green] Toplam {total_fields} alan çıkarıldı. GPS: {has_gps}"
+            )
 
-            logger.info(f"Metadata başarıyla çekildi: {file_path} ({total_fields} alan)")
+            logger.info(
+                f"Metadata başarıyla çekildi: {file_path} ({total_fields} alan)"
+            )
             return True
 
         except Exception as e:

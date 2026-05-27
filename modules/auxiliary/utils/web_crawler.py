@@ -11,20 +11,19 @@
 #   5. run
 # =============================================================================
 
-import re
-from typing import Dict, Any, List, Set, Tuple
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import requests  # type: ignore
 from bs4 import BeautifulSoup  # type: ignore
 from rich import print
-from rich.table import Table
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
 
+from core import logger
 from core.module import BaseModule
 from core.option import Option
-from core import logger
 
 
 class web_crawler(BaseModule):
@@ -115,7 +114,7 @@ class web_crawler(BaseModule):
         parsed = urlparse(url)
         return parsed._replace(fragment="").geturl()
 
-    def _fetch_page(self, url: str, timeout: int, user_agent: str) -> Tuple[str, int]:
+    def _fetch_page(self, url: str, timeout: int, user_agent: str) -> tuple[str, int]:
         """Sayfa HTML içeriğini ve HTTP durum kodunu döner."""
         try:
             resp = requests.get(
@@ -129,9 +128,9 @@ class web_crawler(BaseModule):
         except Exception:
             return "", 0
 
-    def _extract_links(self, html: str, base_url: str) -> List[str]:
+    def _extract_links(self, html: str, base_url: str) -> list[str]:
         """HTML'den tüm <a href> linklerini çıkarır."""
-        links: List[str] = []
+        links: list[str] = []
         try:
             soup = BeautifulSoup(html, "html.parser")
             for tag in soup.find_all("a", href=True):
@@ -144,34 +143,38 @@ class web_crawler(BaseModule):
             pass
         return links
 
-    def _extract_forms(self, html: str, base_url: str) -> List[Dict[str, Any]]:
+    def _extract_forms(self, html: str, base_url: str) -> list[dict[str, Any]]:
         """HTML'den form bilgilerini çıkarır."""
-        forms: List[Dict[str, Any]] = []
+        forms: list[dict[str, Any]] = []
         try:
             soup = BeautifulSoup(html, "html.parser")
             for form in soup.find_all("form"):
                 action = form.get("action", "")
                 method = form.get("method", "GET").upper()
                 full_action = urljoin(base_url, action) if action else base_url
-                inputs: List[Dict[str, str]] = []
+                inputs: list[dict[str, str]] = []
                 for inp in form.find_all(["input", "textarea", "select"]):
-                    inputs.append({
-                        "name": inp.get("name", ""),
-                        "type": inp.get("type", "text"),
-                        "value": inp.get("value", ""),
-                    })
-                forms.append({
-                    "action": full_action,
-                    "method": method,
-                    "inputs": inputs,
-                })
+                    inputs.append(
+                        {
+                            "name": inp.get("name", ""),
+                            "type": inp.get("type", "text"),
+                            "value": inp.get("value", ""),
+                        }
+                    )
+                forms.append(
+                    {
+                        "action": full_action,
+                        "method": method,
+                        "inputs": inputs,
+                    }
+                )
         except Exception:
             pass
         return forms
 
-    def _extract_meta(self, html: str) -> Dict[str, str]:
+    def _extract_meta(self, html: str) -> dict[str, str]:
         """HTML'den başlık ve meta etiketlerini çıkarır."""
-        meta: Dict[str, str] = {}
+        meta: dict[str, str] = {}
         try:
             soup = BeautifulSoup(html, "html.parser")
             title_tag = soup.find("title")
@@ -186,13 +189,17 @@ class web_crawler(BaseModule):
             pass
         return meta
 
-    def _check_robots(self, base_url: str, timeout: int, user_agent: str) -> List[str]:
+    def _check_robots(self, base_url: str, timeout: int, user_agent: str) -> list[str]:
         """Robots.txt içeriğini çeker ve disallow kurallarını döner."""
         robots_url = urljoin(base_url, "/robots.txt")
-        disallows: List[str] = []
+        disallows: list[str] = []
         try:
-            resp = requests.get(robots_url, timeout=timeout,
-                                headers={"User-Agent": user_agent}, verify=False)
+            resp = requests.get(
+                robots_url,
+                timeout=timeout,
+                headers={"User-Agent": user_agent},
+                verify=False,
+            )
             if resp.status_code == 200:
                 for line in resp.text.splitlines():
                     line = line.strip()
@@ -206,7 +213,7 @@ class web_crawler(BaseModule):
 
     # ── RUN ──────────────────────────────────────────────────────────────────
 
-    def run(self, options: Dict[str, Any]) -> bool:
+    def run(self, options: dict[str, Any]) -> bool:
         target_url = str(options.get("TARGET_URL", ""))
         max_depth = int(options.get("MAX_DEPTH", 2))
         max_pages = int(options.get("MAX_PAGES", 50))
@@ -215,22 +222,28 @@ class web_crawler(BaseModule):
         check_robots = str(options.get("CHECK_ROBOTS", "true")).lower() == "true"
 
         if not target_url.startswith(("http://", "https://")):
-            print("[bold red][-] TARGET_URL http:// veya https:// ile başlamalıdır.[/bold red]")
+            print(
+                "[bold red][-] TARGET_URL http:// veya https:// ile başlamalıdır.[/bold red]"
+            )
             return False
 
         logger.info(f"Web crawler başlatıldı: {target_url}")
 
         self.console.print()
-        self.console.print(Panel.fit(
-            "[bold cyan]🕸️  WEB CRAWLER — Bilgi Toplama[/bold cyan]",
-            border_style="cyan",
-        ))
+        self.console.print(
+            Panel.fit(
+                "[bold cyan]🕸️  WEB CRAWLER — Bilgi Toplama[/bold cyan]",
+                border_style="cyan",
+            )
+        )
 
         # ── Robots.txt ───────────────────────────────────────────────────
         if check_robots:
             disallows = self._check_robots(target_url, timeout, user_agent)
             if disallows:
-                tbl = Table(title="🤖 Robots.txt — Disallow Kuralları", border_style="yellow")
+                tbl = Table(
+                    title="🤖 Robots.txt — Disallow Kuralları", border_style="yellow"
+                )
                 tbl.add_column("Yol", style="white")
                 for d in disallows:
                     tbl.add_row(d)
@@ -238,12 +251,12 @@ class web_crawler(BaseModule):
                 self.console.print()
 
         # ── BFS Tarama ────────────────────────────────────────────────────
-        visited: Set[str] = set()
-        external_links: Set[str] = set()
-        all_forms: List[Dict[str, Any]] = []
-        page_info: List[Dict[str, str]] = []
+        visited: set[str] = set()
+        external_links: set[str] = set()
+        all_forms: list[dict[str, Any]] = []
+        page_info: list[dict[str, str]] = []
 
-        queue: List[Tuple[str, int]] = [(self._normalize_url(target_url), 0)]
+        queue: list[tuple[str, int]] = [(self._normalize_url(target_url), 0)]
 
         while queue and len(visited) < max_pages:
             url, depth = queue.pop(0)
@@ -257,11 +270,13 @@ class web_crawler(BaseModule):
 
             # Meta
             meta = self._extract_meta(html)
-            page_info.append({
-                "url": url,
-                "status": str(status),
-                "title": meta.get("title", "-")[:60],
-            })
+            page_info.append(
+                {
+                    "url": url,
+                    "status": str(status),
+                    "title": meta.get("title", "-")[:60],
+                }
+            )
 
             # Formlar
             forms = self._extract_forms(html, url)
@@ -279,7 +294,9 @@ class web_crawler(BaseModule):
 
         # ── Sonuçları Göster ──────────────────────────────────────────────
         # Sayfalar
-        tbl = Table(title=f"📄 Taranan Sayfalar ({len(page_info)})", border_style="blue")
+        tbl = Table(
+            title=f"📄 Taranan Sayfalar ({len(page_info)})", border_style="blue"
+        )
         tbl.add_column("#", style="dim", justify="right")
         tbl.add_column("URL", style="white", max_width=55)
         tbl.add_column("Status", justify="center")
@@ -287,13 +304,17 @@ class web_crawler(BaseModule):
 
         for idx, p in enumerate(page_info, 1):
             color = "green" if p["status"] == "200" else "yellow"
-            tbl.add_row(str(idx), p["url"], f"[{color}]{p['status']}[/{color}]", p["title"])
+            tbl.add_row(
+                str(idx), p["url"], f"[{color}]{p['status']}[/{color}]", p["title"]
+            )
         self.console.print(tbl)
         self.console.print()
 
         # Formlar
         if all_forms:
-            tbl = Table(title=f"📝 Bulunan Formlar ({len(all_forms)})", border_style="red")
+            tbl = Table(
+                title=f"📝 Bulunan Formlar ({len(all_forms)})", border_style="red"
+            )
             tbl.add_column("#", style="dim", justify="right")
             tbl.add_column("Action", style="white", max_width=50)
             tbl.add_column("Method", justify="center")
@@ -306,25 +327,31 @@ class web_crawler(BaseModule):
 
         # Dış Linkler
         if external_links:
-            tbl = Table(title=f"🔗 Dış Linkler ({len(external_links)})", border_style="dim")
+            tbl = Table(
+                title=f"🔗 Dış Linkler ({len(external_links)})", border_style="dim"
+            )
             tbl.add_column("#", style="dim", justify="right")
             tbl.add_column("URL", style="white", max_width=70)
 
             for idx, link in enumerate(sorted(external_links)[:30], 1):
                 tbl.add_row(str(idx), link)
             if len(external_links) > 30:
-                self.console.print(f"  [dim]... ve {len(external_links) - 30} daha.[/dim]")
+                self.console.print(
+                    f"  [dim]... ve {len(external_links) - 30} daha.[/dim]"
+                )
             self.console.print(tbl)
             self.console.print()
 
         # Özet
-        self.console.print(Panel.fit(
-            f"[green]Sayfa:[/green] {len(page_info)}  |  "
-            f"[yellow]Form:[/yellow] {len(all_forms)}  |  "
-            f"[blue]Dış Link:[/blue] {len(external_links)}",
-            title="📊 Özet",
-            border_style="green",
-        ))
+        self.console.print(
+            Panel.fit(
+                f"[green]Sayfa:[/green] {len(page_info)}  |  "
+                f"[yellow]Form:[/yellow] {len(all_forms)}  |  "
+                f"[blue]Dış Link:[/blue] {len(external_links)}",
+                title="📊 Özet",
+                border_style="green",
+            )
+        )
 
         logger.info("Web crawler taraması tamamlandı")
         return True

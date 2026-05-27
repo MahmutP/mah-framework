@@ -15,19 +15,19 @@
 #   7. run
 # =============================================================================
 
+import re
 import subprocess
 import sys
-import re
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any
 
 from rich import print
-from rich.table import Table
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
 
+from core import logger
 from core.module import BaseModule
 from core.option import Option
-from core import logger
 
 
 class service_manager(BaseModule):
@@ -49,7 +49,7 @@ class service_manager(BaseModule):
     Category = "auxiliary/os"
     Version = "1.0"
 
-    Requirements: Dict[str, List[str]] = {}
+    Requirements: dict[str, list[str]] = {}
 
     def __init__(self):
         super().__init__()
@@ -82,11 +82,14 @@ class service_manager(BaseModule):
     # ── YARDIMCI ─────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _run_cmd(cmd: List[str], timeout: int = 15) -> Tuple[str, str, int]:
+    def _run_cmd(cmd: list[str], timeout: int = 15) -> tuple[str, str, int]:
         """Sistem komutunu çalıştırır → (stdout, stderr, returncode)."""
         try:
             result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=timeout,
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
             )
             return result.stdout, result.stderr, result.returncode
         except FileNotFoundError:
@@ -107,11 +110,18 @@ class service_manager(BaseModule):
 
     # ── LİSTELEME ────────────────────────────────────────────────────────────
 
-    def _list_linux(self, filt: str) -> List[Dict[str, str]]:
+    def _list_linux(self, filt: str) -> list[dict[str, str]]:
         stdout, _, _ = self._run_cmd(
-            ["systemctl", "list-units", "--type=service", "--all", "--no-pager", "--plain"]
+            [
+                "systemctl",
+                "list-units",
+                "--type=service",
+                "--all",
+                "--no-pager",
+                "--plain",
+            ]
         )
-        services: List[Dict[str, str]] = []
+        services: list[dict[str, str]] = []
         for line in stdout.splitlines():
             parts = line.split(None, 4)
             if len(parts) >= 4 and ".service" in parts[0]:
@@ -122,15 +132,20 @@ class service_manager(BaseModule):
                 desc = parts[4] if len(parts) > 4 else ""
                 if filt and filt.lower() not in name.lower():
                     continue
-                services.append({
-                    "name": name, "load": load,
-                    "active": active, "sub": sub, "desc": desc.strip(),
-                })
+                services.append(
+                    {
+                        "name": name,
+                        "load": load,
+                        "active": active,
+                        "sub": sub,
+                        "desc": desc.strip(),
+                    }
+                )
         return services
 
-    def _list_darwin(self, filt: str) -> List[Dict[str, str]]:
+    def _list_darwin(self, filt: str) -> list[dict[str, str]]:
         stdout, _, _ = self._run_cmd(["launchctl", "list"])
-        services: List[Dict[str, str]] = []
+        services: list[dict[str, str]] = []
         for line in stdout.splitlines()[1:]:  # Başlık atla
             parts = line.split("\t")
             if len(parts) >= 3:
@@ -139,17 +154,21 @@ class service_manager(BaseModule):
                 label = parts[2].strip()
                 if filt and filt.lower() not in label.lower():
                     continue
-                services.append({
-                    "name": label,
-                    "pid": pid if pid != "-" else "-",
-                    "status": status,
-                })
+                services.append(
+                    {
+                        "name": label,
+                        "pid": pid if pid != "-" else "-",
+                        "status": status,
+                    }
+                )
         return services
 
-    def _list_win32(self, filt: str) -> List[Dict[str, str]]:
-        stdout, _, _ = self._run_cmd(["sc", "query", "type=", "service", "state=", "all"])
-        services: List[Dict[str, str]] = []
-        current: Dict[str, str] = {}
+    def _list_win32(self, filt: str) -> list[dict[str, str]]:
+        stdout, _, _ = self._run_cmd(
+            ["sc", "query", "type=", "service", "state=", "all"]
+        )
+        services: list[dict[str, str]] = []
+        current: dict[str, str] = {}
         for line in stdout.splitlines():
             line = line.strip()
             if line.startswith("SERVICE_NAME:"):
@@ -165,23 +184,34 @@ class service_manager(BaseModule):
         if current:
             services.append(current)
         if filt:
-            services = [s for s in services if filt.lower() in s.get("name", "").lower()]
+            services = [
+                s for s in services if filt.lower() in s.get("name", "").lower()
+            ]
         return services
 
     # ── STATUS / START / STOP ────────────────────────────────────────────────
 
-    def _service_action(self, platform: str, action: str, service: str) -> Tuple[bool, str]:
+    def _service_action(
+        self, platform: str, action: str, service: str
+    ) -> tuple[bool, str]:
         """Servis üzerinde status/start/stop işlemi yapar."""
         if platform == "linux":
             cmd = ["systemctl", action, service]
         elif platform == "darwin":
             if action == "status":
-                stdout, stderr, rc = self._run_cmd(["launchctl", "print", f"system/{service}"])
+                stdout, stderr, rc = self._run_cmd(
+                    ["launchctl", "print", f"system/{service}"]
+                )
                 if rc != 0:
                     stdout, stderr, rc = self._run_cmd(["launchctl", "list", service])
                 return rc == 0, stdout or stderr
             elif action == "start":
-                cmd = ["launchctl", "load", "-w", f"/Library/LaunchDaemons/{service}.plist"]
+                cmd = [
+                    "launchctl",
+                    "load",
+                    "-w",
+                    f"/Library/LaunchDaemons/{service}.plist",
+                ]
             elif action == "stop":
                 cmd = ["launchctl", "unload", f"/Library/LaunchDaemons/{service}.plist"]
             else:
@@ -204,23 +234,32 @@ class service_manager(BaseModule):
 
     # ── RUN ──────────────────────────────────────────────────────────────────
 
-    def run(self, options: Dict[str, Any]) -> bool:
+    def run(self, options: dict[str, Any]) -> bool:
         action = str(options.get("ACTION", "list")).lower()
         service_name = str(options.get("SERVICE_NAME", "")).strip()
         filt = str(options.get("FILTER", "")).strip()
         platform = self._detect_platform()
 
-        logger.info(f"Service manager çalıştırıldı (action={action}, platform={platform})")
+        logger.info(
+            f"Service manager çalıştırıldı (action={action}, platform={platform})"
+        )
 
         self.console.print()
-        self.console.print(Panel.fit(
-            "[bold cyan]⚙️  SERVİS YÖNETİCİSİ[/bold cyan]",
-            border_style="cyan",
-        ))
+        self.console.print(
+            Panel.fit(
+                "[bold cyan]⚙️  SERVİS YÖNETİCİSİ[/bold cyan]",
+                border_style="cyan",
+            )
+        )
 
-        platform_label = {"linux": "Linux (systemctl)", "darwin": "macOS (launchctl)",
-                          "win32": "Windows (sc)"}
-        self.console.print(f"  [dim]Platform:[/dim] {platform_label.get(platform, platform)}")
+        platform_label = {
+            "linux": "Linux (systemctl)",
+            "darwin": "macOS (launchctl)",
+            "win32": "Windows (sc)",
+        }
+        self.console.print(
+            f"  [dim]Platform:[/dim] {platform_label.get(platform, platform)}"
+        )
         self.console.print()
 
         # ── LIST ──────────────────────────────────────────────────────────
@@ -236,9 +275,11 @@ class service_manager(BaseModule):
                 for s in svcs:
                     active_clr = "green" if s["active"] == "active" else "red"
                     tbl.add_row(
-                        s["name"], s["load"],
+                        s["name"],
+                        s["load"],
                         f"[{active_clr}]{s['active']}[/{active_clr}]",
-                        s["sub"], s["desc"],
+                        s["sub"],
+                        s["desc"],
                     )
             elif platform == "darwin":
                 svcs = self._list_darwin(filt)
@@ -271,10 +312,12 @@ class service_manager(BaseModule):
         ok, output = self._service_action(platform, action, service_name)
         icon = "✔" if ok else "✘"
         color = "green" if ok else "red"
-        self.console.print(Panel(
-            f"[{color}]{output or 'İşlem tamamlandı.'}[/{color}]",
-            title=f"[{color}]{icon} {action.upper()} — {service_name}[/{color}]",
-            border_style=color,
-        ))
+        self.console.print(
+            Panel(
+                f"[{color}]{output or 'İşlem tamamlandı.'}[/{color}]",
+                title=f"[{color}]{icon} {action.upper()} — {service_name}[/{color}]",
+                border_style=color,
+            )
+        )
 
         return ok

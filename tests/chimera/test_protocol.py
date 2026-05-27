@@ -10,13 +10,13 @@ Agent'ın HTTP over TLS veri gönderme/alma protokolünü test eder:
 Çalıştırma:
     pytest tests/chimera/test_protocol.py -v
 """
-import pytest
-from unittest.mock import MagicMock
 
+from unittest.mock import MagicMock
 
 # ============================================================
 # send_data() Testleri
 # ============================================================
+
 
 class TestSendData:
     """Agent.send_data() HTTP POST protokol testleri."""
@@ -136,6 +136,7 @@ class TestSendData:
 # recv_data() Testleri
 # ============================================================
 
+
 class TestRecvData:
     """Agent.recv_data() HTTP Response parsing testleri."""
 
@@ -205,6 +206,7 @@ class TestRecvData:
 
     def test_recv_data_content_length_zero(self, agent):
         """Content-Length: 0 durumu boş body döner."""
+
         class ZeroLengthSocket:
             def __init__(self):
                 self.data = b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
@@ -213,7 +215,7 @@ class TestRecvData:
             def recv(self, size):
                 if self.pos >= len(self.data):
                     return b""
-                chunk = self.data[self.pos:self.pos + size]
+                chunk = self.data[self.pos : self.pos + size]
                 self.pos += len(chunk)
                 return chunk
 
@@ -227,6 +229,7 @@ class TestRecvData:
 # ============================================================
 # Protokol Uyumluluk Testleri
 # ============================================================
+
 
 class TestProtocolCompatibility:
     """Agent-Handler protokol uyumluluk testleri."""
@@ -249,7 +252,7 @@ class TestProtocolCompatibility:
         header_end = sent.find(b"\r\n\r\n")
         assert header_end > 0
 
-        body = sent[header_end + 4:]
+        body = sent[header_end + 4 :]
         assert body.decode("utf-8") == test_msg
 
     def test_http_traffic_obfuscation(self, agent):

@@ -12,14 +12,16 @@ Tam bir agent-handler çalışma döngüsünü simüle eder:
 Çalıştırma:
     pytest tests/chimera/test_full_workflow.py -v
 """
-import pytest
-import types
-from unittest.mock import MagicMock, patch
 
+import types
+from unittest.mock import patch
+
+import pytest
 
 # ============================================================
 # Payload Üretim Workflow Testleri
 # ============================================================
+
 
 class TestPayloadGeneration:
     """Payload üretim pipeline'ının end-to-end testi."""
@@ -59,7 +61,7 @@ class TestPayloadGeneration:
 
     def test_generate_only_stdlib_imports(self, payload_generator):
         """Üretilen payload'ın üst seviye importları stdlib olmalı.
-        
+
         Not: Agent, try/except blokları içinde opsiyonel third-party
         modüller (mss gibi) import edebilir — bunlar kontrol edilmez.
         """
@@ -72,43 +74,85 @@ class TestPayloadGeneration:
 
         # Python stdlib modülleri (agent'ın kullandığı tümü)
         allowed_imports = {
-            "socket", "subprocess", "os", "sys", "platform",
-            "struct", "time", "ssl", "random", "string",
-            "threading", "base64", "ctypes", "re", "types",
-            "hashlib", "hmac", "select", "signal", "shutil",
-            "multiprocessing", "json", "tempfile", "io",
-            "collections", "functools", "itertools", "copy",
-            "pathlib", "glob", "fnmatch", "errno", "stat",
-            "abc", "gc", "weakref", "textwrap", "inspect",
-            "traceback", "logging", "contextlib",
+            "socket",
+            "subprocess",
+            "os",
+            "sys",
+            "platform",
+            "struct",
+            "time",
+            "ssl",
+            "random",
+            "string",
+            "threading",
+            "base64",
+            "ctypes",
+            "re",
+            "types",
+            "hashlib",
+            "hmac",
+            "select",
+            "signal",
+            "shutil",
+            "multiprocessing",
+            "json",
+            "tempfile",
+            "io",
+            "collections",
+            "functools",
+            "itertools",
+            "copy",
+            "pathlib",
+            "glob",
+            "fnmatch",
+            "errno",
+            "stat",
+            "abc",
+            "gc",
+            "weakref",
+            "textwrap",
+            "inspect",
+            "traceback",
+            "logging",
+            "contextlib",
         }
 
         # Sadece top-level import'ları kontrol et (try blokları içindekileri atla)
         in_try_block = False
         indent_level = 0
-        
+
         for line in code.split("\n"):
             stripped = line.strip()
             leading_spaces = len(line) - len(line.lstrip())
-            
+
             # try bloğu takibi
             if stripped.startswith("try:"):
                 in_try_block = True
                 indent_level = leading_spaces
                 continue
-            
+
             if in_try_block:
                 if stripped.startswith("except") or stripped.startswith("finally"):
                     continue
-                if leading_spaces <= indent_level and stripped and not stripped.startswith("#"):
+                if (
+                    leading_spaces <= indent_level
+                    and stripped
+                    and not stripped.startswith("#")
+                ):
                     in_try_block = False
                 else:
                     continue  # try/except içindeki importları atla
-            
+
             if stripped.startswith("import ") or stripped.startswith("from "):
-                module_name = stripped.replace("import ", "").replace("from ", "").split(".")[0].split(" ")[0]
-                assert module_name in allowed_imports, \
+                module_name = (
+                    stripped.replace("import ", "")
+                    .replace("from ", "")
+                    .split(".")[0]
+                    .split(" ")[0]
+                )
+                assert module_name in allowed_imports, (
                     f"Standart olmayan import tespit edildi: {stripped}"
+                )
 
     def test_generate_contains_chimera_agent_class(self, payload_generator):
         """Üretilen payload ChimeraAgent sınıfını içerir."""
@@ -130,7 +174,7 @@ class TestPayloadGeneration:
         else:
             code = result
 
-        assert '__name__' in code or '__main__' in code
+        assert "__name__" in code or "__main__" in code
 
     def test_generate_result_dict_format(self, payload_generator):
         """generate() doğru formatta dict döner."""
@@ -145,6 +189,7 @@ class TestPayloadGeneration:
 # ============================================================
 # Agent Run Döngüsü Testleri
 # ============================================================
+
 
 class TestAgentRunLoop:
     """Agent.run() tam döngü simülasyonu."""
@@ -188,8 +233,7 @@ class TestAgentRunLoop:
                 return (
                     b"HTTP/1.1 200 OK\r\n"
                     b"Content-Length: " + str(len(body)).encode() + b"\r\n"
-                    b"\r\n"
-                    + body
+                    b"\r\n" + body
                 )
 
             def recv(self, size):
@@ -200,7 +244,7 @@ class TestAgentRunLoop:
                     self.cmd_idx += 1
                     self.pos = 0
 
-                chunk = self.current_data[self.pos:self.pos + size]
+                chunk = self.current_data[self.pos : self.pos + size]
                 self.pos += len(chunk)
                 return chunk
 
@@ -213,9 +257,11 @@ class TestAgentRunLoop:
             def close(self):
                 pass
 
-        with patch.object(agent, "connect", return_value=True), \
-             patch.object(agent, "send_sysinfo"), \
-             patch.object(agent, "send_data", side_effect=mock_send_data):
+        with (
+            patch.object(agent, "connect", return_value=True),
+            patch.object(agent, "send_sysinfo"),
+            patch.object(agent, "send_data", side_effect=mock_send_data),
+        ):
             agent.sock = MultiCommandSocket()
             agent.run()
 
@@ -234,18 +280,22 @@ class TestAgentRunLoop:
             agent.running = False  # Sonsuz döngüyü kırmak için
             return False
 
-        with patch.object(agent, "connect", return_value=True), \
-             patch.object(agent, "send_sysinfo"), \
-             patch.object(agent, "recv_data", return_value=""), \
-             patch.object(agent, "reconnect", side_effect=mock_reconnect):
+        with (
+            patch.object(agent, "connect", return_value=True),
+            patch.object(agent, "send_sysinfo"),
+            patch.object(agent, "recv_data", return_value=""),
+            patch.object(agent, "reconnect", side_effect=mock_reconnect),
+        ):
             agent.run()
 
         assert reconnect_called
 
     def test_run_initial_connect_failure_triggers_reconnect(self, agent):
         """İlk bağlantı başarısız olursa reconnect denenir."""
-        with patch.object(agent, "connect", return_value=False), \
-             patch.object(agent, "reconnect", return_value=False):
+        with (
+            patch.object(agent, "connect", return_value=False),
+            patch.object(agent, "reconnect", return_value=False),
+        ):
             agent.run()
 
         # Reconnect başarısız olunca run() sonlanmalı
@@ -255,6 +305,7 @@ class TestAgentRunLoop:
 # ============================================================
 # Builder → Agent → Handler Pipeline Testi
 # ============================================================
+
 
 class TestBuilderPipeline:
     """Builder → Payload üretimi → Agent yükleme pipeline testi."""

@@ -10,16 +10,17 @@ Handler'ın birden fazla agent bağlantısını yönetme yeteneğini test eder:
 Çalıştırma:
     pytest tests/chimera/test_multi_session.py -v
 """
+
+from unittest.mock import MagicMock, patch
+
 import pytest
-import ssl
-from unittest.mock import MagicMock, patch, call
 
 from core.shared_state import shared_state
-
 
 # ============================================================
 # Handler Başlatma Testleri
 # ============================================================
+
 
 class TestHandlerInitialization:
     """Handler başlatma ve yapılandırma testleri."""
@@ -36,12 +37,14 @@ class TestHandlerInitialization:
     def test_handler_inherits_base_handler(self, chimera_handler):
         """Handler, BaseHandler'dan miras alır."""
         from core.handler import BaseHandler
+
         assert isinstance(chimera_handler, BaseHandler)
 
 
 # ============================================================
 # Handler Protokol Testleri
 # ============================================================
+
 
 class TestHandlerProtocol:
     """Handler send_data / recv_data protokol testleri."""
@@ -98,12 +101,15 @@ class TestHandlerProtocol:
 # Session Yönetimi Testleri
 # ============================================================
 
+
 class TestSessionManagement:
     """Oturum yönetimi entegrasyon testleri."""
 
     @patch("ssl.SSLContext")
     @patch("builtins.print")
-    def test_handle_connection_assigns_session_id(self, mock_print, mock_ssl_ctx, chimera_handler):
+    def test_handle_connection_assigns_session_id(
+        self, mock_print, mock_ssl_ctx, chimera_handler
+    ):
         """handle_connection session_id'yi doğru atar."""
         mock_client = MagicMock()
         session_id = 42
@@ -112,7 +118,7 @@ class TestSessionManagement:
         mock_ssl_instance = mock_ssl_ctx.return_value
         mock_wrapped = MagicMock()
         mock_ssl_instance.wrap_socket.return_value = mock_wrapped
-        mock_wrapped.cipher.return_value = ('AES256-GCM', 256, 'TLSv1.3')
+        mock_wrapped.cipher.return_value = ("AES256-GCM", 256, "TLSv1.3")
 
         # Sysinfo mock
         sysinfo = "OS: Darwin | User: test"
@@ -131,14 +137,16 @@ class TestSessionManagement:
 
     @patch("ssl.SSLContext")
     @patch("builtins.print")
-    def test_handle_connection_performs_ssl_wrap(self, mock_print, mock_ssl_ctx, chimera_handler):
+    def test_handle_connection_performs_ssl_wrap(
+        self, mock_print, mock_ssl_ctx, chimera_handler
+    ):
         """handle_connection SSL sarmalaması yapar."""
         mock_client = MagicMock()
 
         mock_ssl_instance = mock_ssl_ctx.return_value
         mock_wrapped = MagicMock()
         mock_ssl_instance.wrap_socket.return_value = mock_wrapped
-        mock_wrapped.cipher.return_value = ('AES256-GCM', 256, 'TLSv1.3')
+        mock_wrapped.cipher.return_value = ("AES256-GCM", 256, "TLSv1.3")
 
         sysinfo = "OS: Linux | User: root"
         encoded_sys = sysinfo.encode("utf-8")
@@ -156,7 +164,9 @@ class TestSessionManagement:
 
     @patch("ssl.SSLContext")
     @patch("builtins.print")
-    def test_handle_connection_updates_session_info(self, mock_print, mock_ssl_ctx, chimera_handler):
+    def test_handle_connection_updates_session_info(
+        self, mock_print, mock_ssl_ctx, chimera_handler
+    ):
         """handle_connection session manager'daki oturum bilgisini günceller."""
         mock_client = MagicMock()
         session_id = 99
@@ -164,7 +174,7 @@ class TestSessionManagement:
         mock_ssl_instance = mock_ssl_ctx.return_value
         mock_wrapped = MagicMock()
         mock_ssl_instance.wrap_socket.return_value = mock_wrapped
-        mock_wrapped.cipher.return_value = ('AES256-GCM', 256, 'TLSv1.3')
+        mock_wrapped.cipher.return_value = ("AES256-GCM", 256, "TLSv1.3")
 
         sysinfo = "OS: Windows 10 | User: admin"
         encoded_sys = sysinfo.encode("utf-8")
@@ -188,6 +198,7 @@ class TestSessionManagement:
 # ============================================================
 # Çoklu Agent Simülasyonu
 # ============================================================
+
 
 class TestMultipleAgents:
     """Birden fazla agent instance'ının bağımsız çalışması."""

@@ -10,23 +10,24 @@ SSL/TLS şifreleme altyapısını test eder:
 Çalıştırma:
     pytest tests/chimera/test_encryption.py -v
 """
-import pytest
-import ssl
-import socket
-from unittest.mock import MagicMock, patch
 
+import ssl
+from unittest.mock import MagicMock, patch
 
 # ============================================================
 # SSL Context Oluşturma Testleri
 # ============================================================
+
 
 class TestSSLContextCreation:
     """SSL context yapılandırma testleri."""
 
     def test_creates_default_ssl_context(self, agent):
         """Agent, ssl.create_default_context() kullanır."""
-        with patch("ssl.create_default_context") as mock_ctx_factory, \
-             patch("socket.socket"):
+        with (
+            patch("ssl.create_default_context") as mock_ctx_factory,
+            patch("socket.socket"),
+        ):
             mock_ctx = MagicMock()
             mock_ctx_factory.return_value = mock_ctx
             mock_wrapped = MagicMock()
@@ -38,8 +39,10 @@ class TestSSLContextCreation:
 
     def test_disables_hostname_check(self, agent):
         """Self-signed sertifika için hostname kontrolü kapatılır."""
-        with patch("ssl.create_default_context") as mock_ctx_factory, \
-             patch("socket.socket"):
+        with (
+            patch("ssl.create_default_context") as mock_ctx_factory,
+            patch("socket.socket"),
+        ):
             mock_ctx = MagicMock()
             mock_ctx_factory.return_value = mock_ctx
             mock_wrapped = MagicMock()
@@ -51,8 +54,10 @@ class TestSSLContextCreation:
 
     def test_sets_cert_none_mode(self, agent):
         """Sertifika doğrulama kapatılır (CERT_NONE)."""
-        with patch("ssl.create_default_context") as mock_ctx_factory, \
-             patch("socket.socket"):
+        with (
+            patch("ssl.create_default_context") as mock_ctx_factory,
+            patch("socket.socket"),
+        ):
             mock_ctx = MagicMock()
             mock_ctx_factory.return_value = mock_ctx
             mock_wrapped = MagicMock()
@@ -64,8 +69,10 @@ class TestSSLContextCreation:
 
     def test_wraps_with_server_hostname(self, agent):
         """wrap_socket'e doğru server_hostname geçilir."""
-        with patch("ssl.create_default_context") as mock_ctx_factory, \
-             patch("socket.socket"):
+        with (
+            patch("ssl.create_default_context") as mock_ctx_factory,
+            patch("socket.socket"),
+        ):
             mock_ctx = MagicMock()
             mock_ctx_factory.return_value = mock_ctx
             mock_wrapped = MagicMock()
@@ -74,21 +81,26 @@ class TestSSLContextCreation:
             agent.connect()
 
             call_kwargs = mock_ctx.wrap_socket.call_args
-            assert call_kwargs[1].get("server_hostname") == "127.0.0.1" or \
-                   (len(call_kwargs[0]) > 1 or call_kwargs[1].get("server_hostname") == agent.host)
+            assert call_kwargs[1].get("server_hostname") == "127.0.0.1" or (
+                len(call_kwargs[0]) > 1
+                or call_kwargs[1].get("server_hostname") == agent.host
+            )
 
 
 # ============================================================
 # SSL Hata Senaryoları
 # ============================================================
 
+
 class TestSSLErrorScenarios:
     """SSL/TLS hata durumu testleri."""
 
     def test_ssl_error_on_wrap(self, agent):
         """SSL wrap hatası graceful şekilde ele alınır."""
-        with patch("ssl.create_default_context") as mock_ctx_factory, \
-             patch("socket.socket"):
+        with (
+            patch("ssl.create_default_context") as mock_ctx_factory,
+            patch("socket.socket"),
+        ):
             mock_ctx = MagicMock()
             mock_ctx_factory.return_value = mock_ctx
             mock_ctx.wrap_socket.side_effect = ssl.SSLError("SSL_ERROR_SYSCALL")
@@ -100,8 +112,10 @@ class TestSSLErrorScenarios:
 
     def test_ssl_certificate_verify_failed(self, agent):
         """Sertifika doğrulama hatası bağlantıyı başarısız yapar."""
-        with patch("ssl.create_default_context") as mock_ctx_factory, \
-             patch("socket.socket"):
+        with (
+            patch("ssl.create_default_context") as mock_ctx_factory,
+            patch("socket.socket"),
+        ):
             mock_ctx = MagicMock()
             mock_ctx_factory.return_value = mock_ctx
             mock_ctx.wrap_socket.side_effect = ssl.SSLCertVerificationError(
@@ -114,8 +128,10 @@ class TestSSLErrorScenarios:
 
     def test_protocol_version_error(self, agent):
         """Protokol versiyonu uyuşmazlığı ele alınır."""
-        with patch("ssl.create_default_context") as mock_ctx_factory, \
-             patch("socket.socket"):
+        with (
+            patch("ssl.create_default_context") as mock_ctx_factory,
+            patch("socket.socket"),
+        ):
             mock_ctx = MagicMock()
             mock_ctx_factory.return_value = mock_ctx
             mock_ctx.wrap_socket.side_effect = ssl.SSLError("WRONG_VERSION_NUMBER")
@@ -127,13 +143,15 @@ class TestSSLErrorScenarios:
 
     def test_handshake_timeout(self, agent):
         """Handshake sırasında timeout ele alınır."""
-        with patch("ssl.create_default_context") as mock_ctx_factory, \
-             patch("socket.socket"):
+        with (
+            patch("ssl.create_default_context") as mock_ctx_factory,
+            patch("socket.socket"),
+        ):
             mock_ctx = MagicMock()
             mock_ctx_factory.return_value = mock_ctx
             mock_wrapped = MagicMock()
             mock_ctx.wrap_socket.return_value = mock_wrapped
-            mock_wrapped.connect.side_effect = socket.timeout("handshake timed out")
+            mock_wrapped.connect.side_effect = TimeoutError("handshake timed out")
 
             result = agent.connect()
 
@@ -144,13 +162,16 @@ class TestSSLErrorScenarios:
 # Veri Şifreleme Doğrulama Testleri
 # ============================================================
 
+
 class TestDataEncryption:
     """Veri transferinin şifreli olduğunu doğrulayan testler."""
 
     def test_data_sent_over_ssl_socket(self, agent):
         """Veri SSL socket üzerinden gönderilir (düz socket değil)."""
-        with patch("ssl.create_default_context") as mock_ctx_factory, \
-             patch("socket.socket"):
+        with (
+            patch("ssl.create_default_context") as mock_ctx_factory,
+            patch("socket.socket"),
+        ):
             mock_ctx = MagicMock()
             mock_ctx_factory.return_value = mock_ctx
             mock_wrapped = MagicMock()
@@ -170,8 +191,10 @@ class TestDataEncryption:
 
     def test_raw_socket_not_used_after_connect(self, agent):
         """Bağlantı sonrası raw socket değil, SSL socket kullanılır."""
-        with patch("ssl.create_default_context") as mock_ctx_factory, \
-             patch("socket.socket") as mock_socket_cls:
+        with (
+            patch("ssl.create_default_context") as mock_ctx_factory,
+            patch("socket.socket") as mock_socket_cls,
+        ):
             mock_raw = MagicMock()
             mock_socket_cls.return_value = mock_raw
 

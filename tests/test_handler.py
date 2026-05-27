@@ -11,25 +11,28 @@ Handler mimarisi yeniden yapılandırması testleri:
 Çalıştırma:
     pytest tests/test_handler.py -v
 """
-import unittest
+
+import socket
 import threading
 import time
-import socket
-from unittest.mock import MagicMock, patch, PropertyMock
+import unittest
+from unittest.mock import MagicMock, patch
+
 from core.handler import BaseHandler, BindHandler
 from core.session_manager import SessionManager
 from core.shared_state import shared_state
 
-
 # ============================================================
 # Test için somut Handler alt sınıfı
 # ============================================================
+
 
 class ConcreteHandler(BaseHandler):
     """
     Test amaçlı somut handler.
     handle_connection'ı uygulayarak BaseHandler'ın soyut kontrolünü geçer.
     """
+
     def __init__(self, options=None):
         super().__init__(options or {"LHOST": "127.0.0.1", "LPORT": 0})
         self.connections_received = []  # (client_sock, session_id) çiftleri
@@ -42,6 +45,7 @@ class ConcreteHandler(BaseHandler):
 
 class ConcreteBindHandler(BindHandler):
     """Test amaçlı somut bind handler."""
+
     def __init__(self, options=None):
         super().__init__(options or {"RHOST": "127.0.0.1", "RPORT": 0})
         self.connections_received = []
@@ -53,6 +57,7 @@ class ConcreteBindHandler(BindHandler):
 # ============================================================
 # BaseHandler Testleri
 # ============================================================
+
 
 class TestBaseHandlerInit(unittest.TestCase):
     """BaseHandler başlatma testleri."""
@@ -84,7 +89,9 @@ class TestBaseHandlerInit(unittest.TestCase):
 
     def test_accept_timeout_custom(self):
         """Özel accept_timeout değeri doğru atanır."""
-        handler = ConcreteHandler({"LHOST": "0.0.0.0", "LPORT": 0, "ACCEPT_TIMEOUT": 10})
+        handler = ConcreteHandler(
+            {"LHOST": "0.0.0.0", "LPORT": 0, "ACCEPT_TIMEOUT": 10}
+        )
         self.assertEqual(handler.accept_timeout, 10.0)
 
 
@@ -103,7 +110,7 @@ class TestBaseHandlerMultiClient(unittest.TestCase):
         """Handler'ı arka plan thread'inde başlat ve porta bağlanana kadar bekle."""
         t = threading.Thread(target=self.handler.start, daemon=True)
         t.start()
-        
+
         # Handler'ın porta bağlanmasını bekle
         for _ in range(50):
             if self.handler.running and self.handler.sock:
@@ -120,103 +127,103 @@ class TestBaseHandlerMultiClient(unittest.TestCase):
 
     def test_single_client_connection(self):
         """Tek bir client bağlantısı başarıyla kabul edilir."""
-        t = self._start_handler_in_thread()
-        
+        self._start_handler_in_thread()
+
         # Client bağlantısı
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client.connect(("127.0.0.1", self.handler.lport))
-        
+
         # Bağlantının işlenmesini bekle
         self.handler.connection_event.wait(timeout=3)
-        
+
         self.assertEqual(len(self.handler.connections_received), 1)
         self.assertIsNotNone(self.handler.client_sock)
         self.assertIsNotNone(self.handler.client_addr)
-        
+
         client.close()
 
     def test_multiple_client_connections(self):
         """Birden fazla client bağlantısı paralel olarak kabul edilir."""
-        t = self._start_handler_in_thread()
-        
+        self._start_handler_in_thread()
+
         clients = []
         num_clients = 3
-        
+
         for i in range(num_clients):
             c = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             c.connect(("127.0.0.1", self.handler.lport))
             clients.append(c)
             time.sleep(0.2)  # Bağlantı işlenme süresi
-        
+
         # Tüm bağlantıların işlenmesini bekle
         time.sleep(1)
-        
+
         self.assertEqual(len(self.handler.connections_received), num_clients)
-        
+
         # Session Manager'da da doğru sayıda oturum olmalı
         all_sessions = self.session_manager.get_all_sessions()
         self.assertEqual(len(all_sessions), num_clients)
-        
+
         for c in clients:
             c.close()
 
     def test_client_sock_backward_compat(self):
         """client_sock ve client_addr geriye uyumluluk için son bağlanan istemciyi tutar."""
-        t = self._start_handler_in_thread()
-        
+        self._start_handler_in_thread()
+
         c1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         c1.connect(("127.0.0.1", self.handler.lport))
         time.sleep(0.3)
-        
+
         addr_after_first = self.handler.client_addr
-        
+
         c2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         c2.connect(("127.0.0.1", self.handler.lport))
         time.sleep(0.3)
-        
+
         addr_after_second = self.handler.client_addr
-        
+
         # İkinci bağlantıdan sonra client_addr güncellenmeli
         # (portlar farklı olacak çünkü iki farklı client)
         self.assertIsNotNone(addr_after_first)
         self.assertIsNotNone(addr_after_second)
-        
+
         c1.close()
         c2.close()
 
     def test_session_manager_registration(self):
         """Her bağlantı Session Manager'a kaydedilir."""
-        t = self._start_handler_in_thread()
-        
+        self._start_handler_in_thread()
+
         c = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         c.connect(("127.0.0.1", self.handler.lport))
-        
+
         self.handler.connection_event.wait(timeout=3)
         time.sleep(0.2)
-        
+
         sessions = self.session_manager.get_all_sessions()
         self.assertEqual(len(sessions), 1)
-        
-        session = list(sessions.values())[0]
+
+        session = next(iter(sessions.values()))
         self.assertEqual(session["info"]["host"], "127.0.0.1")
         self.assertEqual(session["status"], "Active")
-        
+
         c.close()
 
     def test_session_type_is_class_name(self):
         """Oturum türü handler sınıf adı olarak kaydedilir."""
-        t = self._start_handler_in_thread()
-        
+        self._start_handler_in_thread()
+
         c = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         c.connect(("127.0.0.1", self.handler.lport))
-        
+
         self.handler.connection_event.wait(timeout=3)
         time.sleep(0.2)
-        
+
         sessions = self.session_manager.get_all_sessions()
-        session = list(sessions.values())[0]
+        session = next(iter(sessions.values()))
         self.assertEqual(session["info"]["type"], "ConcreteHandler")
-        
+
         c.close()
 
 
@@ -232,28 +239,32 @@ class TestBaseHandlerStop(unittest.TestCase):
         handler = ConcreteHandler()
         handler.sock = MagicMock()
         handler.client_sock = MagicMock()
-        
+
         handler.stop()
-        
+
         handler.sock.close.assert_called_once()
         self.assertFalse(handler.running)
 
     def test_stop_closes_all_client_sockets(self):
         """stop() tüm client soketlerini kapatır."""
         handler = ConcreteHandler()
-        
+
         mock_socks = []
         for i in range(3):
             mock_sock = MagicMock()
             mock_socks.append(mock_sock)
-            handler.clients[i] = {"sock": mock_sock, "addr": ("127.0.0.1", 5000 + i), "thread": MagicMock()}
-        
+            handler.clients[i] = {
+                "sock": mock_sock,
+                "addr": ("127.0.0.1", 5000 + i),
+                "thread": MagicMock(),
+            }
+
         handler.stop()
-        
+
         # Tüm soketler kapatılmış olmalı
         for mock_sock in mock_socks:
             mock_sock.close.assert_called_once()
-        
+
         # clients sözlüğü temizlenmeli
         self.assertEqual(len(handler.clients), 0)
 
@@ -261,24 +272,26 @@ class TestBaseHandlerStop(unittest.TestCase):
         """stop() running bayrağını False yapar."""
         handler = ConcreteHandler()
         handler.running = True
-        
+
         handler.stop()
-        
+
         self.assertFalse(handler.running)
 
     def test_stop_handles_socket_errors_gracefully(self):
         """stop() soket hataları sırasında crash olmaz."""
         handler = ConcreteHandler()
-        
+
         mock_sock = MagicMock()
         mock_sock.close.side_effect = OSError("Soket zaten kapalı")
         handler.sock = mock_sock
         handler.client_sock = mock_sock
-        
+
         mock_client = MagicMock()
         mock_client.close.side_effect = OSError("Hata")
-        handler.clients = {1: {"sock": mock_client, "addr": ("127.0.0.1", 5000), "thread": MagicMock()}}
-        
+        handler.clients = {
+            1: {"sock": mock_client, "addr": ("127.0.0.1", 5000), "thread": MagicMock()}
+        }
+
         # Hata fırlatmadan tamamlanmalı
         handler.stop()
         self.assertFalse(handler.running)
@@ -289,23 +302,25 @@ class TestBaseHandlerTimeout(unittest.TestCase):
 
     def test_accept_timeout_set_on_socket(self):
         """accept_timeout > 0 olduğunda soket timeout'u ayarlanır."""
-        handler = ConcreteHandler({"LHOST": "127.0.0.1", "LPORT": 0, "ACCEPT_TIMEOUT": 2})
-        
+        handler = ConcreteHandler(
+            {"LHOST": "127.0.0.1", "LPORT": 0, "ACCEPT_TIMEOUT": 2}
+        )
+
         # Handler'ı threaded başlat
         t = threading.Thread(target=handler.start, daemon=True)
         t.start()
-        
+
         # Başlamasını bekle
         for _ in range(30):
             if handler.running and handler.sock:
                 break
             time.sleep(0.05)
-        
+
         # Soket timeout'u ayarlanmış olmalı
         if handler.sock:
             timeout = handler.sock.gettimeout()
             self.assertEqual(timeout, 2.0)
-        
+
         handler.stop()
 
 
@@ -315,7 +330,7 @@ class TestBaseHandlerAbstractMethods(unittest.TestCase):
     def test_handle_connection_not_implemented(self):
         """BaseHandler doğrudan kullanıldığında NotImplementedError fırlatır."""
         handler = BaseHandler({"LHOST": "0.0.0.0", "LPORT": 4444})
-        
+
         with self.assertRaises(NotImplementedError):
             handler.handle_connection(MagicMock())
 
@@ -324,7 +339,7 @@ class TestBaseHandlerAbstractMethods(unittest.TestCase):
         """Varsayılan interact mesaj basar."""
         handler = BaseHandler({"LHOST": "0.0.0.0", "LPORT": 4444})
         handler.interact(5)
-        
+
         # print çağrılmış olmalı
         mock_print.assert_called()
 
@@ -336,9 +351,9 @@ class TestHandleClientThread(unittest.TestCase):
         """_handle_client_thread handle_connection'ı çağırır."""
         handler = ConcreteHandler()
         mock_sock = MagicMock()
-        
+
         handler._handle_client_thread(mock_sock, ("127.0.0.1", 5000), 1)
-        
+
         self.assertEqual(len(handler.connections_received), 1)
         self.assertEqual(handler.connections_received[0], (mock_sock, 1))
 
@@ -346,12 +361,16 @@ class TestHandleClientThread(unittest.TestCase):
         """Thread tamamlandığında clients sözlüğünden kaldırılır."""
         handler = ConcreteHandler()
         mock_sock = MagicMock()
-        
+
         # Önce client'ı ekle
-        handler.clients[1] = {"sock": mock_sock, "addr": ("127.0.0.1", 5000), "thread": MagicMock()}
-        
+        handler.clients[1] = {
+            "sock": mock_sock,
+            "addr": ("127.0.0.1", 5000),
+            "thread": MagicMock(),
+        }
+
         handler._handle_client_thread(mock_sock, ("127.0.0.1", 5000), 1)
-        
+
         # Thread bittiğinde silinmeli
         self.assertNotIn(1, handler.clients)
 
@@ -360,10 +379,10 @@ class TestHandleClientThread(unittest.TestCase):
         """Thread exception'ı yakalar ve crash olmaz."""
         handler = BaseHandler({"LHOST": "0.0.0.0", "LPORT": 4444})
         mock_sock = MagicMock()
-        
+
         # handle_connection NotImplementedError fırlatacak
         handler._handle_client_thread(mock_sock, ("127.0.0.1", 5000), 1)
-        
+
         # Hata yakalanıp loglanmalı
         mock_print.assert_called()
 
@@ -371,6 +390,7 @@ class TestHandleClientThread(unittest.TestCase):
 # ============================================================
 # BindHandler Testleri
 # ============================================================
+
 
 class TestBindHandlerInit(unittest.TestCase):
     """BindHandler başlatma testleri."""
@@ -395,16 +415,20 @@ class TestBindHandlerStart(unittest.TestCase):
         handler = ConcreteBindHandler({"LHOST": "0.0.0.0", "LPORT": 4444})
         # RHOST yok
         handler.start()
-        
+
         # Hata mesajı basılmış olmalı
-        mock_print.assert_any_call("[!] RHOST belirtilmedi! Bind handler için RHOST gereklidir.")
+        mock_print.assert_any_call(
+            "[!] RHOST belirtilmedi! Bind handler için RHOST gereklidir."
+        )
 
     @patch("core.handler.print")
     def test_start_connection_refused(self, mock_print):
         """Kapalı porta bağlanırken ConnectionRefusedError yakalanır."""
-        handler = ConcreteBindHandler({"RHOST": "127.0.0.1", "RPORT": 1, "ACCEPT_TIMEOUT": 1})
+        handler = ConcreteBindHandler(
+            {"RHOST": "127.0.0.1", "RPORT": 1, "ACCEPT_TIMEOUT": 1}
+        )
         handler.start()
-        
+
         # Hata yakalanıp loglanmalı (ya refused ya timeout)
         self.assertFalse(handler.running)
 
@@ -412,32 +436,32 @@ class TestBindHandlerStart(unittest.TestCase):
         """BindHandler hedef porta başarıyla bağlanır."""
         session_manager = SessionManager()
         shared_state.session_manager = session_manager
-        
+
         # Bir dinleyici oluştur
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind(("127.0.0.1", 0))
         server.listen(1)
         port = server.getsockname()[1]
-        
+
         handler = ConcreteBindHandler({"RHOST": "127.0.0.1", "RPORT": port})
-        
+
         # Handler'ı threaded başlat
         t = threading.Thread(target=handler.start, daemon=True)
         t.start()
-        
+
         # Server bağlantıyı kabul et
-        conn, addr = server.accept()
-        
+        conn, _addr = server.accept()
+
         time.sleep(0.5)
-        
+
         # Handler bağlanmış olmalı
         self.assertEqual(len(handler.connections_received), 1)
-        
+
         conn.close()
         server.close()
         handler.stop()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

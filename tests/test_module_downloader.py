@@ -1,26 +1,25 @@
 # tests/test_module_downloader.py
 # Modül İndirici (ModuleDownloader) ve Download komutu için birim testleri.
 
-import pytest
-import json
-import sys
 import hashlib
+import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Proje kök dizinini path'e ekle
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.module_downloader import ModuleDownloader
 from commands.download import Download
+from core.module_downloader import ModuleDownloader
 from core.shared_state import shared_state
-
 
 # ==============================================================================
 # Yardımcı: Sahte modül dosyası oluşturma
 # ==============================================================================
 
-FAKE_MODULE_CONTENT = '''
+FAKE_MODULE_CONTENT = """
 from core.module import BaseModule
 from core.option import Option
 
@@ -34,9 +33,9 @@ class FakeScanner(BaseModule):
 
     def run(self, options):
         return True
-'''
+"""
 
-FAKE_MODULE_V2_CONTENT = '''
+FAKE_MODULE_V2_CONTENT = """
 from core.module import BaseModule
 
 class FakeScanner(BaseModule):
@@ -48,20 +47,20 @@ class FakeScanner(BaseModule):
 
     def run(self, options):
         return True
-'''
+"""
 
-NOT_A_MODULE_CONTENT = '''
+NOT_A_MODULE_CONTENT = """
 # Bu dosya bir modül değil
 def some_utility():
     return 42
-'''
+"""
 
 
 def compute_sha256(file_path: Path) -> str:
     """Test yardımcısı: Dosya SHA256 hash hesapla."""
     sha256_hash = hashlib.sha256()
-    with open(file_path, 'rb') as f:
-        for chunk in iter(lambda: f.read(8192), b''):
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
             sha256_hash.update(chunk)
     return sha256_hash.hexdigest()
 
@@ -69,6 +68,7 @@ def compute_sha256(file_path: Path) -> str:
 # ==============================================================================
 # ModuleDownloader Init Testleri
 # ==============================================================================
+
 
 class TestModuleDownloaderInit:
     """ModuleDownloader başlatma testleri."""
@@ -81,9 +81,11 @@ class TestModuleDownloaderInit:
         modules_dir = tmp_path / "modules"
         modules_dir.mkdir()
 
-        with patch("core.module_downloader.INSTALLED_MODULES_FILE", str(installed_file)), \
-             patch("core.module_downloader.REPOS_DIR", str(repos_dir)):
-            downloader = ModuleDownloader(modules_dir=str(modules_dir))
+        with (
+            patch("core.module_downloader.INSTALLED_MODULES_FILE", str(installed_file)),
+            patch("core.module_downloader.REPOS_DIR", str(repos_dir)),
+        ):
+            ModuleDownloader(modules_dir=str(modules_dir))
 
         assert installed_file.exists()
 
@@ -95,8 +97,10 @@ class TestModuleDownloaderInit:
         modules_dir = tmp_path / "modules"
         modules_dir.mkdir()
 
-        with patch("core.module_downloader.INSTALLED_MODULES_FILE", str(installed_file)), \
-             patch("core.module_downloader.REPOS_DIR", str(repos_dir)):
+        with (
+            patch("core.module_downloader.INSTALLED_MODULES_FILE", str(installed_file)),
+            patch("core.module_downloader.REPOS_DIR", str(repos_dir)),
+        ):
             downloader = ModuleDownloader(modules_dir=str(modules_dir))
 
         assert downloader.installed == {}
@@ -110,8 +114,10 @@ class TestModuleDownloaderInit:
         modules_dir = tmp_path / "modules"
         modules_dir.mkdir()
 
-        with patch("core.module_downloader.INSTALLED_MODULES_FILE", str(installed_file)), \
-             patch("core.module_downloader.REPOS_DIR", str(repos_dir)):
+        with (
+            patch("core.module_downloader.INSTALLED_MODULES_FILE", str(installed_file)),
+            patch("core.module_downloader.REPOS_DIR", str(repos_dir)),
+        ):
             downloader = ModuleDownloader(modules_dir=str(modules_dir))
 
         assert downloader.installed == {}
@@ -120,6 +126,7 @@ class TestModuleDownloaderInit:
 # ==============================================================================
 # Depo Tarama (Scan) Testleri
 # ==============================================================================
+
 
 class TestModuleDownloaderScan:
     """Depo tarama ve modül bulma testleri."""
@@ -133,8 +140,10 @@ class TestModuleDownloaderScan:
         modules_dir = tmp_path / "modules"
         modules_dir.mkdir()
 
-        with patch("core.module_downloader.INSTALLED_MODULES_FILE", str(installed_file)), \
-             patch("core.module_downloader.REPOS_DIR", str(repos_dir)):
+        with (
+            patch("core.module_downloader.INSTALLED_MODULES_FILE", str(installed_file)),
+            patch("core.module_downloader.REPOS_DIR", str(repos_dir)),
+        ):
             dl = ModuleDownloader(modules_dir=str(modules_dir))
 
         dl.installed_file = installed_file
@@ -184,8 +193,9 @@ class TestModuleDownloaderScan:
         repo_dir.mkdir(parents=True)
         (repo_dir / "fake_scanner.py").write_text(FAKE_MODULE_CONTENT)
         (repo_dir / "other_module.py").write_text(
-            FAKE_MODULE_CONTENT.replace("Fake Scanner", "Other Module")
-            .replace("FakeScanner", "OtherModule")
+            FAKE_MODULE_CONTENT.replace("Fake Scanner", "Other Module").replace(
+                "FakeScanner", "OtherModule"
+            )
         )
 
         # "Fake" araması sadece ilk modülü döndürmeli
@@ -213,6 +223,7 @@ class TestModuleDownloaderScan:
 # Modül Kurma (Install) Testleri
 # ==============================================================================
 
+
 class TestModuleDownloaderInstall:
     """Modül kurma testleri."""
 
@@ -224,8 +235,10 @@ class TestModuleDownloaderInstall:
         modules_dir = tmp_path / "modules"
         modules_dir.mkdir()
 
-        with patch("core.module_downloader.INSTALLED_MODULES_FILE", str(installed_file)), \
-             patch("core.module_downloader.REPOS_DIR", str(repos_dir)):
+        with (
+            patch("core.module_downloader.INSTALLED_MODULES_FILE", str(installed_file)),
+            patch("core.module_downloader.REPOS_DIR", str(repos_dir)),
+        ):
             dl = ModuleDownloader(modules_dir=str(modules_dir))
 
         dl.installed_file = installed_file
@@ -322,7 +335,9 @@ class TestModuleDownloaderInstall:
         module_file.write_text(FAKE_MODULE_CONTENT)
 
         # Geçersiz SHA256 dosyası
-        (repo_dir / "scanner.sha256").write_text("0000000000000000000000000000000000000000000000000000000000000000")
+        (repo_dir / "scanner.sha256").write_text(
+            "0000000000000000000000000000000000000000000000000000000000000000"
+        )
 
         result = downloader.install_module("myrepo/scanner.py")
         assert result is False
@@ -331,6 +346,7 @@ class TestModuleDownloaderInstall:
 # ==============================================================================
 # SHA256 Doğrulama Testleri
 # ==============================================================================
+
 
 class TestModuleDownloaderVerify:
     """SHA256 imza doğrulama testleri."""
@@ -343,8 +359,10 @@ class TestModuleDownloaderVerify:
         modules_dir = tmp_path / "modules"
         modules_dir.mkdir()
 
-        with patch("core.module_downloader.INSTALLED_MODULES_FILE", str(installed_file)), \
-             patch("core.module_downloader.REPOS_DIR", str(repos_dir)):
+        with (
+            patch("core.module_downloader.INSTALLED_MODULES_FILE", str(installed_file)),
+            patch("core.module_downloader.REPOS_DIR", str(repos_dir)),
+        ):
             dl = ModuleDownloader(modules_dir=str(modules_dir))
 
         dl.installed_file = installed_file
@@ -394,6 +412,7 @@ class TestModuleDownloaderVerify:
 # Versiyon Kontrolü Testleri
 # ==============================================================================
 
+
 class TestModuleDownloaderVersionControl:
     """Versiyon kontrolü ve güncelleme testleri."""
 
@@ -405,8 +424,10 @@ class TestModuleDownloaderVersionControl:
         modules_dir = tmp_path / "modules"
         modules_dir.mkdir()
 
-        with patch("core.module_downloader.INSTALLED_MODULES_FILE", str(installed_file)), \
-             patch("core.module_downloader.REPOS_DIR", str(repos_dir)):
+        with (
+            patch("core.module_downloader.INSTALLED_MODULES_FILE", str(installed_file)),
+            patch("core.module_downloader.REPOS_DIR", str(repos_dir)),
+        ):
             dl = ModuleDownloader(modules_dir=str(modules_dir))
 
         dl.installed_file = installed_file
@@ -479,6 +500,7 @@ class TestModuleDownloaderVersionControl:
 # Persistence Testleri
 # ==============================================================================
 
+
 class TestModuleDownloaderPersistence:
     """JSON dosyasına kaydetme ve yükleme testleri."""
 
@@ -494,8 +516,10 @@ class TestModuleDownloaderPersistence:
         modules_dir.mkdir()
 
         # İlk downloader: modül kur
-        with patch("core.module_downloader.INSTALLED_MODULES_FILE", str(installed_file)), \
-             patch("core.module_downloader.REPOS_DIR", str(repos_dir)):
+        with (
+            patch("core.module_downloader.INSTALLED_MODULES_FILE", str(installed_file)),
+            patch("core.module_downloader.REPOS_DIR", str(repos_dir)),
+        ):
             dl1 = ModuleDownloader(modules_dir=str(modules_dir))
             dl1.installed_file = installed_file
             dl1.repos_dir = repos_dir
@@ -507,8 +531,10 @@ class TestModuleDownloaderPersistence:
             dl1.install_module("myrepo/scanner.py")
 
         # İkinci downloader: dosyadan yükle
-        with patch("core.module_downloader.INSTALLED_MODULES_FILE", str(installed_file)), \
-             patch("core.module_downloader.REPOS_DIR", str(repos_dir)):
+        with (
+            patch("core.module_downloader.INSTALLED_MODULES_FILE", str(installed_file)),
+            patch("core.module_downloader.REPOS_DIR", str(repos_dir)),
+        ):
             dl2 = ModuleDownloader(modules_dir=str(modules_dir))
 
         assert "scanner" in dl2.installed
@@ -518,6 +544,7 @@ class TestModuleDownloaderPersistence:
 # ==============================================================================
 # Download Komutu Testleri
 # ==============================================================================
+
 
 class TestDownloadCommand:
     """Download komut sınıfı testleri."""

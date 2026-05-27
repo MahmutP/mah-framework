@@ -1,10 +1,11 @@
-import pytest
 import os
 import tempfile
-from unittest.mock import MagicMock, patch, PropertyMock
-from modules.auxiliary.forensics.metadata_extractor import MetadataExtractor
+from unittest.mock import patch
+
+import pytest
+
 from modules.auxiliary.forensics.metadata_cleaner import MetadataCleaner
-from core.option import Option
+from modules.auxiliary.forensics.metadata_extractor import MetadataExtractor
 
 
 class TestMetadataExtractor:
@@ -31,10 +32,10 @@ class TestMetadataExtractor:
 
     def test_supported_formats(self, extractor):
         """Desteklenen format listesinin doğru olduğunu kontrol et."""
-        assert '.jpg' in extractor.SUPPORTED_FORMATS
-        assert '.jpeg' in extractor.SUPPORTED_FORMATS
-        assert '.png' in extractor.SUPPORTED_FORMATS
-        assert '.tiff' in extractor.SUPPORTED_FORMATS
+        assert ".jpg" in extractor.SUPPORTED_FORMATS
+        assert ".jpeg" in extractor.SUPPORTED_FORMATS
+        assert ".png" in extractor.SUPPORTED_FORMATS
+        assert ".tiff" in extractor.SUPPORTED_FORMATS
 
     def test_run_empty_file(self, extractor):
         """Boş FILE parametresi ile çalıştırma testi."""
@@ -43,7 +44,9 @@ class TestMetadataExtractor:
 
     def test_run_nonexistent_file(self, extractor):
         """Var olmayan dosya ile çalıştırma testi."""
-        result = extractor.run({"FILE": "/tmp/nonexistent_image.jpg", "VERBOSE": "false"})
+        result = extractor.run(
+            {"FILE": "/tmp/nonexistent_image.jpg", "VERBOSE": "false"}
+        )
         assert result is False
 
     def test_run_unsupported_format(self, extractor):
@@ -58,7 +61,7 @@ class TestMetadataExtractor:
         finally:
             os.unlink(temp_path)
 
-    @patch('modules.auxiliary.forensics.metadata_extractor.PIL_AVAILABLE', False)
+    @patch("modules.auxiliary.forensics.metadata_extractor.PIL_AVAILABLE", False)
     def test_run_no_pillow(self):
         """Pillow kurulu değilken çalıştırma testi."""
         extractor = MetadataExtractor()
@@ -77,8 +80,8 @@ class TestMetadataExtractor:
             temp_path = f.name
 
         try:
-            img = Image.new('RGB', (100, 100), color='red')
-            img.save(temp_path, format='PNG')
+            img = Image.new("RGB", (100, 100), color="red")
+            img.save(temp_path, format="PNG")
             img.close()
 
             result = extractor.run({"FILE": temp_path, "VERBOSE": "false"})
@@ -90,10 +93,10 @@ class TestMetadataExtractor:
     def test_gps_coordinate_conversion(self, extractor):
         """GPS koordinat dönüşüm testi."""
         gps_info = {
-            'GPSLatitude': (41.0, 0.0, 50.4),
-            'GPSLongitude': (28.0, 58.0, 59.64),
-            'GPSLatitudeRef': 'N',
-            'GPSLongitudeRef': 'E'
+            "GPSLatitude": (41.0, 0.0, 50.4),
+            "GPSLongitude": (28.0, 58.0, 59.64),
+            "GPSLatitudeRef": "N",
+            "GPSLongitudeRef": "E",
         }
         lat, lon = extractor._get_gps_coordinates(gps_info)
         assert lat is not None
@@ -135,7 +138,9 @@ class TestMetadataCleaner:
 
     def test_run_nonexistent_file(self, cleaner):
         """Var olmayan dosya ile çalıştırma testi."""
-        result = cleaner.run({"FILE": "/tmp/nonexistent_image.jpg", "OUTPUT": "", "BACKUP": "true"})
+        result = cleaner.run(
+            {"FILE": "/tmp/nonexistent_image.jpg", "OUTPUT": "", "BACKUP": "true"}
+        )
         assert result is False
 
     def test_run_unsupported_format(self, cleaner):
@@ -149,7 +154,7 @@ class TestMetadataCleaner:
         finally:
             os.unlink(temp_path)
 
-    @patch('modules.auxiliary.forensics.metadata_cleaner.PIL_AVAILABLE', False)
+    @patch("modules.auxiliary.forensics.metadata_cleaner.PIL_AVAILABLE", False)
     def test_run_no_pillow(self):
         """Pillow kurulu değilken çalıştırma testi."""
         cleaner = MetadataCleaner()
@@ -159,8 +164,8 @@ class TestMetadataCleaner:
     def test_run_clean_image(self, cleaner):
         """Geçerli bir görüntüden metadata temizleme testi."""
         try:
-            from PIL import Image
             import piexif
+            from PIL import Image
         except ImportError:
             pytest.skip("Pillow veya piexif kurulu değil")
 
@@ -170,13 +175,15 @@ class TestMetadataCleaner:
 
         try:
             # EXIF verisi içeren bir JPEG oluştur
-            img = Image.new('RGB', (100, 100), color='blue')
+            img = Image.new("RGB", (100, 100), color="blue")
             exif_dict = {"0th": {piexif.ImageIFD.Make: b"TestCamera"}}
             exif_bytes = piexif.dump(exif_dict)
-            img.save(temp_path, format='JPEG', exif=exif_bytes)
+            img.save(temp_path, format="JPEG", exif=exif_bytes)
             img.close()
 
-            result = cleaner.run({"FILE": temp_path, "OUTPUT": output_path, "BACKUP": "false"})
+            result = cleaner.run(
+                {"FILE": temp_path, "OUTPUT": output_path, "BACKUP": "false"}
+            )
             assert result is True
             assert os.path.exists(output_path)
         finally:
@@ -188,8 +195,8 @@ class TestMetadataCleaner:
     def test_backup_creation(self, cleaner):
         """Yedek dosya oluşturma testi."""
         try:
-            from PIL import Image
             import piexif
+            from PIL import Image
         except ImportError:
             pytest.skip("Pillow veya piexif kurulu değil")
 
@@ -200,10 +207,10 @@ class TestMetadataCleaner:
 
         try:
             # EXIF verisi içeren bir JPEG oluştur
-            img = Image.new('RGB', (50, 50), color='green')
+            img = Image.new("RGB", (50, 50), color="green")
             exif_dict = {"0th": {piexif.ImageIFD.Make: b"TestCamera"}}
             exif_bytes = piexif.dump(exif_dict)
-            img.save(temp_path, format='JPEG', exif=exif_bytes)
+            img.save(temp_path, format="JPEG", exif=exif_bytes)
             img.close()
 
             # Üzerine yazma + backup

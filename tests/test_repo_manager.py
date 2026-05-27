@@ -1,23 +1,23 @@
 # tests/test_repo_manager.py
 # Uzak modül deposu yönetim sistemi (RepoManager) için birim testleri.
 
-import pytest
-import json
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Proje kök dizinini path'e ekle
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.repo_manager import RepoManager
 from commands.repo import Repo
+from core.repo_manager import RepoManager
 from core.shared_state import shared_state
-
 
 # ==============================================================================
 # RepoManager Testleri
 # ==============================================================================
+
 
 class TestRepoManagerInit:
     """RepoManager başlatma testleri."""
@@ -27,9 +27,11 @@ class TestRepoManagerInit:
         repos_file = tmp_path / "repos.json"
         repos_dir = tmp_path / "repos"
 
-        with patch("core.repo_manager.REPOS_FILE", str(repos_file)), \
-             patch("core.repo_manager.REPOS_DIR", str(repos_dir)):
-            manager = RepoManager()
+        with (
+            patch("core.repo_manager.REPOS_FILE", str(repos_file)),
+            patch("core.repo_manager.REPOS_DIR", str(repos_dir)),
+        ):
+            RepoManager()
 
         assert repos_file.exists()
         assert repos_dir.exists()
@@ -39,9 +41,11 @@ class TestRepoManagerInit:
         repos_file = tmp_path / "repos.json"
         repos_dir = tmp_path / "repos"
 
-        with patch("core.repo_manager.REPOS_FILE", str(repos_file)), \
-             patch("core.repo_manager.REPOS_DIR", str(repos_dir)):
-            manager = RepoManager()
+        with (
+            patch("core.repo_manager.REPOS_FILE", str(repos_file)),
+            patch("core.repo_manager.REPOS_DIR", str(repos_dir)),
+        ):
+            RepoManager()
 
         assert repos_dir.is_dir()
 
@@ -50,8 +54,10 @@ class TestRepoManagerInit:
         repos_file = tmp_path / "repos.json"
         repos_dir = tmp_path / "repos"
 
-        with patch("core.repo_manager.REPOS_FILE", str(repos_file)), \
-             patch("core.repo_manager.REPOS_DIR", str(repos_dir)):
+        with (
+            patch("core.repo_manager.REPOS_FILE", str(repos_file)),
+            patch("core.repo_manager.REPOS_DIR", str(repos_dir)),
+        ):
             manager = RepoManager()
 
         assert manager.repos == {}
@@ -66,10 +72,12 @@ class TestRepoManagerAddRemove:
         repos_file = tmp_path / "repos.json"
         repos_dir = tmp_path / "repos"
 
-        with patch("core.repo_manager.REPOS_FILE", str(repos_file)), \
-             patch("core.repo_manager.REPOS_DIR", str(repos_dir)):
+        with (
+            patch("core.repo_manager.REPOS_FILE", str(repos_file)),
+            patch("core.repo_manager.REPOS_DIR", str(repos_dir)),
+        ):
             manager = RepoManager()
-        
+
         # Kalıcı patch: save/load sırasında Path'lerin doğru olması için
         manager.repos_file = repos_file
         manager.repos_dir = repos_dir
@@ -80,7 +88,9 @@ class TestRepoManagerAddRemove:
         result = repo_manager.add_repo("testrepo", "https://github.com/user/repo.git")
         assert result is True
         assert "testrepo" in repo_manager.repos
-        assert repo_manager.repos["testrepo"]["url"] == "https://github.com/user/repo.git"
+        assert (
+            repo_manager.repos["testrepo"]["url"] == "https://github.com/user/repo.git"
+        )
         assert repo_manager.repos["testrepo"]["status"] == "added"
 
     def test_add_repo_duplicate_name(self, repo_manager):
@@ -125,7 +135,7 @@ class TestRepoManagerAddRemove:
     def test_remove_repo_cleans_directory(self, repo_manager):
         """Depo silindiğinde klonlanmış dizinin de silindiğini doğrular."""
         repo_manager.add_repo("dirrepo", "https://github.com/user/repo.git")
-        
+
         # Klonlanmış dizini simüle et
         repo_path = repo_manager.repos_dir / "dirrepo"
         repo_path.mkdir(parents=True, exist_ok=True)
@@ -144,8 +154,10 @@ class TestRepoManagerListQuery:
         repos_file = tmp_path / "repos.json"
         repos_dir = tmp_path / "repos"
 
-        with patch("core.repo_manager.REPOS_FILE", str(repos_file)), \
-             patch("core.repo_manager.REPOS_DIR", str(repos_dir)):
+        with (
+            patch("core.repo_manager.REPOS_FILE", str(repos_file)),
+            patch("core.repo_manager.REPOS_DIR", str(repos_dir)),
+        ):
             manager = RepoManager()
 
         manager.repos_file = repos_file
@@ -195,16 +207,20 @@ class TestRepoManagerPersistence:
         repos_file = tmp_path / "repos.json"
         repos_dir = tmp_path / "repos"
 
-        with patch("core.repo_manager.REPOS_FILE", str(repos_file)), \
-             patch("core.repo_manager.REPOS_DIR", str(repos_dir)):
+        with (
+            patch("core.repo_manager.REPOS_FILE", str(repos_file)),
+            patch("core.repo_manager.REPOS_DIR", str(repos_dir)),
+        ):
             manager1 = RepoManager()
             manager1.repos_file = repos_file
             manager1.repos_dir = repos_dir
             manager1.add_repo("persist", "https://github.com/user/persist.git")
 
         # Yeni bir manager oluştur ve dosyadan yükle
-        with patch("core.repo_manager.REPOS_FILE", str(repos_file)), \
-             patch("core.repo_manager.REPOS_DIR", str(repos_dir)):
+        with (
+            patch("core.repo_manager.REPOS_FILE", str(repos_file)),
+            patch("core.repo_manager.REPOS_DIR", str(repos_dir)),
+        ):
             manager2 = RepoManager()
 
         assert "persist" in manager2.repos
@@ -219,8 +235,10 @@ class TestRepoManagerPersistence:
         # Bozuk JSON yaz
         repos_file.write_text("{invalid json")
 
-        with patch("core.repo_manager.REPOS_FILE", str(repos_file)), \
-             patch("core.repo_manager.REPOS_DIR", str(repos_dir)):
+        with (
+            patch("core.repo_manager.REPOS_FILE", str(repos_file)),
+            patch("core.repo_manager.REPOS_DIR", str(repos_dir)),
+        ):
             manager = RepoManager()
 
         assert manager.repos == {}
@@ -234,8 +252,10 @@ class TestRepoManagerUpdate:
         repos_file = tmp_path / "repos.json"
         repos_dir = tmp_path / "repos"
 
-        with patch("core.repo_manager.REPOS_FILE", str(repos_file)), \
-             patch("core.repo_manager.REPOS_DIR", str(repos_dir)):
+        with (
+            patch("core.repo_manager.REPOS_FILE", str(repos_file)),
+            patch("core.repo_manager.REPOS_DIR", str(repos_dir)),
+        ):
             manager = RepoManager()
 
         manager.repos_file = repos_file
@@ -257,7 +277,9 @@ class TestRepoManagerUpdate:
     @patch("core.repo_manager.subprocess.run")
     def test_pull_repo(self, mock_run, repo_manager):
         """Git pull işleminin çağrıldığını doğrular (dizin mevcutsa)."""
-        mock_run.return_value = MagicMock(returncode=0, stdout="Already up to date.", stderr="")
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout="Already up to date.", stderr=""
+        )
 
         repo_manager.add_repo("pullme", "https://github.com/user/repo.git")
 
@@ -283,7 +305,9 @@ class TestRepoManagerUpdate:
     @patch("core.repo_manager.subprocess.run")
     def test_clone_failure(self, mock_run, repo_manager):
         """Clone hatası durumunda status 'error' olmalı."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="fatal: repo not found")
+        mock_run.return_value = MagicMock(
+            returncode=1, stdout="", stderr="fatal: repo not found"
+        )
 
         repo_manager.add_repo("failrepo", "https://github.com/user/nonexistent.git")
         result = repo_manager.update_repo("failrepo")
@@ -300,8 +324,10 @@ class TestRepoManagerURLValidation:
         repos_file = tmp_path / "repos.json"
         repos_dir = tmp_path / "repos"
 
-        with patch("core.repo_manager.REPOS_FILE", str(repos_file)), \
-             patch("core.repo_manager.REPOS_DIR", str(repos_dir)):
+        with (
+            patch("core.repo_manager.REPOS_FILE", str(repos_file)),
+            patch("core.repo_manager.REPOS_DIR", str(repos_dir)),
+        ):
             manager = RepoManager()
 
         manager.repos_file = repos_file
@@ -321,7 +347,10 @@ class TestRepoManagerURLValidation:
         assert repo_manager._validate_url("git@github.com:user/repo.git") is True
 
     def test_valid_generic_https(self, repo_manager):
-        assert repo_manager._validate_url("https://custom-git.example.com/repo.git") is True
+        assert (
+            repo_manager._validate_url("https://custom-git.example.com/repo.git")
+            is True
+        )
 
     def test_invalid_ftp(self, repo_manager):
         assert repo_manager._validate_url("ftp://bad.url/repo") is False
@@ -333,6 +362,7 @@ class TestRepoManagerURLValidation:
 # ==============================================================================
 # Repo Komutu Testleri
 # ==============================================================================
+
 
 class TestRepoCommand:
     """Repo komut sınıfı metadata testleri."""

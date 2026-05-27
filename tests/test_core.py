@@ -1,7 +1,8 @@
-import pytest
 from pathlib import Path
-from core.module_manager import ModuleManager
+
 from core.command_manager import CommandManager
+from core.module_manager import ModuleManager
+
 
 def test_module_manager_initialization():
     """Test ModuleManager initialization."""
@@ -9,6 +10,7 @@ def test_module_manager_initialization():
     assert mm.modules == {}
     # Default directory should be "modules"
     assert mm.modules_dir == Path("modules")
+
 
 def test_command_manager_initialization():
     """Test CommandManager initialization."""

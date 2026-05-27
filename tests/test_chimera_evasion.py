@@ -3,14 +3,12 @@ Chimera Evasion Techniques - Unit Tests
 Obfuscator pipeline iyileştirmeleri, polimorfik engine,
 sleep obfuscation ve sandbox tespit güncellemelerini test eder.
 """
-import unittest
-import ast
-import sys
+
 import os
+import sys
 import time
-import random
 import types
-from unittest.mock import MagicMock, patch
+import unittest
 
 # Proje kökünü path'e ekle
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -20,25 +18,31 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 # Obfuscator Pipeline Testleri (Yeni aşamalar)
 # ============================================================
 
+
 class TestControlFlowFlattening(unittest.TestCase):
     """Control flow flattening testleri."""
 
     def setUp(self):
         from build.chimera_obfuscator import obfuscate
+
         self.obfuscate = obfuscate
 
     def test_flattening_produces_valid_python(self):
         """Düzleştirilen kod geçerli Python çıktısı verir."""
-        code = '''
+        code = """
 def compute(a, b):
     x = a + b
     y = x * 2
     z = y - a
     return z
-'''
+"""
         result = self.obfuscate(
-            code, rename=False, encrypt_strings=False, inject_junk=False,
-            control_flow_flatten=True, seed=42
+            code,
+            rename=False,
+            encrypt_strings=False,
+            inject_junk=False,
+            control_flow_flatten=True,
+            seed=42,
         )
         self.assertTrue(result["success"])
         # Geçerli Python olmalı
@@ -46,16 +50,20 @@ def compute(a, b):
 
     def test_flattening_preserves_functionality(self):
         """Düzleştirilen kod orijinalle aynı sonucu verir."""
-        code = '''
+        code = """
 def add(a, b):
     result = a + b
     doubled = result * 2
     final = doubled + 1
     return final
-'''
+"""
         result = self.obfuscate(
-            code, rename=False, encrypt_strings=False, inject_junk=False,
-            control_flow_flatten=True, seed=42
+            code,
+            rename=False,
+            encrypt_strings=False,
+            inject_junk=False,
+            control_flow_flatten=True,
+            seed=42,
         )
         self.assertTrue(result["success"])
 
@@ -73,7 +81,7 @@ def add(a, b):
 
     def test_flattening_count_in_stats(self):
         """İstatistiklerde düzleştirilen fonksiyon sayısı görünür."""
-        code = '''
+        code = """
 def f1(x):
     a = x + 1
     b = a + 2
@@ -85,10 +93,14 @@ def f2(y):
     e = d * 3
     f = e * 4
     return f
-'''
+"""
         result = self.obfuscate(
-            code, rename=False, encrypt_strings=False, inject_junk=False,
-            control_flow_flatten=True, seed=42
+            code,
+            rename=False,
+            encrypt_strings=False,
+            inject_junk=False,
+            control_flow_flatten=True,
+            seed=42,
         )
         self.assertTrue(result["success"])
         self.assertGreater(result["stats"]["flattened_functions"], 0)
@@ -99,34 +111,43 @@ class TestOpaquePredicates(unittest.TestCase):
 
     def setUp(self):
         from build.chimera_obfuscator import obfuscate
+
         self.obfuscate = obfuscate
 
     def test_opaque_predicates_produce_valid_python(self):
         """Opak yüklemler eklenen kod geçerli Python çıktısı verir."""
-        code = '''
+        code = """
 def process(data):
     result = data + 10
     extra = result * 2
     return extra
-'''
+"""
         result = self.obfuscate(
-            code, rename=False, encrypt_strings=False, inject_junk=False,
-            opaque_predicates=True, seed=42
+            code,
+            rename=False,
+            encrypt_strings=False,
+            inject_junk=False,
+            opaque_predicates=True,
+            seed=42,
         )
         self.assertTrue(result["success"])
         compile(result["code"], "<test>", "exec")
 
     def test_opaque_predicates_preserve_functionality(self):
         """Opak yüklemler fonksiyon davranışını değiştirmez."""
-        code = '''
+        code = """
 def calc(x):
     a = x * 3
     b = a + 5
     return b
-'''
+"""
         result = self.obfuscate(
-            code, rename=False, encrypt_strings=False, inject_junk=False,
-            opaque_predicates=True, seed=42
+            code,
+            rename=False,
+            encrypt_strings=False,
+            inject_junk=False,
+            opaque_predicates=True,
+            seed=42,
         )
         self.assertTrue(result["success"])
 
@@ -145,25 +166,38 @@ class TestDeadCodeInsertion(unittest.TestCase):
 
     def setUp(self):
         from build.chimera_obfuscator import obfuscate
+
         self.obfuscate = obfuscate
 
     def test_dead_code_increases_size(self):
         """Ölü kod eklenmesi toplam boyutu artırır."""
-        code = 'x = 1\ny = 2\nz = x + y\n'
+        code = "x = 1\ny = 2\nz = x + y\n"
         result = self.obfuscate(
-            code, rename=False, encrypt_strings=False, inject_junk=False,
-            dead_code=True, dead_code_count=3, seed=42
+            code,
+            rename=False,
+            encrypt_strings=False,
+            inject_junk=False,
+            dead_code=True,
+            dead_code_count=3,
+            seed=42,
         )
         self.assertTrue(result["success"])
         self.assertGreater(result["stats"]["dead_code_blocks"], 0)
-        self.assertGreater(result["stats"]["final_size"], result["stats"]["original_size"])
+        self.assertGreater(
+            result["stats"]["final_size"], result["stats"]["original_size"]
+        )
 
     def test_dead_code_valid_python(self):
         """Ölü kod eklenmiş çıktı geçerli Python."""
         code = 'print("hello")\n'
         result = self.obfuscate(
-            code, rename=False, encrypt_strings=False, inject_junk=False,
-            dead_code=True, dead_code_count=5, seed=42
+            code,
+            rename=False,
+            encrypt_strings=False,
+            inject_junk=False,
+            dead_code=True,
+            dead_code_count=5,
+            seed=42,
         )
         self.assertTrue(result["success"])
         compile(result["code"], "<test>", "exec")
@@ -174,11 +208,12 @@ class TestFullPipeline(unittest.TestCase):
 
     def setUp(self):
         from build.chimera_obfuscator import obfuscate
+
         self.obfuscate = obfuscate
 
     def test_all_stages_combined(self):
         """Tüm 6 aşama birlikte çalışır ve geçerli Python üretir."""
-        code = '''
+        code = """
 def greet(name):
     msg = "Hello " + name
     marker = "test_marker"
@@ -186,7 +221,7 @@ def greet(name):
     return msg
 
 result = greet("world")
-'''
+"""
         result = self.obfuscate(
             code,
             rename=True,
@@ -195,7 +230,7 @@ result = greet("world")
             control_flow_flatten=True,
             opaque_predicates=True,
             dead_code=True,
-            seed=42
+            seed=42,
         )
         self.assertTrue(result["success"], f"Hata: {result.get('error')}")
         compile(result["code"], "<test>", "exec")
@@ -212,11 +247,13 @@ result = greet("world")
 # Polimorfik Engine Testleri
 # ============================================================
 
+
 class TestPolymorphicEngine(unittest.TestCase):
     """Polimorfik payload engine testleri."""
 
     def setUp(self):
         from build.chimera_polymorphic import polymorphic_wrap
+
         self.polymorphic_wrap = polymorphic_wrap
 
     def test_different_seeds_different_output(self):
@@ -230,14 +267,14 @@ class TestPolymorphicEngine(unittest.TestCase):
 
     def test_output_valid_python(self):
         """Polimorfik çıktı geçerli Python kodu."""
-        code = 'x = 42\nprint(x)\n'
+        code = "x = 42\nprint(x)\n"
         result = self.polymorphic_wrap(code, seed=42)
         self.assertTrue(result["success"])
         compile(result["code"], "<test>", "exec")
 
     def test_output_executes_correctly(self):
         """Polimorfik çıktı doğru çalışır."""
-        code = 'POLY_RESULT = 42\n'
+        code = "POLY_RESULT = 42\n"
         result = self.polymorphic_wrap(code, seed=42)
         self.assertTrue(result["success"])
         # Exec ile çalıştır - hata fırlatmamalı
@@ -252,14 +289,15 @@ class TestPolymorphicEngine(unittest.TestCase):
 
     def test_no_mutations_when_disabled(self):
         """Tüm mutasyonlar kapalıyken mutasyon uygulanmaz."""
-        code = 'x = 1\n'
+        code = "x = 1\n"
         result = self.polymorphic_wrap(
-            code, seed=42,
+            code,
+            seed=42,
             shuffle_imports=False,
             shuffle_defs=False,
             encoding_wrapper=False,
             decoy_metadata=False,
-            entry_stub=False
+            entry_stub=False,
         )
         self.assertTrue(result["success"])
         self.assertEqual(len(result["mutations"]), 0)
@@ -272,11 +310,12 @@ class TestPolymorphicEngine(unittest.TestCase):
         results = set()
         for seed in range(5):
             r = self.polymorphic_wrap(
-                code, seed=seed,
+                code,
+                seed=seed,
                 shuffle_imports=True,
                 shuffle_defs=False,
                 encoding_wrapper=False,
-                decoy_metadata=False
+                decoy_metadata=False,
             )
             if r["success"]:
                 results.add(r["code"])
@@ -288,6 +327,7 @@ class TestPolymorphicEngine(unittest.TestCase):
 # Sleep Obfuscation Testleri
 # ============================================================
 
+
 class TestSleepObfuscation(unittest.TestCase):
     """Sleep obfuscation testleri (Agent sınıfı üzerinden)."""
 
@@ -295,6 +335,7 @@ class TestSleepObfuscation(unittest.TestCase):
     def setUpClass(cls):
         """Agent sınıfını yükle."""
         from modules.payloads.python.chimera.generate import Payload
+
         gen = Payload()
         gen.set_option_value("LHOST", "127.0.0.1")
         gen.set_option_value("LPORT", 9999)
@@ -341,13 +382,13 @@ class TestSleepObfuscation(unittest.TestCase):
         """Hassas öznitelikler şifrelendikten sonra geri çözülür."""
         original_host = self.agent.host
         original_port = self.agent.port
-        
+
         key = self.agent._generate_sleep_key()
         backup = self.agent._encrypt_sensitive_attrs(key)
-        
+
         # Şifreleme sonrası değişmeli
         self.assertNotEqual(self.agent.host, original_host)
-        
+
         # Çözme
         self.agent._decrypt_sensitive_attrs(key, backup)
         self.assertEqual(self.agent.host, original_host)
@@ -359,7 +400,7 @@ class TestSleepObfuscation(unittest.TestCase):
         t_start = time.time()
         self.agent._sleep_obfuscated(duration)
         elapsed = time.time() - t_start
-        
+
         # Jitter ±15% + küçük overhead ile uyumlu olmalı
         self.assertGreater(elapsed, duration * 0.80)
         self.assertLess(elapsed, duration * 1.25)
@@ -368,9 +409,9 @@ class TestSleepObfuscation(unittest.TestCase):
         """_sleep_obfuscated uyku sonrası öznitelikleri korur."""
         original_host = self.agent.host
         original_port = self.agent.port
-        
+
         self.agent._sleep_obfuscated(0.1)
-        
+
         self.assertEqual(self.agent.host, original_host)
         self.assertEqual(self.agent.port, original_port)
 
@@ -379,6 +420,7 @@ class TestSleepObfuscation(unittest.TestCase):
 # Sandbox Tespit Testleri
 # ============================================================
 
+
 class TestSandboxDetection(unittest.TestCase):
     """Geliştirilmiş sandbox tespit testleri."""
 
@@ -386,6 +428,7 @@ class TestSandboxDetection(unittest.TestCase):
     def setUpClass(cls):
         """Agent sınıfını yükle."""
         from modules.payloads.python.chimera.generate import Payload
+
         gen = Payload()
         gen.set_option_value("LHOST", "127.0.0.1")
         gen.set_option_value("LPORT", 9999)
@@ -427,19 +470,18 @@ class TestSandboxDetection(unittest.TestCase):
 # Builder Entegrasyon Testleri
 # ============================================================
 
+
 class TestBuilderIntegration(unittest.TestCase):
     """Builder'ın yeni parametreleri doğru geçirip geçirmediğini test eder."""
 
     def test_builder_accepts_polymorphic_param(self):
         """build_payload polymorphic parametresini kabul eder."""
         from build.chimera_builder import build_payload
+
         # Sadece parametre kabul edildiğini kontrol et (LHOST yoksa hata verir ama
         # parametre hatasından farklı)
         result = build_payload(
-            lhost="127.0.0.1",
-            lport=4444,
-            polymorphic=True,
-            quiet=True
+            lhost="127.0.0.1", lport=4444, polymorphic=True, quiet=True
         )
         # Builder'ın polymorphic_mutations anahtarı içermesi
         self.assertIn("polymorphic_mutations", result)
@@ -447,6 +489,7 @@ class TestBuilderIntegration(unittest.TestCase):
     def test_generate_module_has_polymorphic_option(self):
         """Generate modülü POLYMORPHIC option'ına sahip."""
         from modules.payloads.python.chimera.generate import Payload
+
         gen = Payload()
         self.assertIn("POLYMORPHIC", gen.Options)
 

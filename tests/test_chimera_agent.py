@@ -8,15 +8,12 @@ Agent'ın temel fonksiyonlarını test eder:
 - Reconnect mantığı
 - Generate (payload üretim) modülü
 """
-import unittest
-import struct
-import socket
-import threading
-import time
+
 import os
 import sys
 import types
-from unittest.mock import MagicMock, patch, PropertyMock
+import unittest
+from unittest.mock import MagicMock, patch
 
 # Proje kökünü path'e ekle
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -25,11 +22,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 def _load_chimera_agent_class():
     """chimera_agent.py template dosyasını generate.py ile üretip ChimeraAgent sınıfını döndürür."""
     from modules.payloads.python.chimera.generate import Payload
+
     gen = Payload()
     gen.set_option_value("LHOST", "127.0.0.1")
     gen.set_option_value("LPORT", 9999)
     code = gen.generate()["code"]
-    
+
     # Üretilen kodu bir modül olarak yükle
     module = types.ModuleType("chimera_agent_test")
     exec(compile(code, "<chimera_agent>", "exec"), module.__dict__)
@@ -76,7 +74,7 @@ class TestChimeraAgentProtocol(unittest.TestCase):
         """recv_data, HTTP Response içinden veriyi okur."""
         test_msg = "chimera test"
         encoded = test_msg.encode("utf-8")
-        
+
         # HTTP Response Mock
         headers = (
             b"HTTP/1.1 200 OK\r\n"
@@ -86,28 +84,35 @@ class TestChimeraAgentProtocol(unittest.TestCase):
         # Mock socket behavior: return headers byte-by-byte, then body
         # This is tricky with side_effect. A simpler way is to just return chunks.
         # Recv data reads 1 byte at a time for headers.
-        
+
         # To simplify test, we can mock recv to return headers when asked for 1 byte (in loop)
         # and body when asked for content length.
         # But loop calls recv(1) many times.
-        
+
         # Let's mock a socket that yields from a buffer
         class MockSocket:
             def __init__(self, data):
                 self.data = data
                 self.pos = 0
-            
+
             def recv(self, size):
                 if self.pos >= len(self.data):
                     return b""
-                chunk = self.data[self.pos:self.pos+size]
+                chunk = self.data[self.pos : self.pos + size]
                 self.pos += len(chunk)
                 return chunk
-                
-            def settimeout(self, t): pass
-            def connect(self, a): pass
-            def sendall(self, d): pass
-            def close(self): pass
+
+            def settimeout(self, t):
+                pass
+
+            def connect(self, a):
+                pass
+
+            def sendall(self, d):
+                pass
+
+            def close(self):
+                pass
 
         mock_sock = MockSocket(headers + encoded)
         self.agent.sock = mock_sock
@@ -219,7 +224,7 @@ class TestChimeraAgentSysinfo(unittest.TestCase):
         # HTTP Header ve Body kontrolü
         self.assertIn(b"POST /api/v1/sync HTTP/1.1", sent)
         self.assertIn(b"Content-Length:", sent)
-        
+
         # Body'yi ayıkla (\r\n\r\n sonrası)
         body = sent.split(b"\r\n\r\n")[1].decode("utf-8")
 
@@ -235,6 +240,7 @@ class TestChimeraAgentSysinfo(unittest.TestCase):
 class TestChimeraAgentIntegration(unittest.TestCase):
     """Entegrasyon testi: Agent ile gerçek soket bağlantısı."""
 
+
 class TestChimeraAgentRunLoop(unittest.TestCase):
     """Run döngüsü testleri (Mock ile)."""
 
@@ -247,43 +253,42 @@ class TestChimeraAgentRunLoop(unittest.TestCase):
         """Run döngüsü: Connect -> Sysinfo -> Recv Cmd -> Exec -> Send Output."""
         # Setup Mocks
         mock_sock_instance = MagicMock()
-        mock_socket.return_value = MagicMock() # raw socket
-        
+        mock_socket.return_value = MagicMock()  # raw socket
+
         # SSL wrap sonucunda dönecek socket (bizim mock_sock_instance)
         mock_context = MagicMock()
         mock_ssl_context.return_value = mock_context
         mock_context.wrap_socket.return_value = mock_sock_instance
-        
+
         # Recv tarafını simüle et
         # 1. Döngü: "whoami" komutu gönder
         cmd_body = b"whoami"
-        cmd_response = (
+        (
             b"HTTP/1.1 200 OK\r\n"
             b"Content-Length: " + str(len(cmd_body)).encode() + b"\r\n"
-            b"\r\n"
-            + cmd_body
+            b"\r\n" + cmd_body
         )
-        
+
         # 2. Döngü: Bağlantıyı kapatmak için boş veri (ya da terminate komutu)
         # recv_data headers okurken empty dönerse kopmuş sayar.
-        
+
         # Mocking recv data stream
-        # Protocol: 
+        # Protocol:
         # - recv_data() çağrılır (headers... body...)
-        
+
         # Simülasyon veri akışı:
         # [CMD HEADER][CMD BODY] ... [Empty/Close]
-        
+
         # Bu karmaşık akışı mocklamak yerine recv_data'yı patchlemek daha kolay olabilir
         # ama integration testi gibi class metodlarını test etmek istiyoruz.
-        
+
         # Basitçe: recv side effect
         # recv(1) for headers...
         # recv(len) for body...
-        
-        self.agent.connect() # Manually connect to setup self.sock
-        self.agent.sock = mock_sock_instance # Ensure it set
-        
+
+        self.agent.connect()  # Manually connect to setup self.sock
+        self.agent.sock = mock_sock_instance  # Ensure it set
+
         # Mock recv calls
         # We need a robust mock socket iterator
         class MockSocketIter:
@@ -291,22 +296,26 @@ class TestChimeraAgentRunLoop(unittest.TestCase):
                 self.chunks = chunks
                 self.current_chunk = 0
                 self.pos = 0
-            
+
             def recv(self, size):
                 if self.current_chunk >= len(self.chunks):
                     return b""
-                
+
                 chunk = self.chunks[self.current_chunk]
                 if self.pos >= len(chunk):
                     self.current_chunk += 1
                     self.pos = 0
                     return self.recv(size)
-                
-                ret = chunk[self.pos:self.pos+size]
+
+                ret = chunk[self.pos : self.pos + size]
                 self.pos += len(ret)
                 return ret
-            def sendall(self, d): pass
-            def close(self): pass
+
+            def sendall(self, d):
+                pass
+
+            def close(self):
+                pass
 
         # Senaryo:
         # 1. Sunucu "terminate" gönderir.
@@ -314,40 +323,41 @@ class TestChimeraAgentRunLoop(unittest.TestCase):
         resp1 = (
             b"HTTP/1.1 200 OK\r\n"
             b"Content-Length: " + str(len(cmd1)).encode() + b"\r\n"
-            b"\r\n"
-            + cmd1
+            b"\r\n" + cmd1
         )
-        
+
         mock_sock_instance.recv.side_effect = MockSocketIter([resp1]).recv
-        
+
         # Run'ı çalıştır
         # terminate komutu self.running = False yapar ve döngüden çıkar
         self.agent.run()
-        
+
         # Kontroller
         # 1. Connect çağrıldı (Setup'da çağırdık ama run içinde de çağrılır tekrar check eder)
         # 2. Sysinfo gönderildi (send_data called)
         # 3. Terminate alındı
         # 4. Terminate mesajı (output) gönderildi
-        
+
         # sendall çağrılarını topla
         # İlk çağrı: Sysinfo
         # İkinci çağrı: "Agent sonlandırılıyor..." mesajı
-        
+
         # Mock socket'in sendall metoduna yapılan çağrıları kontrol et
         self.assertTrue(mock_sock_instance.sendall.call_count >= 2)
-        
+
         args_list = mock_sock_instance.sendall.call_args_list
-        
+
         # İlk mesaj Sysinfo olmalı (POST request içinde)
         first_call_arg = args_list[0][0][0]
         self.assertIn(b"POST /api/v1/sync", first_call_arg)
         self.assertIn(b"OS:", first_call_arg)
-        
+
         # Son mesaj Terminate Output olmalı
         last_call_arg = args_list[-1][0][0]
-        self.assertIn(b"sonlandiriliyor", last_call_arg.lower().replace(b'\xc4\xb1', b'i')) # Türkçe karakter fix veya simple check
-        
+        self.assertIn(
+            b"sonlandiriliyor", last_call_arg.lower().replace(b"\xc4\xb1", b"i")
+        )  # Türkçe karakter fix veya simple check
+
         self.assertFalse(self.agent.running)
 
 
@@ -386,7 +396,9 @@ class TestChimeraGenerate(unittest.TestCase):
         except SyntaxError:
             syntax_valid = False
 
-        self.assertTrue(syntax_valid, "Üretilen payload geçersiz Python syntax içeriyor!")
+        self.assertTrue(
+            syntax_valid, "Üretilen payload geçersiz Python syntax içeriyor!"
+        )
 
     def test_generate_only_stdlib(self):
         """Üretilen payload sadece stdlib importları içermeli."""
@@ -396,16 +408,51 @@ class TestChimeraGenerate(unittest.TestCase):
         code = gen.generate()["code"]
 
         # İzin verilen stdlib modülleri
-        allowed_imports = {"socket", "subprocess", "os", "sys", "platform", "struct", "time", "ssl", "random", "string", "types", "base64", "json", "urllib", "threading", "queue", "ctypes", "shutil", "re", "datetime", "math", "hashlib", "multiprocessing", "io", "tempfile", "mss", "PIL", "winreg"}
+        allowed_imports = {
+            "socket",
+            "subprocess",
+            "os",
+            "sys",
+            "platform",
+            "struct",
+            "time",
+            "ssl",
+            "random",
+            "string",
+            "types",
+            "base64",
+            "json",
+            "urllib",
+            "threading",
+            "queue",
+            "ctypes",
+            "shutil",
+            "re",
+            "datetime",
+            "math",
+            "hashlib",
+            "multiprocessing",
+            "io",
+            "tempfile",
+            "mss",
+            "PIL",
+            "winreg",
+        }
 
         # Tüm import satırlarını kontrol et
         for line in code.split("\n"):
             stripped = line.strip()
             if stripped.startswith("import ") or stripped.startswith("from "):
-                module_name = stripped.replace("import ", "").replace("from ", "").split(".")[0].split(" ")[0]
+                module_name = (
+                    stripped.replace("import ", "")
+                    .replace("from ", "")
+                    .split(".")[0]
+                    .split(" ")[0]
+                )
                 self.assertIn(
-                    module_name, allowed_imports,
-                    f"Standart olmayan import tespit edildi: {stripped}"
+                    module_name,
+                    allowed_imports,
+                    f"Standart olmayan import tespit edildi: {stripped}",
                 )
 
 

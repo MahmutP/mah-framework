@@ -2,21 +2,22 @@
 # Yardımcı Araç Modülleri — Birim Testleri
 # =============================================================================
 
-import pytest
 import hashlib
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
-# ── Web Crawler ──────────────────────────────────────────────────────────────
-from modules.auxiliary.utils.web_crawler import web_crawler
+import pytest
 
-# ── Hash Cracker ─────────────────────────────────────────────────────────────
-from modules.auxiliary.utils.hash_cracker import hash_cracker
+# ── Process Manager ──────────────────────────────────────────────────────────
+from modules.auxiliary.os.process_manager import process_manager
 
 # ── Service Manager ──────────────────────────────────────────────────────────
 from modules.auxiliary.os.service_manager import service_manager
 
-# ── Process Manager ──────────────────────────────────────────────────────────
-from modules.auxiliary.os.process_manager import process_manager
+# ── Hash Cracker ─────────────────────────────────────────────────────────────
+from modules.auxiliary.utils.hash_cracker import hash_cracker
+
+# ── Web Crawler ──────────────────────────────────────────────────────────────
+from modules.auxiliary.utils.web_crawler import web_crawler
 
 
 # =============================================================================
@@ -82,14 +83,16 @@ class TestWebCrawler:
         mock_resp.status_code = 200
         mock_get.return_value = mock_resp
 
-        result = mod.run({
-            "TARGET_URL": "http://example.com",
-            "MAX_DEPTH": 0,
-            "MAX_PAGES": 1,
-            "TIMEOUT": 2,
-            "USER_AGENT": "Test",
-            "CHECK_ROBOTS": "false",
-        })
+        result = mod.run(
+            {
+                "TARGET_URL": "http://example.com",
+                "MAX_DEPTH": 0,
+                "MAX_PAGES": 1,
+                "TIMEOUT": 2,
+                "USER_AGENT": "Test",
+                "CHECK_ROBOTS": "false",
+            }
+        )
         assert result is True
 
 
@@ -169,23 +172,27 @@ class TestServiceManager:
     @patch("modules.auxiliary.os.service_manager.subprocess.run")
     def test_run_cmd_success(self, mock_run, mod):
         mock_run.return_value = MagicMock(stdout="output", stderr="", returncode=0)
-        stdout, stderr, rc = mod._run_cmd(["echo", "hello"])
+        stdout, _stderr, rc = mod._run_cmd(["echo", "hello"])
         assert rc == 0
         assert stdout == "output"
 
     @patch("modules.auxiliary.os.service_manager.subprocess.run")
     def test_run_cmd_not_found(self, mock_run, mod):
         mock_run.side_effect = FileNotFoundError()
-        _, stderr, rc = mod._run_cmd(["nonexistent"])
+        _, _stderr, rc = mod._run_cmd(["nonexistent"])
         assert rc == -1
 
     def test_detect_platform(self, mod):
         plat = mod._detect_platform()
         assert plat in ("linux", "darwin", "win32")
 
-    @patch.object(service_manager, "_list_darwin", return_value=[
-        {"name": "com.apple.sshd", "pid": "123", "status": "0"},
-    ])
+    @patch.object(
+        service_manager,
+        "_list_darwin",
+        return_value=[
+            {"name": "com.apple.sshd", "pid": "123", "status": "0"},
+        ],
+    )
     @patch.object(service_manager, "_detect_platform", return_value="darwin")
     def test_run_list(self, mock_plat, mock_list, mod):
         result = mod.run({"ACTION": "list", "SERVICE_NAME": "", "FILTER": ""})
@@ -225,19 +232,34 @@ class TestProcessManager:
     def test_get_processes(self, mock_iter, mod):
         mock_proc = MagicMock()
         mock_proc.info = {
-            "pid": 1, "name": "test", "username": "root",
-            "cpu_percent": 5.0, "memory_percent": 2.0,
-            "status": "running", "cmdline": ["test"],
+            "pid": 1,
+            "name": "test",
+            "username": "root",
+            "cpu_percent": 5.0,
+            "memory_percent": 2.0,
+            "status": "running",
+            "cmdline": ["test"],
         }
         mock_iter.return_value = [mock_proc]
         procs = mod._get_processes()
         assert len(procs) == 1
         assert procs[0]["pid"] == 1
 
-    @patch.object(process_manager, "_get_processes", return_value=[
-        {"pid": 1, "name": "init", "user": "root", "cpu": 0.0,
-         "mem": 0.1, "status": "running", "cmd": "/sbin/init"},
-    ])
+    @patch.object(
+        process_manager,
+        "_get_processes",
+        return_value=[
+            {
+                "pid": 1,
+                "name": "init",
+                "user": "root",
+                "cpu": 0.0,
+                "mem": 0.1,
+                "status": "running",
+                "cmd": "/sbin/init",
+            },
+        ],
+    )
     def test_action_list(self, mock_procs, mod):
         result = mod._action_list("cpu", 10)
         assert result is True
@@ -246,12 +268,30 @@ class TestProcessManager:
         result = mod._action_search("")
         assert result is False
 
-    @patch.object(process_manager, "_get_processes", return_value=[
-        {"pid": 100, "name": "python3", "user": "user", "cpu": 10.0,
-         "mem": 5.0, "status": "running", "cmd": "python3 app.py"},
-        {"pid": 200, "name": "bash", "user": "user", "cpu": 0.0,
-         "mem": 0.1, "status": "sleeping", "cmd": "/bin/bash"},
-    ])
+    @patch.object(
+        process_manager,
+        "_get_processes",
+        return_value=[
+            {
+                "pid": 100,
+                "name": "python3",
+                "user": "user",
+                "cpu": 10.0,
+                "mem": 5.0,
+                "status": "running",
+                "cmd": "python3 app.py",
+            },
+            {
+                "pid": 200,
+                "name": "bash",
+                "user": "user",
+                "cpu": 0.0,
+                "mem": 0.1,
+                "status": "sleeping",
+                "cmd": "/bin/bash",
+            },
+        ],
+    )
     def test_action_search_found(self, mock_procs, mod):
         result = mod._action_search("python")
         assert result is True
@@ -266,5 +306,7 @@ class TestProcessManager:
         mock_proc.terminate.assert_called_once()
 
     def test_run_kill_no_pid(self, mod):
-        result = mod.run({"ACTION": "kill", "PID": "", "FILTER": "", "SORT_BY": "cpu", "COUNT": 10})
+        result = mod.run(
+            {"ACTION": "kill", "PID": "", "FILTER": "", "SORT_BY": "cpu", "COUNT": 10}
+        )
         assert result is False

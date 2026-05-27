@@ -1,8 +1,12 @@
-from typing import Any, List
+from typing import Any
+
+from rich import print
+
 from core.command import Command
+from core.module import BaseModule
 from core.shared_state import shared_state
-from core.module import BaseModule 
-from rich import  print
+
+
 class Unset(Command):
     """Ayarlanmış option'u sıfırlamak (default hali) için kullanılan bir komuttur.
 
@@ -12,21 +16,25 @@ class Unset(Command):
     Returns:
         _type_: _description_
     """
+
     Name = "unset"
-    Description = "Ayarlanmış option'u sıfırlamak (default hali) için kullanılan bir komuttur."
+    Description = (
+        "Ayarlanmış option'u sıfırlamak (default hali) için kullanılan bir komuttur."
+    )
     Category = "module"
     Aliases = []
     Usage = "unset <seçenek_adı>"
     Examples = [
         "unset RHOSTS             # RHOSTS değerini sıfırlar",
-        "unset TEXT               # TEXT değerini sıfırlar"
+        "unset TEXT               # TEXT değerini sıfırlar",
     ]
+
     def __init__(self) -> None:
-        """init fonksiyon
-        """
+        """init fonksiyon"""
         super().__init__()
-        self.completer_function = self._unset_completer 
-    def _unset_completer(self, text: str, word_before_cursor: str) -> List[str]:
+        self.completer_function = self._unset_completer
+
+    def _unset_completer(self, text: str, word_before_cursor: str) -> list[str]:
         """unset komutunun otomatik tamamlaması.
 
         Args:
@@ -37,19 +45,22 @@ class Unset(Command):
             List[str]: Otomatik tamamlama listesi.
         """
         parts = text.split()
-        if len(parts) == 1 and text.endswith(' '): 
+        if len(parts) == 1 and text.endswith(" "):
             selected_module: BaseModule = shared_state.get_selected_module()
             if selected_module:
                 return sorted(list(selected_module.get_options().keys()))
             return []
-        elif len(parts) == 2 and not text.endswith(' '): 
+        elif len(parts) == 2 and not text.endswith(" "):
             current_arg = parts[1]
             target_module: BaseModule = shared_state.get_selected_module()
             if target_module:
                 all_option_names = list(target_module.get_options().keys())
-                return sorted([name for name in all_option_names if name.startswith(current_arg)])
+                return sorted(
+                    [name for name in all_option_names if name.startswith(current_arg)]
+                )
             return []
         return []
+
     def execute(self, *args: str, **kwargs: Any) -> bool:
         """Komut çalışınca çalışacak komut.
 
@@ -58,7 +69,9 @@ class Unset(Command):
         """
         selected_module: BaseModule = shared_state.get_selected_module()
         if not selected_module:
-            print("Herhangi bir modül seçili değil. Lütfen önce 'use <modül_yolu>' komutunu kullanın.")
+            print(
+                "Herhangi bir modül seçili değil. Lütfen önce 'use <modül_yolu>' komutunu kullanın."
+            )
             return False
         if not args:
             print("Kullanım: unset <seçenek_adı>")
@@ -66,7 +79,7 @@ class Unset(Command):
         option_name = args[0]
         options = selected_module.get_options()
         if option_name in options:
-            option_obj = options[option_name]
+            options[option_name]
             selected_module.set_option_value(option_name, None)
             print(f"Seçenek '{option_name}' sıfırlandı.")
             return True

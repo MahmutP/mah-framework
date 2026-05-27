@@ -1,9 +1,13 @@
 # çıkış için temel komut
 import sys
 from typing import Any
+
+from rich import print
+
 from core.command import Command
-from core.shared_state import shared_state 
-from rich import  print
+from core.shared_state import shared_state
+
+
 class Exit(Command):
     """Mah Framework'ten çıkmaya yarıyan komut.
 
@@ -13,6 +17,7 @@ class Exit(Command):
     Returns:
         _type_: _description_
     """
+
     Name = "exit"
     Description = "Uygulamadan çıkar."
     Category = "core"
@@ -20,8 +25,9 @@ class Exit(Command):
     Usage = "exit"
     Examples = [
         "exit                     # Uygulamayı kapatır",
-        "quit                     # 'exit' için alias"
+        "quit                     # 'exit' için alias",
     ]
+
     def execute(self, *args: str, **kwargs: Any) -> bool:
         """Komut çalıştırıldığında çalışacak kod.
 
@@ -29,9 +35,9 @@ class Exit(Command):
             bool: Komutun başarılı olup olmadığının kontrolü.
         """
         print("Uygulamadan çıkış yapılıyor...")
-        if hasattr(shared_state, 'console_instance') and shared_state.console_instance:
+        if hasattr(shared_state, "console_instance") and shared_state.console_instance:
             shared_state.console_instance.shutdown()
         else:
             print("Console instance bulunamadı, doğrudan çıkılıyor.")
-            sys.exit(0) 
-        return True 
+            sys.exit(0)
+        return True

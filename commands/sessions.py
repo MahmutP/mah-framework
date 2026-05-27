@@ -1,12 +1,13 @@
-import shutil
-from typing import Any
-from core.command import Command
-from core.shared_state import shared_state
-from core.cont import LEFT_PADDING, COL_SPACING, DEFAULT_TERMINAL_WIDTH
-from rich import print
-
 import time
 from datetime import timedelta
+from typing import Any
+
+from rich import print
+
+from core.command import Command
+from core.cont import COL_SPACING, LEFT_PADDING
+from core.shared_state import shared_state
+
 
 class SessionsCommand(Command):
     Name = "sessions"
@@ -19,7 +20,7 @@ class SessionsCommand(Command):
         "sessions -g              # Oturumları hedefe (IP) göre gruplandırarak listeler",
         "sessions list            # Aktif oturumları listeler",
         "sessions -i <id>         # Belirtilen ID'li oturumla etkileşime geçer",
-        "sessions -k <id>         # Belirtilen ID'li oturumu sonlandırır"
+        "sessions -k <id>         # Belirtilen ID'li oturumu sonlandırır",
     ]
 
     def execute(self, *args: str, **kwargs: Any) -> bool:
@@ -52,7 +53,7 @@ class SessionsCommand(Command):
         else:
             print(f"Kullanım: {self.Usage}")
             print("Detaylı bilgi için 'help sessions' komutunu kullanın.")
-            
+
         return True
 
     def list_sessions(self, group_by_host: bool = False) -> None:
@@ -64,28 +65,32 @@ class SessionsCommand(Command):
         current_time = time.time()
         rows = []
         for s_id, data in sessions.items():
-            info_str = f"{data['info'].get('host', 'Unknown')}:{data['info'].get('port', 0)}"
-            
+            info_str = (
+                f"{data['info'].get('host', 'Unknown')}:{data['info'].get('port', 0)}"
+            )
+
             # Uptime hesapla
             connected_at = data.get("connected_at", current_time)
             uptime_seconds = int(current_time - connected_at)
             uptime_str = str(timedelta(seconds=uptime_seconds))
-            
-            rows.append({
-                "id": str(s_id),
-                "type": str(data['type']),
-                "info": info_str,
-                "host": data['info'].get('host', 'Unknown'),
-                "status": str(data['status']),
-                "uptime": uptime_str
-            })
+
+            rows.append(
+                {
+                    "id": str(s_id),
+                    "type": str(data["type"]),
+                    "info": info_str,
+                    "host": data["info"].get("host", "Unknown"),
+                    "status": str(data["status"]),
+                    "uptime": uptime_str,
+                }
+            )
 
         if group_by_host:
             # IP adresine göre gruplandır
             groups: dict[str, list] = {}
             for row in rows:
                 groups.setdefault(row["host"], []).append(row)
-            
+
             print("\nAktif Oturumlar (Gruplandırılmış)")
             print("=================================")
             for host, host_rows in groups.items():
@@ -99,7 +104,7 @@ class SessionsCommand(Command):
     def _print_table(self, rows: list) -> None:
         if not rows:
             return
-            
+
         headers = ["ID", "Type", "Information", "Status", "Uptime"]
 
         id_width = max(max(len(r["id"]) for r in rows), len(headers[0]))
@@ -141,7 +146,7 @@ class SessionsCommand(Command):
                 f"{pad(row['uptime'], uptime_width)}"
             )
             print(line)
-        print() 
+        print()
 
     def interact_session(self, session_id: int) -> None:
         session = shared_state.session_manager.get_session(session_id)
@@ -158,13 +163,13 @@ class SessionsCommand(Command):
             except KeyboardInterrupt:
                 print("\n[*] Oturum etkileşimi sonlandırıldı.")
         else:
-             print("[!] Bu oturum türü interaktif modu desteklemiyor.")
+            print("[!] Bu oturum türü interaktif modu desteklemiyor.")
 
     def kill_session(self, session_id: int) -> None:
         session = shared_state.session_manager.get_session(session_id)
         if not session:
-             print(f"[!] {session_id} numaralı oturum bulunamadı.")
-             return
-        
+            print(f"[!] {session_id} numaralı oturum bulunamadı.")
+            return
+
         shared_state.session_manager.remove_session(session_id)
         print(f"[*] {session_id} numaralı oturum sonlandırıldı.")

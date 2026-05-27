@@ -1,8 +1,10 @@
 # temel komut banner, banner ve modül bilgisi basacak.
 # modül bilgisini basacak kısım henüz kodlanmadı
 from typing import Any
-from core.command import Command
+
 from core.banner import print_banner
+from core.command import Command
+
 
 class BannerCommand(Command):
     """Banner basmaya yarıyan komut.
@@ -13,14 +15,14 @@ class BannerCommand(Command):
     Returns:
         _type_: _description_
     """
+
     Name = "banner"
     Description = "Rastgele bir banner basar."
-    Category = "system" 
+    Category = "system"
     Aliases = []
     Usage = "banner"
-    Examples = [
-        "banner                   # Rastgele ASCII art banner gösterir"
-    ] 
+    Examples = ["banner                   # Rastgele ASCII art banner gösterir"]
+
     def execute(self, *args: str, **kwargs: Any) -> bool:
         """Komut çalıştırılınca çalışacak kod
 

@@ -2,17 +2,18 @@
 # Kullanıcının framework konsolundan uzak depoları eklemesini, güncellemesini,
 # listelemesini ve silmesini sağlar.
 
-from typing import Any, List
+from typing import Any
+
 from rich import print
+
 from core.command import Command
 from core.shared_state import shared_state
-from core import logger
 
 
 class Repo(Command):
     """
     Uzak modül deposu yönetim komutu.
-    
+
     GitHub/GitLab gibi uzak kaynaklardan modül deposu ekleme, güncelleme,
     listeleme ve silme işlemlerini sağlar.
     """
@@ -40,7 +41,9 @@ class Repo(Command):
         """
         # RepoManager kontrolü
         if not shared_state.repo_manager:
-            print("[bold red]Hata:[/bold red] Depo Yöneticisi (RepoManager) yüklenemedi.")
+            print(
+                "[bold red]Hata:[/bold red] Depo Yöneticisi (RepoManager) yüklenemedi."
+            )
             return False
 
         # Alt komut yoksa veya 'list' ise, depoları listele
@@ -117,6 +120,7 @@ class Repo(Command):
             if updated_at:
                 try:
                     from datetime import datetime
+
                     dt = datetime.fromisoformat(updated_at)
                     updated_str = dt.strftime("%Y-%m-%d %H:%M").ljust(22)
                 except (ValueError, TypeError):
@@ -138,7 +142,9 @@ class Repo(Command):
 
         repo = shared_state.repo_manager.get_repo(name)
         if not repo:
-            print(f"[bold red]Hata:[/bold red] '{name}' adında kayıtlı bir depo bulunamadı.")
+            print(
+                f"[bold red]Hata:[/bold red] '{name}' adında kayıtlı bir depo bulunamadı."
+            )
             return
 
         print(f"\n[bold cyan]Depo Detayları: {name}[/bold cyan]")
@@ -150,24 +156,26 @@ class Repo(Command):
 
         # Klonlanmış dizin bilgisi
         from pathlib import Path
+
         from core.cont import REPOS_DIR
+
         repo_path = Path(REPOS_DIR) / name.strip().lower()
         if repo_path.exists():
             # Dizindeki dosya sayısı
-            file_count = sum(1 for _ in repo_path.rglob('*') if _.is_file())
+            file_count = sum(1 for _ in repo_path.rglob("*") if _.is_file())
             print(f"[bold]Yerel Dizin:[/bold]    {repo_path}")
             print(f"[bold]Dosya Sayısı:[/bold]   {file_count}")
         else:
-            print(f"[bold]Yerel Dizin:[/bold]    [dim]Henüz klonlanmadı[/dim]")
+            print("[bold]Yerel Dizin:[/bold]    [dim]Henüz klonlanmadı[/dim]")
 
         print("-" * 50)
 
-    def get_completions(self, text: str, word_before_cursor: str) -> List[str]:
+    def get_completions(self, text: str, word_before_cursor: str) -> list[str]:
         """Otomatik tamamlama desteği."""
         parts = text.split()
 
         # "repo" yazıldıysa alt komut öner
-        if len(parts) == 1 or (len(parts) == 2 and not text.endswith(' ')):
+        if len(parts) == 1 or (len(parts) == 2 and not text.endswith(" ")):
             subcommands = ["add", "update", "list", "remove", "info"]
             if len(parts) == 2:
                 return [s for s in subcommands if s.startswith(parts[1].lower())]
@@ -180,7 +188,7 @@ class Repo(Command):
                 if not shared_state.repo_manager:
                     return []
                 repo_names = shared_state.repo_manager.get_repo_names()
-                if len(parts) == 3 and not text.endswith(' '):
+                if len(parts) == 3 and not text.endswith(" "):
                     return [r for r in repo_names if r.startswith(parts[2].lower())]
                 return repo_names
 

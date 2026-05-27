@@ -1,9 +1,13 @@
 import os
-import subprocess
 import shlex
-from core.command import Command
+import subprocess
 from typing import Any
+
 from rich import print
+
+from core.command import Command
+
+
 class Shell(Command):
     """terminal komutları çalıştırmaya yarıyan komut
 
@@ -13,6 +17,7 @@ class Shell(Command):
     Returns:
         _type_: _description_
     """
+
     Name = "shell"
     Description = "Sistem kabuğuna düşer."
     Category = "system"
@@ -22,8 +27,9 @@ class Shell(Command):
         "shell                    # Interaktif shell oturumu açar",
         "shell ls -la             # 'ls -la' komutunu çalıştırır",
         "shell whoami             # Mevcut kullanıcı adını gösterir",
-        "! pwd                    # Mevcut dizini gösterir (alias)"
-    ] 
+        "! pwd                    # Mevcut dizini gösterir (alias)",
+    ]
+
     def execute(self, *args: str, **kwargs: Any) -> bool:
         """komut çalıştırılınca çalışacak fonksiyon.
 
@@ -34,11 +40,11 @@ class Shell(Command):
         if not command_to_execute:
             print("Sistem kabuğuna düşülüyor. Çıkmak için 'exit' yazın.")
             try:
-                if os.name == 'nt': 
+                if os.name == "nt":
                     subprocess.run("cmd.exe", shell=True, check=True)
-                    #subprocess.run("powershell.exe", shell=True, check=True)
+                    # subprocess.run("powershell.exe", shell=True, check=True)
                     # "shell komut" metodunda komutu powershell de çalıştırabilirsem powershelle geçieceğim.
-                else: 
+                else:
                     subprocess.run("/bin/bash", shell=True, check=True)
                 print("Sistem kabuğundan çıkıldı.")
             except subprocess.CalledProcessError as e:
@@ -51,18 +57,27 @@ class Shell(Command):
             print(f"Sistem komutu çalıştırılıyor: {command_to_execute}")
             try:
                 cmd_list = shlex.split(command_to_execute)
-                result = subprocess.run(cmd_list, check=True,
-                                        capture_output=True, text=True, encoding='utf-8')
+                result = subprocess.run(
+                    cmd_list,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                )
                 if result.stdout:
                     print(result.stdout.strip())
                 if result.stderr:
                     print(f"Komut hata çıktısı: {result.stderr.strip()}")
                 return True
             except subprocess.CalledProcessError as e:
-                print(f"Komut '{command_to_execute}' çalıştırılırken hata oluştu (Çıkış kodu: {e.returncode}): {e.stderr.strip()}")
+                print(
+                    f"Komut '{command_to_execute}' çalıştırılırken hata oluştu (Çıkış kodu: {e.returncode}): {e.stderr.strip()}"
+                )
                 return False
             except FileNotFoundError:
-                print(f"Komut bulunamadı: '{command_to_execute}'. Sistem PATH'inde olduğundan emin olun.")
+                print(
+                    f"Komut bulunamadı: '{command_to_execute}'. Sistem PATH'inde olduğundan emin olun."
+                )
                 return False
             except ValueError as e:
                 print(f"Komut ayrıştırma hatası: {e}")

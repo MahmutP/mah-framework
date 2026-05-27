@@ -15,3 +15,57 @@ module = [
     "core/*",
 ]
 disallow_untyped_defs = true
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "I",    # isort (import sırası)
+    "F",    # pyflakes (mantık hataları)
+    "E",    # pycodestyle ( stil hataları)
+    "W",    # pycodestyle ( stil uyarıları)
+    "N",    # pep8-naming (isimlendirme)
+    "UP",   # pyupgrade (modern Python)
+    "SIM",  # flake8-simplify (basitleştirme)
+    "RUF",  # ruff'a özel kurallar
+]
+ignore = [
+    "E501",  # satır uzunluğu (mevcut kodda çok var)
+    "N801",  # class isimleri büyük harf (mevcut kod böyle)
+    "N802",  # fonksiyon isimleri küçük harf (legacy)
+    "N803",  # argüman isimleri küçük harf (legacy)
+    "N806",  # değişken isimleri küçük harf (legacy)
+    "N815",  # camelCase (legacy)
+    "SIM108", # if-else -> ternary (okunabilirlik)
+    "RUF001", # Türkçe karakter uyarıları (Türkçe proje)
+    "RUF002", # Türkçe karakter uyarıları (Türkçe proje)
+    "RUF003", # Türkçe karakter uyarıları (Türkçe proje)
+    "RUF012", # Mutable class attr default (yaygın Python idiomu)
+    "E722",   # bare except (mevcut kodda çok yerde)
+    "E701",   # multiple statements on one line (stil tercihi)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"modules/payloads/**" = ["F821", "E741", "SIM102", "SIM105", "SIM115"]
+"build/chimera_builder.py" = ["SIM102"]
+"core/option.py" = ["SIM102"]
+"core/session_manager.py" = ["SIM105"]
+"tests/chimera/test_full_workflow.py" = ["SIM117"]
+"build/chimera_obfuscator.py" = ["SIM102"]
+"build/chimera_polymorphic.py" = ["SIM102"]
+"modules/auxiliary/recon/github_tracker.py" = ["SIM102"]
+"modules/auxiliary/scanner/ssl_checker.py" = ["SIM117"]
+"modules/payloads/python/chimera/handler.py" = ["SIM105"]
+"tests/chimera/conftest.py" = ["E402", "F811"]
+"tests/*" = ["N", "E741"]
+"tests/test_utils_modules.py" = ["E741", "RUF059"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12

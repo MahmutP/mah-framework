@@ -10,5 +10,6 @@ repos:
     rev: v1.19.1
     hooks:
       - id: mypy
-        args: [--no-strict-optional, --ignore-missing-imports]
+        args: [--no-strict-optional, --ignore-missing-imports, --explicit-package-bases]
         additional_dependencies: [types-requests, types-PyYAML]
+        exclude: ^(build/|modules/payloads/)

@@ -18,70 +18,291 @@ Kullanım (generate.py içinden):
 import ast
 import random
 import string
-import hashlib
-import textwrap
-from typing import Optional
-
 
 # ============================================================
 # Sabitler
 # ============================================================
 
 # Korunacak Python built-in ve anahtar kelimeler (rename edilmeyecek)
-_PROTECTED_NAMES = frozenset({
-    # Builtins
-    "None", "True", "False", "print", "len", "range", "int", "str", "float",
-    "bool", "list", "dict", "set", "tuple", "bytes", "bytearray", "type",
-    "object", "super", "isinstance", "issubclass", "hasattr", "getattr",
-    "setattr", "delattr", "callable", "iter", "next", "enumerate", "zip",
-    "map", "filter", "sorted", "reversed", "min", "max", "sum", "abs",
-    "round", "hash", "id", "repr", "format", "chr", "ord", "hex", "bin",
-    "oct", "open", "input", "exit", "quit", "help", "dir", "vars", "globals",
-    "locals", "exec", "eval", "compile", "importlib", "__import__",
-    "staticmethod", "classmethod", "property", "any", "all", "divmod",
-    "pow", "breakpoint", "memoryview", "slice", "complex",
-    # Standard kwargs for built-ins
-    "key", "reverse", "file", "flush", "end", "sep",
-    # Sık kullanılan istisnalar
-    "Exception", "ValueError", "TypeError", "KeyError", "IndexError",
-    "AttributeError", "RuntimeError", "OSError", "IOError", "FileNotFoundError",
-    "PermissionError", "TimeoutError", "ConnectionError", "ImportError",
-    "StopIteration", "GeneratorExit", "SystemExit", "KeyboardInterrupt",
-    "NotImplementedError", "OverflowError", "ZeroDivisionError",
-    "MemoryError", "RecursionError", "UnicodeError", "UnicodeDecodeError",
-    "UnicodeEncodeError", "BufferError",
-    # Dunder metotlar ve özel adlar
-    "__init__", "__new__", "__del__", "__repr__", "__str__", "__bytes__",
-    "__format__", "__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__",
-    "__hash__", "__bool__", "__getattr__", "__setattr__", "__delattr__",
-    "__dir__", "__get__", "__set__", "__delete__", "__call__", "__len__",
-    "__getitem__", "__setitem__", "__delitem__", "__iter__", "__next__",
-    "__contains__", "__enter__", "__exit__", "__await__", "__aiter__",
-    "__anext__", "__aenter__", "__aexit__", "__name__", "__file__",
-    "__doc__", "__module__", "__class__", "__dict__", "__slots__",
-    "__all__", "__version__", "__author__", "__builtins__", "__spec__",
-    "__loader__", "__package__", "__cached__", "__annotations__",
-    "__abstractmethods__", "__bases__", "__mro__", "__subclasses__",
-    # Modül isimleri (sık import edilenler)
-    "os", "sys", "re", "io", "time", "json", "ssl", "socket", "struct",
-    "threading", "subprocess", "hashlib", "base64", "hmac", "ctypes",
-    "platform", "select", "signal", "random", "string", "types", "ast",
-    "inspect", "traceback", "logging", "pathlib", "collections", "itertools",
-    "functools", "contextlib", "abc", "copy", "gc", "weakref", "textwrap",
-    "shutil", "tempfile", "glob", "fnmatch", "errno", "stat",
-    # Sık kullanılan metodlar / nitelikler
-    "append", "extend", "insert", "remove", "pop", "clear", "copy", "update",
-    "keys", "values", "items", "get", "setdefault", "read", "write", "close",
-    "flush", "seek", "tell", "readline", "readlines", "split", "join",
-    "strip", "lstrip", "rstrip", "replace", "find", "index", "count",
-    "startswith", "endswith", "upper", "lower", "encode", "decode",
-    "format", "send", "recv", "connect", "bind", "listen", "accept",
-    "settimeout", "setblocking", "shutdown", "setsockopt", "getsockopt",
-    "fileno", "makefile", "do_handshake", "wrap_socket", "start", "run",
-    "join", "is_alive", "daemon", "target", "args", "kwargs",
-    # Yaygın değişken isimleri (agent'a özgü, korunmalı)
-    "self", "cls", "args", "kwargs",
-})
+_PROTECTED_NAMES = frozenset(
+    {
+        # Builtins
+        "None",
+        "True",
+        "False",
+        "print",
+        "len",
+        "range",
+        "int",
+        "str",
+        "float",
+        "bool",
+        "list",
+        "dict",
+        "set",
+        "tuple",
+        "bytes",
+        "bytearray",
+        "type",
+        "object",
+        "super",
+        "isinstance",
+        "issubclass",
+        "hasattr",
+        "getattr",
+        "setattr",
+        "delattr",
+        "callable",
+        "iter",
+        "next",
+        "enumerate",
+        "zip",
+        "map",
+        "filter",
+        "sorted",
+        "reversed",
+        "min",
+        "max",
+        "sum",
+        "abs",
+        "round",
+        "hash",
+        "id",
+        "repr",
+        "format",
+        "chr",
+        "ord",
+        "hex",
+        "bin",
+        "oct",
+        "open",
+        "input",
+        "exit",
+        "quit",
+        "help",
+        "dir",
+        "vars",
+        "globals",
+        "locals",
+        "exec",
+        "eval",
+        "compile",
+        "importlib",
+        "__import__",
+        "staticmethod",
+        "classmethod",
+        "property",
+        "any",
+        "all",
+        "divmod",
+        "pow",
+        "breakpoint",
+        "memoryview",
+        "slice",
+        "complex",
+        # Standard kwargs for built-ins
+        "key",
+        "reverse",
+        "file",
+        "flush",
+        "end",
+        "sep",
+        # Sık kullanılan istisnalar
+        "Exception",
+        "ValueError",
+        "TypeError",
+        "KeyError",
+        "IndexError",
+        "AttributeError",
+        "RuntimeError",
+        "OSError",
+        "IOError",
+        "FileNotFoundError",
+        "PermissionError",
+        "TimeoutError",
+        "ConnectionError",
+        "ImportError",
+        "StopIteration",
+        "GeneratorExit",
+        "SystemExit",
+        "KeyboardInterrupt",
+        "NotImplementedError",
+        "OverflowError",
+        "ZeroDivisionError",
+        "MemoryError",
+        "RecursionError",
+        "UnicodeError",
+        "UnicodeDecodeError",
+        "UnicodeEncodeError",
+        "BufferError",
+        # Dunder metotlar ve özel adlar
+        "__init__",
+        "__new__",
+        "__del__",
+        "__repr__",
+        "__str__",
+        "__bytes__",
+        "__format__",
+        "__lt__",
+        "__le__",
+        "__eq__",
+        "__ne__",
+        "__gt__",
+        "__ge__",
+        "__hash__",
+        "__bool__",
+        "__getattr__",
+        "__setattr__",
+        "__delattr__",
+        "__dir__",
+        "__get__",
+        "__set__",
+        "__delete__",
+        "__call__",
+        "__len__",
+        "__getitem__",
+        "__setitem__",
+        "__delitem__",
+        "__iter__",
+        "__next__",
+        "__contains__",
+        "__enter__",
+        "__exit__",
+        "__await__",
+        "__aiter__",
+        "__anext__",
+        "__aenter__",
+        "__aexit__",
+        "__name__",
+        "__file__",
+        "__doc__",
+        "__module__",
+        "__class__",
+        "__dict__",
+        "__slots__",
+        "__all__",
+        "__version__",
+        "__author__",
+        "__builtins__",
+        "__spec__",
+        "__loader__",
+        "__package__",
+        "__cached__",
+        "__annotations__",
+        "__abstractmethods__",
+        "__bases__",
+        "__mro__",
+        "__subclasses__",
+        # Modül isimleri (sık import edilenler)
+        "os",
+        "sys",
+        "re",
+        "io",
+        "time",
+        "json",
+        "ssl",
+        "socket",
+        "struct",
+        "threading",
+        "subprocess",
+        "hashlib",
+        "base64",
+        "hmac",
+        "ctypes",
+        "platform",
+        "select",
+        "signal",
+        "random",
+        "string",
+        "types",
+        "ast",
+        "inspect",
+        "traceback",
+        "logging",
+        "pathlib",
+        "collections",
+        "itertools",
+        "functools",
+        "contextlib",
+        "abc",
+        "copy",
+        "gc",
+        "weakref",
+        "textwrap",
+        "shutil",
+        "tempfile",
+        "glob",
+        "fnmatch",
+        "errno",
+        "stat",
+        # Sık kullanılan metodlar / nitelikler
+        "append",
+        "extend",
+        "insert",
+        "remove",
+        "pop",
+        "clear",
+        "copy",
+        "update",
+        "keys",
+        "values",
+        "items",
+        "get",
+        "setdefault",
+        "read",
+        "write",
+        "close",
+        "flush",
+        "seek",
+        "tell",
+        "readline",
+        "readlines",
+        "split",
+        "join",
+        "strip",
+        "lstrip",
+        "rstrip",
+        "replace",
+        "find",
+        "index",
+        "count",
+        "startswith",
+        "endswith",
+        "upper",
+        "lower",
+        "encode",
+        "decode",
+        "format",
+        "send",
+        "recv",
+        "connect",
+        "bind",
+        "listen",
+        "accept",
+        "settimeout",
+        "setblocking",
+        "shutdown",
+        "setsockopt",
+        "getsockopt",
+        "fileno",
+        "makefile",
+        "do_handshake",
+        "wrap_socket",
+        "start",
+        "run",
+        "join",
+        "is_alive",
+        "daemon",
+        "target",
+        "args",
+        "kwargs",
+        # Yaygın değişken isimleri (agent'a özgü, korunmalı)
+        "self",
+        "cls",
+        "args",
+        "kwargs",
+    }
+)
 
 # Junk kod şablonları (birbirinden bağımsız, yan etkisiz Python ifadeleri)
 _JUNK_TEMPLATES = [
@@ -104,6 +325,7 @@ _JUNK_TEMPLATES = [
 # ============================================================
 # Yardımcı Fonksiyonlar
 # ============================================================
+
 
 def _rand_name(prefix: str = "_", length: int = 12) -> str:
     """Rastgele, geçerli bir Python tanımlayıcısı üretir."""
@@ -147,6 +369,7 @@ def _make_junk_line() -> str:
 # Aşama 1: AST Rename (Tanımlayıcı İsim Değiştirme)
 # ============================================================
 
+
 class _NameCollector(ast.NodeVisitor):
     """Kaynak koddan yeniden adlandırılabilecek tüm tanımlayıcıları toplar."""
 
@@ -158,12 +381,26 @@ class _NameCollector(ast.NodeVisitor):
             if node.name not in _PROTECTED_NAMES and not node.name.startswith("__"):
                 self.defined.add(node.name)
         # Parametreler
-        for arg in node.args.args + getattr(node.args, 'posonlyargs', []) + node.args.kwonlyargs:
-            if arg.arg not in _PROTECTED_NAMES and arg.arg != "self" and arg.arg != "cls":
+        for arg in (
+            node.args.args
+            + getattr(node.args, "posonlyargs", [])
+            + node.args.kwonlyargs
+        ):
+            if (
+                arg.arg not in _PROTECTED_NAMES
+                and arg.arg != "self"
+                and arg.arg != "cls"
+            ):
                 self.defined.add(arg.arg)
-        if getattr(node.args, 'vararg', None) and node.args.vararg.arg not in _PROTECTED_NAMES:
+        if (
+            getattr(node.args, "vararg", None)
+            and node.args.vararg.arg not in _PROTECTED_NAMES
+        ):
             self.defined.add(node.args.vararg.arg)
-        if getattr(node.args, 'kwarg', None) and node.args.kwarg.arg not in _PROTECTED_NAMES:
+        if (
+            getattr(node.args, "kwarg", None)
+            and node.args.kwarg.arg not in _PROTECTED_NAMES
+        ):
             self.defined.add(node.args.kwarg.arg)
         self.generic_visit(node)
 
@@ -172,16 +409,18 @@ class _NameCollector(ast.NodeVisitor):
     def visit_ClassDef(self, node):
         if node.name not in _PROTECTED_NAMES and not node.name.startswith("__"):
             self.defined.add(node.name)
-        
+
         in_class_prev = getattr(self, "in_class", False)
         self.in_class = True
         self.generic_visit(node)
         self.in_class = in_class_prev
 
     def visit_Name(self, node):
-        if (isinstance(node.ctx, ast.Store) and
-                node.id not in _PROTECTED_NAMES and
-                not node.id.startswith("__")):
+        if (
+            isinstance(node.ctx, ast.Store)
+            and node.id not in _PROTECTED_NAMES
+            and not node.id.startswith("__")
+        ):
             self.defined.add(node.id)
         self.generic_visit(node)
 
@@ -205,15 +444,18 @@ class _NameRenamer(ast.NodeTransformer):
         self.mapping = mapping
 
     def visit_FunctionDef(self, node):
-        if not getattr(self, "in_class", False):
-            if node.name in self.mapping:
-                node.name = self.mapping[node.name]
-        for arg in node.args.args + getattr(node.args, 'posonlyargs', []) + node.args.kwonlyargs:
+        if not getattr(self, "in_class", False) and node.name in self.mapping:
+            node.name = self.mapping[node.name]
+        for arg in (
+            node.args.args
+            + getattr(node.args, "posonlyargs", [])
+            + node.args.kwonlyargs
+        ):
             if arg.arg in self.mapping:
                 arg.arg = self.mapping[arg.arg]
-        if getattr(node.args, 'vararg', None) and node.args.vararg.arg in self.mapping:
+        if getattr(node.args, "vararg", None) and node.args.vararg.arg in self.mapping:
             node.args.vararg.arg = self.mapping[node.args.vararg.arg]
-        if getattr(node.args, 'kwarg', None) and node.args.kwarg.arg in self.mapping:
+        if getattr(node.args, "kwarg", None) and node.args.kwarg.arg in self.mapping:
             node.args.kwarg.arg = self.mapping[node.args.kwarg.arg]
         self.generic_visit(node)
         return node
@@ -255,7 +497,7 @@ class _NameRenamer(ast.NodeTransformer):
         return node
 
 
-def _ast_rename(source: str, seed: Optional[int] = None) -> tuple:
+def _ast_rename(source: str, seed: int | None = None) -> tuple:
     """
     Kaynak kodu parse edip tanımlayıcıları yeniden adlandırır.
 
@@ -289,6 +531,7 @@ def _ast_rename(source: str, seed: Optional[int] = None) -> tuple:
 # Aşama 2: String XOR Şifreleme
 # ============================================================
 
+
 class _StringEncryptor(ast.NodeTransformer):
     """
     Kaynak koddaki string sabitlerini XOR ile şifreleyip
@@ -302,10 +545,22 @@ class _StringEncryptor(ast.NodeTransformer):
     """
 
     # Obfuscate edilmeyecek string desenleri (import isimleri, format spec vb.)
-    _SKIP_PATTERNS = frozenset({
-        "utf-8", "utf8", "latin-1", "ascii", "rb", "wb", "r", "w", "a",
-        "rt", "wt", "utf-16",
-    })
+    _SKIP_PATTERNS = frozenset(
+        {
+            "utf-8",
+            "utf8",
+            "latin-1",
+            "ascii",
+            "rb",
+            "wb",
+            "r",
+            "w",
+            "a",
+            "rt",
+            "wt",
+            "utf-16",
+        }
+    )
 
     def __init__(self):
         self.key = _xor_key()
@@ -345,48 +600,51 @@ class _StringEncryptor(ast.NodeTransformer):
         # (lambda _k, _d: bytes([_b ^ _k for _b in _d]).decode('utf-8'))(KEY, [BYTES])
         key_node = ast.Constant(value=self.key)
         bytes_list = ast.List(
-            elts=[ast.Constant(value=b) for b in encrypted],
-            ctx=ast.Load()
+            elts=[ast.Constant(value=b) for b in encrypted], ctx=ast.Load()
         )
 
         lambda_node = ast.Lambda(
             args=ast.arguments(
                 posonlyargs=[],
                 args=[ast.arg(arg="_k"), ast.arg(arg="_d")],
-                vararg=None, kwonlyargs=[], kw_defaults=[],
-                kwarg=None, defaults=[]
+                vararg=None,
+                kwonlyargs=[],
+                kw_defaults=[],
+                kwarg=None,
+                defaults=[],
             ),
             body=ast.Call(
                 func=ast.Attribute(
                     value=ast.Call(
                         func=ast.Name(id="bytes", ctx=ast.Load()),
-                        args=[ast.ListComp(
-                            elt=ast.BinOp(
-                                left=ast.Name(id="_b", ctx=ast.Load()),
-                                op=ast.BitXor(),
-                                right=ast.Name(id="_k", ctx=ast.Load())
-                            ),
-                            generators=[ast.comprehension(
-                                target=ast.Name(id="_b", ctx=ast.Store()),
-                                iter=ast.Name(id="_d", ctx=ast.Load()),
-                                ifs=[], is_async=0
-                            )]
-                        )],
-                        keywords=[]
+                        args=[
+                            ast.ListComp(
+                                elt=ast.BinOp(
+                                    left=ast.Name(id="_b", ctx=ast.Load()),
+                                    op=ast.BitXor(),
+                                    right=ast.Name(id="_k", ctx=ast.Load()),
+                                ),
+                                generators=[
+                                    ast.comprehension(
+                                        target=ast.Name(id="_b", ctx=ast.Store()),
+                                        iter=ast.Name(id="_d", ctx=ast.Load()),
+                                        ifs=[],
+                                        is_async=0,
+                                    )
+                                ],
+                            )
+                        ],
+                        keywords=[],
                     ),
                     attr="decode",
-                    ctx=ast.Load()
+                    ctx=ast.Load(),
                 ),
                 args=[ast.Constant(value="utf-8")],
-                keywords=[]
-            )
+                keywords=[],
+            ),
         )
 
-        call_node = ast.Call(
-            func=lambda_node,
-            args=[key_node, bytes_list],
-            keywords=[]
-        )
+        call_node = ast.Call(func=lambda_node, args=[key_node, bytes_list], keywords=[])
         return ast.copy_location(call_node, node)
 
 
@@ -413,6 +671,7 @@ def _encrypt_strings(source: str) -> tuple:
 # Aşama 3: Junk Code Enjeksiyonu
 # ============================================================
 
+
 def _inject_junk(source: str, density: float = 0.3) -> tuple:
     """
     Kaynak kodun satırlarına rastgele junk kod satırları ekler.
@@ -426,46 +685,47 @@ def _inject_junk(source: str, density: float = 0.3) -> tuple:
         (obfuscated_source: str, injected_count: int)
     """
     lines = source.split("\n")
-    
+
     # Olası Syntax/Indentation hatalarına karşı 3 kez tekrar deneyebiliriz
     for attempt in range(3):
         result = []
         injected = 0
         in_multiline_string = False
-        
+
         for line in lines:
             result.append(line)
             stripped = line.strip()
-            
+
             # Basit çoklu satır string (docstring) takibi
             if stripped.count('"""') % 2 != 0 or stripped.count("'''") % 2 != 0:
                 in_multiline_string = not in_multiline_string
-                
+
             if in_multiline_string:
                 continue
 
             # Bu karakterlerle biten veya başlayan satırların hemen altına kod eklemek risklidir
             is_unsafe = (
-                stripped.endswith(":") or
-                stripped.endswith("\\") or
-                stripped.endswith(",") or
-                stripped.endswith("(") or
-                stripped.endswith("[") or
-                stripped.endswith("{") or
-                stripped.startswith("@") or
-                stripped.startswith("elif ") or
-                stripped.startswith("else:") or
-                stripped.startswith("except ") or
-                stripped.startswith("finally:") or
-                '"""' in stripped or
-                "'''" in stripped
+                stripped.endswith(":")
+                or stripped.endswith("\\")
+                or stripped.endswith(",")
+                or stripped.endswith("(")
+                or stripped.endswith("[")
+                or stripped.endswith("{")
+                or stripped.startswith("@")
+                or stripped.startswith("elif ")
+                or stripped.startswith("else:")
+                or stripped.startswith("except ")
+                or stripped.startswith("finally:")
+                or '"""' in stripped
+                or "'''" in stripped
             )
 
-            if (stripped and
-                    not stripped.startswith("#") and
-                    not is_unsafe and
-                    random.random() < density):
-                    
+            if (
+                stripped
+                and not stripped.startswith("#")
+                and not is_unsafe
+                and random.random() < density
+            ):
                 # Mevcut satırın girintisini al
                 indent = len(line) - len(line.lstrip())
                 indent_str = " " * indent
@@ -474,7 +734,7 @@ def _inject_junk(source: str, density: float = 0.3) -> tuple:
                 injected += 1
 
         new_source = "\n".join(result)
-        
+
         # Enjekte edilen kod parse edilebilir boyutta ve doğru mu kontrol et
         try:
             ast.parse(new_source)
@@ -491,6 +751,7 @@ def _inject_junk(source: str, density: float = 0.3) -> tuple:
 # Aşama 4: Control Flow Flattening (Kontrol Akışı Düzleştirme)
 # ============================================================
 
+
 class _ControlFlowFlattener(ast.NodeTransformer):
     """Fonksiyon gövdelerini state-machine benzeri while-switch yapısına dönüştürür.
 
@@ -506,8 +767,10 @@ class _ControlFlowFlattener(ast.NodeTransformer):
         if len(body) < 3:
             return False
         for node in body:
-            if isinstance(node, (ast.Try, ast.With, ast.AsyncWith,
-                                 ast.For, ast.AsyncFor, ast.While)):
+            if isinstance(
+                node,
+                (ast.Try, ast.With, ast.AsyncWith, ast.For, ast.AsyncFor, ast.While),
+            ):
                 return False
         return True
 
@@ -547,7 +810,7 @@ class _ControlFlowFlattener(ast.NodeTransformer):
                 assign = ast.Assign(
                     targets=[ast.Name(id=state_var, ctx=ast.Store())],
                     value=ast.Constant(value=next_state),
-                    lineno=0
+                    lineno=0,
                 )
                 body_stmts.append(assign)
 
@@ -555,10 +818,10 @@ class _ControlFlowFlattener(ast.NodeTransformer):
                 test=ast.Compare(
                     left=ast.Name(id=state_var, ctx=ast.Load()),
                     ops=[ast.Eq()],
-                    comparators=[ast.Constant(value=current_state)]
+                    comparators=[ast.Constant(value=current_state)],
                 ),
                 body=body_stmts,
-                orelse=[]
+                orelse=[],
             )
             cases.append(if_node)
 
@@ -569,7 +832,7 @@ class _ControlFlowFlattener(ast.NodeTransformer):
         init_assign = ast.Assign(
             targets=[ast.Name(id=state_var, ctx=ast.Store())],
             value=ast.Constant(value=state_ids[0]),
-            lineno=0
+            lineno=0,
         )
 
         # while state_var != end_state:
@@ -577,10 +840,10 @@ class _ControlFlowFlattener(ast.NodeTransformer):
             test=ast.Compare(
                 left=ast.Name(id=state_var, ctx=ast.Load()),
                 ops=[ast.NotEq()],
-                comparators=[ast.Constant(value=end_state)]
+                comparators=[ast.Constant(value=end_state)],
             ),
             body=cases,
-            orelse=[]
+            orelse=[],
         )
 
         node.body = [init_assign, while_node]
@@ -620,30 +883,30 @@ _OPAQUE_TRUE_TEMPLATES = [
         left=ast.BinOp(
             left=ast.Name(id=var, ctx=ast.Load()),
             op=ast.Mult(),
-            right=ast.Name(id=var, ctx=ast.Load())
+            right=ast.Name(id=var, ctx=ast.Load()),
         ),
         ops=[ast.GtE()],
-        comparators=[ast.Constant(value=0)]
+        comparators=[ast.Constant(value=0)],
     ),
     # (x | 1) != 0 her zaman True
     lambda var: ast.Compare(
         left=ast.BinOp(
             left=ast.Name(id=var, ctx=ast.Load()),
             op=ast.BitOr(),
-            right=ast.Constant(value=1)
+            right=ast.Constant(value=1),
         ),
         ops=[ast.NotEq()],
-        comparators=[ast.Constant(value=0)]
+        comparators=[ast.Constant(value=0)],
     ),
     # (x + 1) != x her zaman True
     lambda var: ast.Compare(
         left=ast.BinOp(
             left=ast.Name(id=var, ctx=ast.Load()),
             op=ast.Add(),
-            right=ast.Constant(value=1)
+            right=ast.Constant(value=1),
         ),
         ops=[ast.NotEq()],
-        comparators=[ast.Name(id=var, ctx=ast.Load())]
+        comparators=[ast.Name(id=var, ctx=ast.Load())],
     ),
 ]
 
@@ -663,24 +926,22 @@ class _OpaquePredicateInjector(ast.NodeTransformer):
         assign = ast.Assign(
             targets=[ast.Name(id=pred_var, ctx=ast.Store())],
             value=ast.Constant(value=pred_val),
-            lineno=0
+            lineno=0,
         )
 
         template = random.choice(_OPAQUE_TRUE_TEMPLATES)
         test = template(pred_var)
 
         junk_var = _rand_name("_j", 6)
-        fake_body = [ast.Assign(
-            targets=[ast.Name(id=junk_var, ctx=ast.Store())],
-            value=ast.Constant(value=random.randint(0, 9999)),
-            lineno=0
-        )]
+        fake_body = [
+            ast.Assign(
+                targets=[ast.Name(id=junk_var, ctx=ast.Store())],
+                value=ast.Constant(value=random.randint(0, 9999)),
+                lineno=0,
+            )
+        ]
 
-        if_node = ast.If(
-            test=test,
-            body=[stmt],
-            orelse=fake_body
-        )
+        if_node = ast.If(test=test, body=[stmt], orelse=fake_body)
 
         self.injected_count += 1
         return [assign, if_node]
@@ -689,8 +950,10 @@ class _OpaquePredicateInjector(ast.NodeTransformer):
         self.generic_visit(node)
         new_body = []
         for stmt in node.body:
-            if (isinstance(stmt, (ast.Assign, ast.Expr, ast.AugAssign)) and
-                    random.random() < self.density):
+            if (
+                isinstance(stmt, (ast.Assign, ast.Expr, ast.AugAssign))
+                and random.random() < self.density
+            ):
                 new_body.extend(self._make_opaque_if(stmt))
             else:
                 new_body.append(stmt)
@@ -728,13 +991,10 @@ def _inject_opaque_predicates(source: str, density: float = 0.15) -> tuple:
 # ============================================================
 
 _DEAD_FUNC_TEMPLATES = [
-    'def {name}({p1}, {p2}):\n    {v1} = {p1} + {p2}\n    {v2} = [{p1}] * {n1}\n    for {v3} in range({n2}):\n        {v1} += {v3}\n    return {v1}',
-
-    'def {name}({p1}):\n    {v1} = str({p1})\n    {v2} = {v1}[::-1]\n    return len({v2}) * {n1}',
-
-    'def {name}({p1}, {p2}={n1}):\n    if {p1} > {p2}:\n        return {p1} - {p2}\n    return {p2} - {p1}',
-
-    'class {name}:\n    def __init__(self):\n        self.{v1} = {n1}\n        self.{v2} = \"{s1}\"\n    def {v3}(self):\n        return self.{v1} * {n2}',
+    "def {name}({p1}, {p2}):\n    {v1} = {p1} + {p2}\n    {v2} = [{p1}] * {n1}\n    for {v3} in range({n2}):\n        {v1} += {v3}\n    return {v1}",
+    "def {name}({p1}):\n    {v1} = str({p1})\n    {v2} = {v1}[::-1]\n    return len({v2}) * {n1}",
+    "def {name}({p1}, {p2}={n1}):\n    if {p1} > {p2}:\n        return {p1} - {p2}\n    return {p2} - {p1}",
+    'class {name}:\n    def __init__(self):\n        self.{v1} = {n1}\n        self.{v2} = "{s1}"\n    def {v3}(self):\n        return self.{v1} * {n2}',
 ]
 
 
@@ -812,6 +1072,7 @@ def _inject_dead_code(source: str, count: int = 5) -> tuple:
 # Ana Pipeline
 # ============================================================
 
+
 def obfuscate(
     source: str,
     rename: bool = True,
@@ -822,7 +1083,7 @@ def obfuscate(
     opaque_predicates: bool = False,
     dead_code: bool = False,
     dead_code_count: int = 5,
-    seed: Optional[int] = None,
+    seed: int | None = None,
 ) -> dict:
     """
     Chimera agent kaynak koduna çok katmanlı obfuscation uygular.
@@ -933,6 +1194,7 @@ def obfuscate(
 # Obfuscation Raporu
 # ============================================================
 
+
 def print_obfuscation_report(result: dict):
     """Obfuscation sonuç raporunu ekrana basar."""
     if not result["success"]:
@@ -943,23 +1205,25 @@ def print_obfuscation_report(result: dict):
     border = "═" * 58
 
     size_reduction = s["original_size"] - s["final_size"]
-    size_pct = (size_reduction / s["original_size"] * 100) if s["original_size"] > 0 else 0
+    (size_reduction / s["original_size"] * 100) if s["original_size"] > 0 else 0
     line_growth = s["final_lines"] - s["original_lines"]
 
     print(f"\n  ╔{border}╗")
-    print(f"  ║  🔀  CHIMERA OBFUSCATOR - Obfuscation Raporu          ║")
+    print("  ║  🔀  CHIMERA OBFUSCATOR - Obfuscation Raporu          ║")
     print(f"  ╠{border}╣")
-    print(f"  ║  Durum           : ✅ Başarılı                        ║")
+    print("  ║  Durum           : ✅ Başarılı                        ║")
     print(f"  ╠{border}╣")
-    print(f"  ║  📊 İstatistikler                                     ║")
-    print(f"  ║  ├─ Rename edilen tanımlayıcı : {str(s['renamed_identifiers']):<25}║")
-    print(f"  ║  ├─ Şifrelenen string         : {str(s['encrypted_strings']):<25}║")
-    print(f"  ║  ├─ Eklenen junk satır        : {str(s['injected_junk_lines']):<25}║")
-    print(f"  ║  ├─ Düzleştirilen fonksiyon   : {str(s.get('flattened_functions', 0)):<25}║")
-    print(f"  ║  ├─ Opak yüklem               : {str(s.get('opaque_predicates', 0)):<25}║")
-    print(f"  ║  ├─ Ölü kod bloğu             : {str(s.get('dead_code_blocks', 0)):<25}║")
+    print("  ║  📊 İstatistikler                                     ║")
+    print(f"  ║  ├─ Rename edilen tanımlayıcı : {s['renamed_identifiers']!s:<25}║")
+    print(f"  ║  ├─ Şifrelenen string         : {s['encrypted_strings']!s:<25}║")
+    print(f"  ║  ├─ Eklenen junk satır        : {s['injected_junk_lines']!s:<25}║")
+    print(
+        f"  ║  ├─ Düzleştirilen fonksiyon   : {s.get('flattened_functions', 0)!s:<25}║"
+    )
+    print(f"  ║  ├─ Opak yüklem               : {s.get('opaque_predicates', 0)!s:<25}║")
+    print(f"  ║  ├─ Ölü kod bloğu             : {s.get('dead_code_blocks', 0)!s:<25}║")
     print(f"  ╠{border}╣")
-    print(f"  ║  📦 Boyut Bilgisi                                     ║")
+    print("  ║  📦 Boyut Bilgisi                                     ║")
     orig_str = f"{s['original_size']:,} B / {s['original_lines']} satır"
     print(f"  ║  ├─ Orijinal  : {orig_str:<41}║")
     final_str = f"{s['final_size']:,} B / {s['final_lines']} satır"

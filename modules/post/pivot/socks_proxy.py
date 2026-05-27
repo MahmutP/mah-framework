@@ -13,21 +13,21 @@
 #   6. (Ctrl+C veya stop ile durdurulur)
 # =============================================================================
 
+import contextlib
+import select
 import socket
 import struct
-import select
 import threading
-import time
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any
 
 from rich import print
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from core import logger
 from core.module import BaseModule
 from core.option import Option
-from core import logger
 
 
 class socks_proxy(BaseModule):
@@ -50,7 +50,7 @@ class socks_proxy(BaseModule):
     Category = "post/pivot"
     Version = "1.0"
 
-    Requirements: Dict[str, List[str]] = {}
+    Requirements: dict[str, list[str]] = {}
 
     def __init__(self):
         super().__init__()
@@ -111,19 +111,25 @@ class socks_proxy(BaseModule):
         self.console = Console()
 
         # Çalışma durumu
-        self._server_socket: Optional[socket.socket] = None
+        self._server_socket: socket.socket | None = None
         self._running = False
-        self._threads: List[threading.Thread] = []
+        self._threads: list[threading.Thread] = []
         self._stats = {"connections": 0, "active": 0, "bytes_sent": 0, "bytes_recv": 0}
         self._stats_lock = threading.Lock()
 
     # ── SOCKS5 PROTOKOLü ────────────────────────────────────────────────────
 
-    def _handle_client(self, client: socket.socket, addr: Tuple[str, int],
-                       auth_required: bool, username: str, password: str,
-                       timeout: int) -> None:
+    def _handle_client(
+        self,
+        client: socket.socket,
+        addr: tuple[str, int],
+        auth_required: bool,
+        username: str,
+        password: str,
+        timeout: int,
+    ) -> None:
         """Tek bir SOCKS5 istemci bağlantısını yönetir."""
-        remote: Optional[socket.socket] = None
+        remote: socket.socket | None = None
         try:
             client.settimeout(timeout)
             with self._stats_lock:
@@ -137,7 +143,7 @@ class socks_proxy(BaseModule):
             ver, nmethods = struct.unpack("!BB", header)
             if ver != 0x05:
                 return
-            methods = client.recv(nmethods)
+            client.recv(nmethods)
 
             if auth_required:
                 # 0x02 = Username / Password
@@ -163,7 +169,7 @@ class socks_proxy(BaseModule):
             req = client.recv(4)
             if len(req) < 4:
                 return
-            ver, cmd, rsv, atype = struct.unpack("!BBBB", req)
+            ver, cmd, _rsv, atype = struct.unpack("!BBBB", req)
             if cmd != 0x01:  # Sadece CONNECT destekleniyor
                 reply = struct.pack("!BBBBIH", 0x05, 0x07, 0x00, 0x01, 0, 0)
                 client.sendall(reply)
@@ -198,9 +204,11 @@ class socks_proxy(BaseModule):
 
             # Başarılı yanıt
             bind_addr = remote.getsockname()
-            reply = struct.pack(
-                "!BBBB", 0x05, 0x00, 0x00, 0x01
-            ) + socket.inet_aton(bind_addr[0]) + struct.pack("!H", bind_addr[1])
+            reply = (
+                struct.pack("!BBBB", 0x05, 0x00, 0x00, 0x01)
+                + socket.inet_aton(bind_addr[0])
+                + struct.pack("!H", bind_addr[1])
+            )
             client.sendall(reply)
 
             # ── Relay ────────────────────────────────────────────────────
@@ -212,14 +220,10 @@ class socks_proxy(BaseModule):
             with self._stats_lock:
                 self._stats["active"] -= 1
             if remote:
-                try:
+                with contextlib.suppress(Exception):
                     remote.close()
-                except Exception:
-                    pass
-            try:
+            with contextlib.suppress(Exception):
                 client.close()
-            except Exception:
-                pass
 
     def _relay(self, client: socket.socket, remote: socket.socket) -> None:
         """İstemci ↔ hedef arasında çift yönlü veri aktarımı."""
@@ -249,9 +253,16 @@ class socks_proxy(BaseModule):
 
     # ── SUNUCU YAŞAM DÖNGÜSÜ ────────────────────────────────────────────────
 
-    def _start_server(self, bind_host: str, bind_port: int,
-                      auth: bool, username: str, password: str,
-                      timeout: int, max_clients: int) -> None:
+    def _start_server(
+        self,
+        bind_host: str,
+        bind_port: int,
+        auth: bool,
+        username: str,
+        password: str,
+        timeout: int,
+        max_clients: int,
+    ) -> None:
         """Proxy sunucusunu başlatır ve gelen bağlantıları kabul eder."""
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -261,21 +272,27 @@ class socks_proxy(BaseModule):
             self._server_socket.bind((bind_host, bind_port))
             self._server_socket.listen(max_clients)
         except OSError as e:
-            print(f"[bold red][-] Bind hatası ({bind_host}:{bind_port}): {e}[/bold red]")
+            print(
+                f"[bold red][-] Bind hatası ({bind_host}:{bind_port}): {e}[/bold red]"
+            )
             self._running = False
             return
 
         self._running = True
 
-        auth_label = f"[yellow]AUTH ({username})[/yellow]" if auth else "[green]Yok[/green]"
-        self.console.print(Panel.fit(
-            f"[bold green]✔ SOCKS5 Proxy Aktif[/bold green]\n"
-            f"  Adres     : [cyan]{bind_host}:{bind_port}[/cyan]\n"
-            f"  Doğrulama : {auth_label}\n"
-            f"  Timeout   : {timeout}s\n\n"
-            f"  [dim]Durdurmak için Ctrl+C kullanın.[/dim]",
-            border_style="green",
-        ))
+        auth_label = (
+            f"[yellow]AUTH ({username})[/yellow]" if auth else "[green]Yok[/green]"
+        )
+        self.console.print(
+            Panel.fit(
+                f"[bold green]✔ SOCKS5 Proxy Aktif[/bold green]\n"
+                f"  Adres     : [cyan]{bind_host}:{bind_port}[/cyan]\n"
+                f"  Doğrulama : {auth_label}\n"
+                f"  Timeout   : {timeout}s\n\n"
+                f"  [dim]Durdurmak için Ctrl+C kullanın.[/dim]",
+                border_style="green",
+            )
+        )
 
         while self._running:
             try:
@@ -288,7 +305,7 @@ class socks_proxy(BaseModule):
                 )
                 t.start()
                 self._threads.append(t)
-            except socket.timeout:
+            except TimeoutError:
                 continue
             except OSError:
                 break
@@ -297,10 +314,8 @@ class socks_proxy(BaseModule):
         """Proxy sunucusunu durdurur."""
         self._running = False
         if self._server_socket:
-            try:
+            with contextlib.suppress(Exception):
                 self._server_socket.close()
-            except Exception:
-                pass
             self._server_socket = None
 
         # Canlı thread'leri bekle (kısa süre)
@@ -312,7 +327,9 @@ class socks_proxy(BaseModule):
         """Bağlantı istatistiklerini gösterir."""
         with self._stats_lock:
             s = self._stats.copy()
-        tbl = Table(title="📊 Proxy İstatistikleri", show_header=False, border_style="cyan")
+        tbl = Table(
+            title="📊 Proxy İstatistikleri", show_header=False, border_style="cyan"
+        )
         tbl.add_column("Metrik", style="cyan")
         tbl.add_column("Değer", style="white")
         tbl.add_row("Toplam Bağlantı", str(s["connections"]))
@@ -323,7 +340,7 @@ class socks_proxy(BaseModule):
 
     # ── RUN ──────────────────────────────────────────────────────────────────
 
-    def run(self, options: Dict[str, Any]) -> bool:
+    def run(self, options: dict[str, Any]) -> bool:
         bind_host = str(options.get("BIND_HOST", "0.0.0.0"))
         bind_port = int(options.get("BIND_PORT", 1080))
         auth = str(options.get("AUTH", "false")).lower() == "true"
@@ -335,19 +352,24 @@ class socks_proxy(BaseModule):
         logger.info(f"SOCKS5 proxy başlatılıyor: {bind_host}:{bind_port}")
 
         self.console.print()
-        self.console.print(Panel.fit(
-            "[bold cyan]🌐 SOCKS5 PROXY — Pivoting Modülü[/bold cyan]",
-            border_style="cyan",
-        ))
+        self.console.print(
+            Panel.fit(
+                "[bold cyan]🌐 SOCKS5 PROXY — Pivoting Modülü[/bold cyan]",
+                border_style="cyan",
+            )
+        )
 
         try:
-            self._start_server(bind_host, bind_port, auth, username, password,
-                               timeout, max_clients)
+            self._start_server(
+                bind_host, bind_port, auth, username, password, timeout, max_clients
+            )
         except KeyboardInterrupt:
             pass
         finally:
             self._stop_server()
-            self.console.print("\n[bold yellow][*] SOCKS5 Proxy durduruldu.[/bold yellow]")
+            self.console.print(
+                "\n[bold yellow][*] SOCKS5 Proxy durduruldu.[/bold yellow]"
+            )
             self._print_stats()
 
         return True

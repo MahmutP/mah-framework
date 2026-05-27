@@ -12,22 +12,20 @@
 #   6. run
 # =============================================================================
 
-import platform
-import os
-import getpass
-import socket
 import datetime
-from typing import Dict, Any, List
+import getpass
+import platform
+import socket
+from typing import Any
 
 import psutil  # type: ignore
-from rich import print
-from rich.table import Table
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
 
+from core import logger
 from core.module import BaseModule
 from core.option import Option
-from core import logger
 
 
 class system_info(BaseModule):
@@ -49,7 +47,9 @@ class system_info(BaseModule):
 
     # ── META ──────────────────────────────────────────────────────────────────
     Name = "System Information Gatherer"
-    Description = "Hedef sistemden ayrıntılı bilgi toplar: OS, CPU, RAM, Disk, Ağ, Süreçler"
+    Description = (
+        "Hedef sistemden ayrıntılı bilgi toplar: OS, CPU, RAM, Disk, Ağ, Süreçler"
+    )
     Author = "Mahmut P."
     Category = "post/gather"
     Version = "1.0"
@@ -112,7 +112,7 @@ class system_info(BaseModule):
         days, rem = divmod(seconds, 86400)
         hours, rem = divmod(rem, 3600)
         minutes, secs = divmod(rem, 60)
-        parts: List[str] = []
+        parts: list[str] = []
         if days:
             parts.append(f"{int(days)} gün")
         if hours:
@@ -125,7 +125,7 @@ class system_info(BaseModule):
 
     # ── VERİ TOPLAMA ─────────────────────────────────────────────────────────
 
-    def _get_os_info(self) -> Dict[str, str]:
+    def _get_os_info(self) -> dict[str, str]:
         return {
             "Sistem": platform.system(),
             "Sürüm": platform.release(),
@@ -137,7 +137,7 @@ class system_info(BaseModule):
             "Kullanıcı": getpass.getuser(),
         }
 
-    def _get_cpu_info(self) -> Dict[str, Any]:
+    def _get_cpu_info(self) -> dict[str, Any]:
         try:
             freq = psutil.cpu_freq()
             freq_str = f"{freq.current:.0f} MHz" if freq else "Bilinmiyor"
@@ -150,7 +150,7 @@ class system_info(BaseModule):
             "Frekans": freq_str,
         }
 
-    def _get_ram_info(self) -> Dict[str, str]:
+    def _get_ram_info(self) -> dict[str, str]:
         mem = psutil.virtual_memory()
         return {
             "Toplam": self._bytes_to_human(mem.total),
@@ -159,28 +159,30 @@ class system_info(BaseModule):
             "Kullanım": f"{mem.percent}%",
         }
 
-    def _get_disk_info(self) -> List[Dict[str, str]]:
-        disks: List[Dict[str, str]] = []
+    def _get_disk_info(self) -> list[dict[str, str]]:
+        disks: list[dict[str, str]] = []
         try:
             for part in psutil.disk_partitions(all=False):
                 try:
                     usage = psutil.disk_usage(part.mountpoint)
-                    disks.append({
-                        "Bağlama Noktası": part.mountpoint,
-                        "Dosya Sistemi": part.fstype,
-                        "Toplam": self._bytes_to_human(usage.total),
-                        "Kullanılan": self._bytes_to_human(usage.used),
-                        "Boş": self._bytes_to_human(usage.free),
-                        "Kullanım": f"{usage.percent}%",
-                    })
+                    disks.append(
+                        {
+                            "Bağlama Noktası": part.mountpoint,
+                            "Dosya Sistemi": part.fstype,
+                            "Toplam": self._bytes_to_human(usage.total),
+                            "Kullanılan": self._bytes_to_human(usage.used),
+                            "Boş": self._bytes_to_human(usage.free),
+                            "Kullanım": f"{usage.percent}%",
+                        }
+                    )
                 except PermissionError:
                     continue
         except Exception:
             pass
         return disks
 
-    def _get_network_info(self) -> List[Dict[str, str]]:
-        interfaces: List[Dict[str, str]] = []
+    def _get_network_info(self) -> list[dict[str, str]]:
+        interfaces: list[dict[str, str]] = []
         try:
             addrs = psutil.net_if_addrs()
             stats = psutil.net_if_stats()
@@ -196,18 +198,20 @@ class system_info(BaseModule):
                         mac = addr.address
                 is_up = stats.get(name)
                 status = "🟢 Aktif" if is_up and is_up.isup else "🔴 Pasif"
-                interfaces.append({
-                    "Arayüz": name,
-                    "IPv4": ipv4,
-                    "MAC": mac,
-                    "Durum": status,
-                })
+                interfaces.append(
+                    {
+                        "Arayüz": name,
+                        "IPv4": ipv4,
+                        "MAC": mac,
+                        "Durum": status,
+                    }
+                )
         except Exception:
             pass
         return interfaces
 
-    def _get_top_processes(self, count: int) -> List[Dict[str, str]]:
-        procs: List[Dict[str, str]] = []
+    def _get_top_processes(self, count: int) -> list[dict[str, str]]:
+        procs: list[dict[str, str]] = []
         try:
             sorted_procs = sorted(
                 psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent"]),
@@ -217,12 +221,14 @@ class system_info(BaseModule):
             for proc in sorted_procs[:count]:
                 try:
                     info = proc.info
-                    procs.append({
-                        "PID": str(info.get("pid", "?")),
-                        "İsim": (info.get("name", "?") or "?")[:25],
-                        "CPU%": f"{info.get('cpu_percent', 0):.1f}%",
-                        "RAM%": f"{info.get('memory_percent', 0):.1f}%",
-                    })
+                    procs.append(
+                        {
+                            "PID": str(info.get("pid", "?")),
+                            "İsim": (info.get("name", "?") or "?")[:25],
+                            "CPU%": f"{info.get('cpu_percent', 0):.1f}%",
+                            "RAM%": f"{info.get('memory_percent', 0):.1f}%",
+                        }
+                    )
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
         except Exception:
@@ -232,19 +238,23 @@ class system_info(BaseModule):
     def _get_uptime(self) -> str:
         try:
             boot = psutil.boot_time()
-            return self._seconds_to_human(int(datetime.datetime.now().timestamp() - boot))
+            return self._seconds_to_human(
+                int(datetime.datetime.now().timestamp() - boot)
+            )
         except Exception:
             return "Bilinmiyor"
 
     def _get_boot_time(self) -> str:
         try:
-            return datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%d %H:%M:%S")
+            return datetime.datetime.fromtimestamp(psutil.boot_time()).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
         except Exception:
             return "Bilinmiyor"
 
     # ── RUN ──────────────────────────────────────────────────────────────────
 
-    def run(self, options: Dict[str, Any]) -> bool:
+    def run(self, options: dict[str, Any]) -> bool:
         """Sistem bilgilerini toplar ve rich tabloları ile görüntüler."""
         show_processes = str(options.get("SHOW_PROCESSES", "true")).lower() == "true"
         process_count = int(options.get("PROCESS_COUNT", 10))
@@ -255,10 +265,12 @@ class system_info(BaseModule):
 
         # ── Başlık ────────────────────────────────────────────────────────
         self.console.print()
-        self.console.print(Panel.fit(
-            "[bold cyan]📊 SİSTEM BİLGİLERİ — Post-Exploitation[/bold cyan]",
-            border_style="cyan",
-        ))
+        self.console.print(
+            Panel.fit(
+                "[bold cyan]📊 SİSTEM BİLGİLERİ — Post-Exploitation[/bold cyan]",
+                border_style="cyan",
+            )
+        )
 
         # ── İşletim Sistemi ───────────────────────────────────────────────
         os_info = self._get_os_info()
@@ -288,7 +300,9 @@ class system_info(BaseModule):
         tbl.add_column("Özellik", style="cyan")
         tbl.add_column("Değer", style="white")
         for k, v in ram_info.items():
-            color = "red" if k == "Kullanım" and float(v.replace("%", "")) > 80 else "white"
+            color = (
+                "red" if k == "Kullanım" and float(v.replace("%", "")) > 80 else "white"
+            )
             tbl.add_row(k, f"[{color}]{v}[/{color}]")
         self.console.print(tbl)
         self.console.print()
@@ -308,8 +322,11 @@ class system_info(BaseModule):
                     pct = float(d["Kullanım"].replace("%", ""))
                     clr = "red" if pct > 90 else "yellow" if pct > 70 else "green"
                     tbl.add_row(
-                        d["Bağlama Noktası"], d["Dosya Sistemi"],
-                        d["Toplam"], d["Kullanılan"], d["Boş"],
+                        d["Bağlama Noktası"],
+                        d["Dosya Sistemi"],
+                        d["Toplam"],
+                        d["Kullanılan"],
+                        d["Boş"],
                         f"[{clr}]{d['Kullanım']}[/{clr}]",
                     )
                 self.console.print(tbl)
@@ -333,7 +350,9 @@ class system_info(BaseModule):
         if show_processes:
             procs = self._get_top_processes(process_count)
             if procs:
-                tbl = Table(title=f"⚡ En Aktif {process_count} Süreç", border_style="red")
+                tbl = Table(
+                    title=f"⚡ En Aktif {process_count} Süreç", border_style="red"
+                )
                 tbl.add_column("PID", style="dim")
                 tbl.add_column("İsim", style="cyan")
                 tbl.add_column("CPU%", justify="right")

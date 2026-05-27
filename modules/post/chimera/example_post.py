@@ -20,25 +20,21 @@ Kullanım (Handler tarafından):
 """
 
 import os
-import sys
 import platform
 import socket
-import subprocess
 import struct
+import subprocess
+import sys
 import time
 
-
 # ── Yardımcı: Komutu güvenli şekilde çalıştır ─────────────────────────────────
+
 
 def _run(cmd: str, timeout: int = 10) -> str:
     """Sistem komutunu çalıştırır; hata durumunda boş string döner."""
     try:
         result = subprocess.run(
-            cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=timeout
+            cmd, shell=True, capture_output=True, text=True, timeout=timeout
         )
         output = result.stdout.strip()
         if not output and result.stderr.strip():
@@ -50,18 +46,19 @@ def _run(cmd: str, timeout: int = 10) -> str:
 
 # ── Bilgi Toplama Fonksiyonları ────────────────────────────────────────────────
 
+
 def _collect_os() -> dict:
     """İşletim sistemi ve donanım özetini toplar."""
     uname = platform.uname()
     return {
-        "os"       : f"{uname.system} {uname.release} ({uname.version})",
-        "machine"  : uname.machine,
-        "hostname" : uname.node,
-        "python"   : f"{sys.version.split()[0]} ({platform.python_implementation()})",
-        "pid"      : os.getpid(),
-        "cwd"      : os.getcwd(),
+        "os": f"{uname.system} {uname.release} ({uname.version})",
+        "machine": uname.machine,
+        "hostname": uname.node,
+        "python": f"{sys.version.split()[0]} ({platform.python_implementation()})",
+        "pid": os.getpid(),
+        "cwd": os.getcwd(),
         "arch_bits": struct.calcsize("P") * 8,
-        "user"     : _get_user(),
+        "user": _get_user(),
     }
 
 
@@ -79,7 +76,7 @@ def _collect_network() -> list:
     """Ağ arayüzlerini ve IP adreslerini toplar."""
     interfaces = []
     try:
-        hostname = socket.gethostname()
+        socket.gethostname()
         # Ana IP
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -105,7 +102,9 @@ def _collect_network() -> list:
                     if len(parts) == 2:
                         ip = parts[1].strip()
                         if ip and ip != primary_ip:
-                            interfaces.append({"name": current_adapter or "unknown", "ip": ip})
+                            interfaces.append(
+                                {"name": current_adapter or "unknown", "ip": ip}
+                            )
         else:
             # Linux / macOS
             raw = _run("ip addr 2>/dev/null || ifconfig 2>/dev/null")
@@ -132,25 +131,27 @@ def _collect_processes(limit: int = 20) -> list:
             for line in raw.splitlines()[:limit]:
                 parts = line.strip('"').split('","')
                 if len(parts) >= 5:
-                    procs.append({
-                        "name"   : parts[0],
-                        "pid"    : parts[1],
-                        "memory" : parts[4].strip()
-                    })
+                    procs.append(
+                        {"name": parts[0], "pid": parts[1], "memory": parts[4].strip()}
+                    )
         else:
-            raw = _run("ps aux --sort=-%mem 2>/dev/null || ps aux 2>/dev/null", timeout=15)
+            raw = _run(
+                "ps aux --sort=-%mem 2>/dev/null || ps aux 2>/dev/null", timeout=15
+            )
             lines = raw.splitlines()
             # Başlık satırını atla
-            for line in lines[1:limit + 1]:
+            for line in lines[1 : limit + 1]:
                 cols = line.split(None, 10)
                 if len(cols) >= 11:
-                    procs.append({
-                        "user"   : cols[0],
-                        "pid"    : cols[1],
-                        "cpu"    : cols[2] + "%",
-                        "mem"    : cols[3] + "%",
-                        "cmd"    : cols[10][:50]
-                    })
+                    procs.append(
+                        {
+                            "user": cols[0],
+                            "pid": cols[1],
+                            "cpu": cols[2] + "%",
+                            "mem": cols[3] + "%",
+                            "cmd": cols[10][:50],
+                        }
+                    )
     except Exception:
         pass
     return procs
@@ -180,7 +181,7 @@ def _collect_users() -> list:
         else:
             # Linux: /etc/passwd'den okuma
             try:
-                with open("/etc/passwd", "r") as f:
+                with open("/etc/passwd") as f:
                     for line in f:
                         parts = line.split(":")
                         if len(parts) >= 7 and "/bin/" in parts[6]:
@@ -193,13 +194,24 @@ def _collect_users() -> list:
     return users
 
 
-def _collect_env_vars(keys: list = None) -> dict:
+def _collect_env_vars(keys: list | None = None) -> dict:
     """Önemli ortam değişkenlerini toplar."""
     interesting = keys or [
-        "PATH", "HOME", "USER", "USERNAME", "COMPUTERNAME",
-        "APPDATA", "TEMP", "TMP", "SHELL", "LOGNAME",
-        "HOSTNAME", "USERPROFILE", "PROGRAMFILES",
-        "SystemRoot", "windir"
+        "PATH",
+        "HOME",
+        "USER",
+        "USERNAME",
+        "COMPUTERNAME",
+        "APPDATA",
+        "TEMP",
+        "TMP",
+        "SHELL",
+        "LOGNAME",
+        "HOSTNAME",
+        "USERPROFILE",
+        "PROGRAMFILES",
+        "SystemRoot",
+        "windir",
     ]
     result = {}
     for key in interesting:
@@ -210,6 +222,7 @@ def _collect_env_vars(keys: list = None) -> dict:
 
 
 # ── Formatlama Yardımcıları ────────────────────────────────────────────────────
+
 
 def _header(title: str, width: int = 60) -> str:
     bar = "═" * width
@@ -227,6 +240,7 @@ def _kv(label: str, value: str, indent: int = 2) -> str:
 
 # ── Public Fonksiyonlar (runmodule tarafından çağrılır) ───────────────────────
 
+
 def run() -> str:
     """
     Tam keşif raporu.
@@ -238,13 +252,13 @@ def run() -> str:
     # ── 1. İşletim Sistemi ────────────────────────────────────
     lines.append(_section("1. İşletim Sistemi / Donanım"))
     os_info = _collect_os()
-    lines.append(_kv("OS",         os_info["os"]))
-    lines.append(_kv("Mimari",     f"{os_info['machine']} ({os_info['arch_bits']}-bit)"))
-    lines.append(_kv("Hostname",   os_info["hostname"]))
-    lines.append(_kv("Kullanıcı",  os_info["user"]))
+    lines.append(_kv("OS", os_info["os"]))
+    lines.append(_kv("Mimari", f"{os_info['machine']} ({os_info['arch_bits']}-bit)"))
+    lines.append(_kv("Hostname", os_info["hostname"]))
+    lines.append(_kv("Kullanıcı", os_info["user"]))
     lines.append(_kv("PID (ajan)", str(os_info["pid"])))
-    lines.append(_kv("CWD",        os_info["cwd"]))
-    lines.append(_kv("Python",     os_info["python"]))
+    lines.append(_kv("CWD", os_info["cwd"]))
+    lines.append(_kv("Python", os_info["python"]))
 
     # ── 2. Ağ ─────────────────────────────────────────────────
     lines.append(_section("2. Ağ Arayüzleri"))
@@ -279,12 +293,12 @@ def run() -> str:
     if procs:
         if sys.platform == "win32":
             lines.append(f"  {'İSİM':<30} {'PID':<8} {'MEMORY'}")
-            lines.append(f"  {'─'*29} {'─'*7} {'─'*15}")
+            lines.append(f"  {'─' * 29} {'─' * 7} {'─' * 15}")
             for p in procs:
                 lines.append(f"  {p['name']:<30} {p['pid']:<8} {p['memory']}")
         else:
             lines.append(f"  {'USER':<12} {'PID':<7} {'CPU':>5} {'MEM':>5}  COMMAND")
-            lines.append(f"  {'─'*11} {'─'*6} {'─'*5} {'─'*5}  {'─'*30}")
+            lines.append(f"  {'─' * 11} {'─' * 6} {'─' * 5} {'─' * 5}  {'─' * 30}")
             for p in procs:
                 lines.append(
                     f"  {p['user']:<12} {p['pid']:<7} "
@@ -306,16 +320,16 @@ def quick() -> str:
     Handler komutu: runmodule example_post quick
     """
     os_info = _collect_os()
-    ifaces  = _collect_network()
+    ifaces = _collect_network()
     primary_ip = ifaces[0]["ip"] if ifaces else "?"
 
     lines = [
         _header("CHIMERA — Hızlı Özet"),
-        _kv("Hostname",   os_info["hostname"]),
-        _kv("Kullanıcı",  os_info["user"]),
-        _kv("OS",         os_info["os"]),
+        _kv("Hostname", os_info["hostname"]),
+        _kv("Kullanıcı", os_info["user"]),
+        _kv("OS", os_info["os"]),
         _kv("Birincil IP", primary_ip),
-        _kv("CWD",        os_info["cwd"]),
+        _kv("CWD", os_info["cwd"]),
         _kv("PID (ajan)", str(os_info["pid"])),
     ]
     return "\n".join(lines)
@@ -346,12 +360,12 @@ def processes() -> str:
     if procs:
         if sys.platform == "win32":
             lines.append(f"  {'İSİM':<30} {'PID':<8} {'MEMORY'}")
-            lines.append(f"  {'─'*29} {'─'*7} {'─'*15}")
+            lines.append(f"  {'─' * 29} {'─' * 7} {'─' * 15}")
             for p in procs:
                 lines.append(f"  {p['name']:<30} {p['pid']:<8} {p['memory']}")
         else:
             lines.append(f"  {'USER':<12} {'PID':<7} {'CPU':>5} {'MEM':>5}  COMMAND")
-            lines.append(f"  {'─'*11} {'─'*6} {'─'*5} {'─'*5}  {'─'*30}")
+            lines.append(f"  {'─' * 11} {'─' * 6} {'─' * 5} {'─' * 5}  {'─' * 30}")
             for p in procs:
                 lines.append(
                     f"  {p['user']:<12} {p['pid']:<7} "

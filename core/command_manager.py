@@ -17,6 +17,11 @@ from core.hooks import HookType
 from core.shared_state import shared_state
 
 
+from typing import Any
+
+from core.plugin_manager import PluginManager as PluginManagerType
+
+
 class CommandManager:
     """
     Komut Yönetim Sınıfı (CommandManager).
@@ -27,12 +32,19 @@ class CommandManager:
     3. Kullanıcıdan gelen metin girdisini ayrıştırıp ilgili komutu çalıştırmak.
     """
 
-    def __init__(self, commands_dir: str = "commands") -> None:
+    def __init__(
+        self,
+        commands_dir: str = "commands",
+        plugin_manager: PluginManagerType | None = None,
+        context: Any = None,
+    ) -> None:
         """
         CommandManager başlatıcı metod.
 
         Args:
             commands_dir (str, optional): Komut dosyalarının bulunduğu dizin yolu. Varsayılan: "commands".
+            plugin_manager (PluginManager | None, optional): DI ile enjekte edilen plugin yöneticisi.
+            context (Any, optional): AppContext örneği (DI için).
         """
         self.commands_dir = Path(commands_dir)  # Komutların aranacağı dizin
         self.commands: dict[
@@ -41,6 +53,16 @@ class CommandManager:
         self.aliases: dict[
             str, str
         ] = {}  # Yüklenen alias'ları tutan sözlük (Alias -> Hedef Komut)
+        self._plugin_manager = plugin_manager
+        self._context = context
+
+    @property
+    def plugin_manager(self):
+        if self._plugin_manager:
+            return self._plugin_manager
+        if self._context and hasattr(self._context, "plugin_manager") and self._context.plugin_manager:
+            return self._context.plugin_manager
+        return shared_state.plugin_manager
 
         # Alias dosyasının varlığından emin ol, yoksa oluştur.
         self._ensure_aliases_file()
@@ -292,8 +314,8 @@ class CommandManager:
 
         # PRE_COMMAND hook'unu tetikle (Komut çalışmadan hemen önce)
         # Bu, eklentilerin komutları izlemesine veya engellemesine olanak tanır.
-        if shared_state.plugin_manager:
-            shared_state.plugin_manager.trigger_hook(
+        if self.plugin_manager:
+            self.plugin_manager.trigger_hook(
                 HookType.PRE_COMMAND, command_line=command_line
             )
 
@@ -333,8 +355,8 @@ class CommandManager:
                     result = command_obj.execute(*args)
 
                     # POST_COMMAND hook'unu tetikle (başarılı durum)
-                    if shared_state.plugin_manager:
-                        shared_state.plugin_manager.trigger_hook(
+                    if self.plugin_manager:
+                        self.plugin_manager.trigger_hook(
                             HookType.POST_COMMAND,
                             command_line=command_line,
                             success=result,
@@ -350,8 +372,8 @@ class CommandManager:
                         f"Komut '{resolved_command_name}' yürütülürken TypeError"
                     )
 
-                    if shared_state.plugin_manager:
-                        shared_state.plugin_manager.trigger_hook(
+                    if self.plugin_manager:
+                        self.plugin_manager.trigger_hook(
                             HookType.POST_COMMAND,
                             command_line=command_line,
                             success=False,
@@ -365,8 +387,8 @@ class CommandManager:
                         f"Komut '{resolved_command_name}' kullanıcı tarafından kesildi"
                     )
 
-                    if shared_state.plugin_manager:
-                        shared_state.plugin_manager.trigger_hook(
+                    if self.plugin_manager:
+                        self.plugin_manager.trigger_hook(
                             HookType.POST_COMMAND,
                             command_line=command_line,
                             success=False,
@@ -382,8 +404,8 @@ class CommandManager:
                         f"Komut '{resolved_command_name}' yürütülürken beklenmeyen hata"
                     )
 
-                    if shared_state.plugin_manager:
-                        shared_state.plugin_manager.trigger_hook(
+                    if self.plugin_manager:
+                        self.plugin_manager.trigger_hook(
                             HookType.POST_COMMAND,
                             command_line=command_line,
                             success=False,

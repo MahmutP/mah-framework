@@ -17,7 +17,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from core.shared_state import shared_state
+from core.shared_state import reset_shared_state, shared_state
 
 # ============================================================
 # Agent Yükleme Yardımcıları
@@ -66,9 +66,9 @@ except Exception as e:
 
 
 @pytest.fixture(autouse=True)
-def reset_shared_state():
+def reset_test_state():
     """Her test öncesi shared state'i sıfırlar."""
-    shared_state._initialize()
+    reset_shared_state()
     yield
 
 

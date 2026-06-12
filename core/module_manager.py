@@ -4,6 +4,7 @@
 
 import importlib.util
 from pathlib import Path
+from typing import Any
 
 from rich import print
 
@@ -11,7 +12,9 @@ from core import logger
 from core.code_scanner import print_scan_report, scan_file
 from core.hooks import HookType
 from core.module import BaseModule
+from core.plugin_manager import PluginManager as PluginManagerType
 from core.shared_state import shared_state
+from core.validation_pipeline import ValidationPipeline, print_validation_report
 
 
 class ModuleManager:
@@ -24,17 +27,46 @@ class ModuleManager:
     3. Kullanıcı talebine göre modülleri bulmak, bilgilerini getirmek ve çalıştırmak.
     """
 
-    def __init__(self, modules_dir: str = "modules") -> None:
+    def __init__(
+        self,
+        modules_dir: str = "modules",
+        plugin_manager: PluginManagerType | None = None,
+        context: Any = None,
+        use_validation_pipeline: bool = False,
+        restricted_exec: bool = False,
+    ) -> None:
         """
         ModuleManager başlatıcı.
 
         Args:
             modules_dir (str, optional): Modüllerin aranacağı kök dizin. Varsayılan: "modules".
+            plugin_manager (PluginManager | None, optional): DI ile enjekte edilen plugin yöneticisi.
+            context (Any, optional): AppContext örneği (DI için).
+            use_validation_pipeline (bool): Validation pipeline kullanılsın mı.
+            restricted_exec (bool): Güvenilmeyen modüller için kısıtlı çalıştırma.
         """
-        self.modules_dir = Path(modules_dir)  # Modül dizin yolu (Path nesnesi olarak)
-        self.modules: dict[
-            str, BaseModule
-        ] = {}  # Yüklenen modülleri tutan sözlük (Modül Yolu -> Modül Nesnesi)
+        self.modules_dir = Path(modules_dir)
+        self.modules: dict[str, BaseModule] = {}
+        self._plugin_manager = plugin_manager
+        self._context = context
+        self.use_validation_pipeline = use_validation_pipeline
+        self.restricted_exec = restricted_exec
+        self._validation_pipeline: ValidationPipeline | None = (
+            ValidationPipeline() if use_validation_pipeline else None
+        )
+
+    @property
+    def plugin_manager(self):
+        """Plugin manager referansını döndürür (DI veya shared_state fallback)."""
+        if self._plugin_manager:
+            return self._plugin_manager
+        if self._context and self._context.plugin_manager:
+            return self._context.plugin_manager
+        return shared_state.plugin_manager
+
+    @plugin_manager.setter
+    def plugin_manager(self, value):
+        self._plugin_manager = value
 
     def load_modules(self) -> None:
         """
@@ -80,8 +112,28 @@ class ModuleManager:
                 module_name_for_dict = f"uncategorized/{module_name_for_dict}"
 
             try:
-                # 1. AST tabanlı statik güvenlik taraması (payload dosyaları hedef kodudur, atlanır).
+                # PRE_MODULE_LOAD hook tetikle
+                if self.plugin_manager:
+                    self.plugin_manager.trigger_hook(
+                        HookType.PRE_MODULE_LOAD,
+                        module_path=module_name_for_dict,
+                        file_path=str(file_path),
+                    )
+
+                # 1. Validation Pipeline (opsiyonel)
                 is_payload = "payloads" in file_path.parts
+                if not is_payload and self._validation_pipeline:
+                    vresult = self._validation_pipeline.validate_module_file(
+                        str(file_path), strict_scan=False, sandbox=self.restricted_exec
+                    )
+                    if not vresult.is_valid:
+                        print(
+                            f"[bold red]✗ Doğrulama hatası:[/bold red] '{file_path.name}'"
+                        )
+                        print_validation_report(vresult)
+                        continue
+
+                # 2. AST tabanlı statik güvenlik taraması (payload dosyaları hedef kodudur, atlanır).
                 if not is_payload:
                     scan_result = scan_file(str(file_path), strict=False)
                     if not scan_result.is_safe:
@@ -90,7 +142,7 @@ class ModuleManager:
                         )
                         print_scan_report(scan_result)
 
-                # 2. Python'un import mekanizmasını kullanarak dosyadan modül spesifikasyonu oluştur.
+                # 3. Python'un import mekanizmasını kullanarak dosyadan modül spesifikasyonu oluştur.
                 spec = importlib.util.spec_from_file_location(
                     module_name_for_dict, str(file_path)
                 )
@@ -98,13 +150,30 @@ class ModuleManager:
                     print(f"Modül spesifikasyonu alınamadı: {file_path}")
                     continue
 
-                # 3. Modülü spesifikasyondan oluştur (Henüz kod çalıştırılmadı).
+                # 4. Modülü spesifikasyondan oluştur (Henüz kod çalıştırılmadı).
                 module = importlib.util.module_from_spec(spec)
 
-                # 4. Modül kodunu çalıştır (Class tanımları belleğe yüklenir).
-                spec.loader.exec_module(module)
+                # 5. Modül kodunu çalıştır (Class tanımları belleğe yüklenir).
+                if self.restricted_exec and not is_payload:
+                    with open(file_path, encoding="utf-8", errors="ignore") as f:
+                        source = f.read()
+                    sandbox = self._validation_pipeline.sandbox if self._validation_pipeline else None
+                    if sandbox:
+                        restricted_module = sandbox.exec_module_restricted(
+                            source, str(file_path)
+                        )
+                        if restricted_module is None:
+                            print(
+                                f"[bold red]✗ Kısıtlı çalıştırma hatası:[/bold red] '{file_path.name}'"
+                            )
+                            continue
+                        module.__dict__.update(restricted_module.__dict__)
+                    else:
+                        spec.loader.exec_module(module)
+                else:
+                    spec.loader.exec_module(module)
 
-                # 4. Modül içindeki sınıfları tara ve BaseModule türevi olanı bul.
+                # 6. Modül içindeki sınıfları tara ve BaseModule türevi olanı bul.
                 for name, obj in module.__dict__.items():
                     # BaseModule'den türetilmiş OLACAK ama BaseModule'ün kendisi OLMAYACAK.
                     if (
@@ -136,6 +205,15 @@ class ModuleManager:
                             )
 
                         self.modules[module_name_for_dict] = module_instance
+
+                        # POST_MODULE_LOAD hook tetikle
+                        if self.plugin_manager:
+                            self.plugin_manager.trigger_hook(
+                                HookType.POST_MODULE_LOAD,
+                                module_path=module_name_for_dict,
+                                module=module_instance,
+                            )
+
                         break  # Bir dosyada bir modül sınıfı bekliyoruz, bulduktan sonra çık.
 
             except SyntaxError:
@@ -292,8 +370,8 @@ class ModuleManager:
 
         # Modül çalışmadan ÖNCE (PRE_MODULE_RUN) eklenti hook'unu tetikle.
         # Bu, eklentilerin araya girip doğrulama yapmasına veya çalıştırmayı engellemesine izin verir.
-        if shared_state.plugin_manager:
-            shared_state.plugin_manager.trigger_hook(
+        if self.plugin_manager:
+            self.plugin_manager.trigger_hook(
                 HookType.PRE_MODULE_RUN, module_path=module_path, module=module
             )
 
@@ -311,8 +389,8 @@ class ModuleManager:
             # ----------------------------------
 
             # Modül çalıştıktan SONRA (POST_MODULE_RUN) başarılı hook'unu tetikle.
-            if shared_state.plugin_manager:
-                shared_state.plugin_manager.trigger_hook(
+            if self.plugin_manager:
+                self.plugin_manager.trigger_hook(
                     HookType.POST_MODULE_RUN,
                     module_path=module_path,
                     module=module,
@@ -328,8 +406,8 @@ class ModuleManager:
             logger.exception(f"Modül '{module_path}' çalıştırılırken TypeError")
 
             # Hata durumunda hook tetikle.
-            if shared_state.plugin_manager:
-                shared_state.plugin_manager.trigger_hook(
+            if self.plugin_manager:
+                self.plugin_manager.trigger_hook(
                     HookType.POST_MODULE_RUN,
                     module_path=module_path,
                     module=module,
@@ -342,8 +420,8 @@ class ModuleManager:
             print("\nModül çalışması kullanıcı tarafından kesildi.")
             logger.info(f"Modül '{module_path}' kullanıcı tarafından kesildi")
 
-            if shared_state.plugin_manager:
-                shared_state.plugin_manager.trigger_hook(
+            if self.plugin_manager:
+                self.plugin_manager.trigger_hook(
                     HookType.POST_MODULE_RUN,
                     module_path=module_path,
                     module=module,
@@ -359,8 +437,8 @@ class ModuleManager:
             )
             logger.exception(f"Modül '{module_path}' çalıştırılırken beklenmeyen hata")
 
-            if shared_state.plugin_manager:
-                shared_state.plugin_manager.trigger_hook(
+            if self.plugin_manager:
+                self.plugin_manager.trigger_hook(
                     HookType.POST_MODULE_RUN,
                     module_path=module_path,
                     module=module,

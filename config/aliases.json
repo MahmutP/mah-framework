@@ -1,12 +1,1 @@
-{
-    "quit": "exit",
-    "?": "help",
-    "update": "checkupdate",
-    "check": "checkupdate",
-    "exploit": "run",
-    "execute": "run",
-    "cls": "clear",
-    "!": "shell",
-    "makro": "record",
-    "hist": "history"
-}
+{}

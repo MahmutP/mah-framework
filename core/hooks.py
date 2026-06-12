@@ -117,6 +117,44 @@ class HookType(Enum):
     """
 
     # ==============================================================================
+    # Modül Yükleme (Module Loading) Hook'ları
+    # ==============================================================================
+
+    PRE_MODULE_LOAD = "pre_module_load"
+    """
+    Bir modül dosyası yüklenmeye başlamadan hemen önce tetiklenir.
+    Kullanım Alanları:
+    - Modül yükleme izleme/loglama.
+    - Belirli modüllerin yüklenmesini engelleme (kara liste).
+    """
+
+    POST_MODULE_LOAD = "post_module_load"
+    """
+    Bir modül başarıyla yüklendikten sonra tetiklenir.
+    Kullanım Alanları:
+    - Yüklenen modülün metadata'sını kaydetme.
+    - Modül bağımlılıklarını otomatik çözümleme.
+    """
+
+    # ==============================================================================
+    # Plugin Yükleme (Plugin Loading) Hook'ları
+    # ==============================================================================
+
+    PRE_PLUGIN_LOAD = "pre_plugin_load"
+    """
+    Bir plugin yüklenmeye başlamadan önce tetiklenir.
+    Kullanım Alanları:
+    - Plugin yükleme öncesi ortam hazırlığı.
+    """
+
+    POST_PLUGIN_LOAD = "post_plugin_load"
+    """
+    Bir plugin başarıyla yüklendikten sonra tetiklenir.
+    Kullanım Alanları:
+    - Plugin başlatma istatistikleri.
+    """
+
+    # ==============================================================================
     # Hata (Error) Hook'ları
     # ==============================================================================
 

@@ -28,6 +28,8 @@ from prompt_toolkit.styles import Style  # Terminaldeki renk ve stilleri tanıml
 from prompt_toolkit.validation import ValidationError, Validator
 from rich import print
 
+from typing import Any
+
 from core import logger
 from core.command_manager import CommandManager
 from core.completer import CLICompleter  # Özel tamamlama mantığı
@@ -120,7 +122,10 @@ class Console:
     """
 
     def __init__(
-        self, command_manager: CommandManager, module_manager: ModuleManager
+        self,
+        command_manager: CommandManager,
+        module_manager: ModuleManager,
+        context: Any = None,
     ) -> None:
         """
         Konsol nesnesini başlatır ve gerekli bileşenleri hazırlar.
@@ -128,9 +133,11 @@ class Console:
         Args:
             command_manager (CommandManager): Komutları işlemek için gerekli yönetici.
             module_manager (ModuleManager): Modüllerle ilgili işlemler için gerekli yönetici.
+            context (Any, optional): AppContext örneği (DI için).
         """
         self.command_manager = command_manager
         self.module_manager = module_manager
+        self._context = context
 
         # Komut geçmişini başlat (Kalıcı olarak dosyada tutulur)
         # Framework root dizinini bul (core klasörünün bir üstü)

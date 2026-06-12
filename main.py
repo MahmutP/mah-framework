@@ -9,11 +9,13 @@ from core import logger
 from core.banner import print_banner
 from core.command_manager import CommandManager
 from core.console import Console as AppConsole
+from core.context import AppContext, get_global_context
 from core.hooks import HookType
 from core.module_downloader import ModuleDownloader
 from core.module_manager import ModuleManager
 from core.plugin_manager import PluginManager
 from core.repo_manager import RepoManager
+from core.service_container import ServiceContainer, get_container
 from core.session_manager import SessionManager
 from core.shared_state import shared_state
 
@@ -343,30 +345,47 @@ def main() -> None:
     if not args.quiet:
         print("Uygulama başlatılıyor...")
 
-    # Initialize managers with absolute paths
-    command_manager = CommandManager(commands_dir=str(base_dir / "commands"))
-    module_manager = ModuleManager(modules_dir=str(base_dir / "modules"))
+    # -- Service Container & AppContext (DI) --
+    container = get_container()
+    app_context = get_global_context()
 
-    shared_state.command_manager = command_manager
-    shared_state.module_manager = module_manager
+    # Initialize managers with absolute paths
+    command_manager = CommandManager(
+        commands_dir=str(base_dir / "commands"),
+        context=app_context,
+    )
+    module_manager = ModuleManager(
+        modules_dir=str(base_dir / "modules"),
+        context=app_context,
+    )
+
+    # Service Container'a kaydet
+    container.register(CommandManager, command_manager)
+    container.register(ModuleManager, module_manager)
+    container.register(AppContext, app_context)
+
+    app_context.command_manager = command_manager
+    app_context.module_manager = module_manager
 
     # Session Manager'ı başlat
     session_manager = SessionManager()
-    shared_state.session_manager = session_manager
+    app_context.session_manager = session_manager
+    container.register(SessionManager, session_manager)
 
     # Repo Manager'ı başlat (Uzak depo yönetimi)
     repo_manager = RepoManager()
-    shared_state.repo_manager = repo_manager
+    app_context.repo_manager = repo_manager
+    container.register(RepoManager, repo_manager)
 
     # Module Downloader'ı başlat (Modül indirme ve versiyon yönetimi)
     module_downloader = ModuleDownloader(modules_dir=str(base_dir / "modules"))
-    shared_state.module_downloader = module_downloader
+    app_context.module_downloader = module_downloader
 
     # Plugin Downloader'ı başlat (Eklenti indirme ve versiyon yönetimi)
     from core.plugin_downloader import PluginDownloader
 
     plugin_downloader = PluginDownloader(plugins_dir=str(base_dir / "plugins"))
-    shared_state.plugin_downloader = plugin_downloader
+    app_context.plugin_downloader = plugin_downloader
 
     command_manager.load_commands()
     module_manager.load_modules()
@@ -374,10 +393,10 @@ def main() -> None:
     # Plugin Manager başlat
     plugin_manager = PluginManager(plugins_dir=str(base_dir / "plugins"))
     plugin_manager.load_plugins()
-    shared_state.plugin_manager = plugin_manager
+    app_context.plugin_manager = plugin_manager
 
-    console = AppConsole(command_manager, module_manager)
-    shared_state.console_instance = console
+    console = AppConsole(command_manager, module_manager, context=app_context)
+    app_context.console_instance = console
 
     # Sessiz mod değilse banner ve bilgi göster
     if not args.quiet:

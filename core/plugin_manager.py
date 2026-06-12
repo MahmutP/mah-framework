@@ -10,6 +10,7 @@ from core import logger
 from core.code_scanner import print_scan_report, scan_file
 from core.hooks import HookType
 from core.plugin import BasePlugin
+from core.validation_pipeline import ValidationPipeline, print_validation_report
 
 
 class PluginManager:
@@ -22,10 +23,17 @@ class PluginManager:
     3. Framework içindeki olaylar tetiklendiğinde (trigger_hook), ilgili eklenti fonksiyonlarını çağırmak.
     """
 
-    def __init__(self, plugins_dir: str = "plugins") -> None:
+    def __init__(
+        self,
+        plugins_dir: str = "plugins",
+        use_validation_pipeline: bool = False,
+        restricted_exec: bool = False,
+    ) -> None:
         """
         Args:
             plugins_dir (str): Eklenti dosyalarının aranacağı dizin. Varsayılan: "plugins".
+            use_validation_pipeline (bool): Validation pipeline kullanılsın mı.
+            restricted_exec (bool): Kısıtlı çalıştırma modu.
         """
         self.plugins_dir: Path = Path(plugins_dir)
 
@@ -38,6 +46,12 @@ class PluginManager:
         self.hooks: dict[HookType, list[tuple[int, Callable[..., Any]]]] = {
             hook: [] for hook in HookType
         }
+
+        self.use_validation_pipeline = use_validation_pipeline
+        self.restricted_exec = restricted_exec
+        self._validation_pipeline: ValidationPipeline | None = (
+            ValidationPipeline() if use_validation_pipeline else None
+        )
 
     def load_plugins(self) -> None:
         """
@@ -63,7 +77,29 @@ class PluginManager:
             plugin_name = file_path.stem
 
             try:
-                # 1. AST tabanlı statik güvenlik taraması (plugin'ler framework içinde çalışır, strict=True).
+                # PRE_PLUGIN_LOAD hook tetikle
+                self.trigger_hook(
+                    HookType.PRE_PLUGIN_LOAD,
+                    plugin_name=plugin_name,
+                    file_path=str(file_path),
+                )
+
+                # 1. Validation Pipeline (opsiyonel)
+                if self._validation_pipeline:
+                    vresult = self._validation_pipeline.validate_plugin_file(
+                        str(file_path), sandbox=self.restricted_exec
+                    )
+                    if not vresult.is_valid:
+                        logger.warning(
+                            f"Plugin '{file_path.name}' doğrulamadan geçemedi, yüklenmiyor."
+                        )
+                        print(
+                            f"[bold red]✗ Doğrulama:[/bold red] '{file_path.name}' doğrulamadan geçemedi."
+                        )
+                        print_validation_report(vresult)
+                        continue
+
+                # 2. AST tabanlı statik güvenlik taraması (plugin'ler framework içinde çalışır, strict=True).
                 scan_result = scan_file(str(file_path), strict=True)
                 if not scan_result.is_safe:
                     logger.warning(
@@ -75,7 +111,7 @@ class PluginManager:
                     print_scan_report(scan_result)
                     continue
 
-                # 2. Modül spesifikasyonu oluştur.
+                # 3. Modül spesifikasyonu oluştur.
                 spec = importlib.util.spec_from_file_location(
                     plugin_name, str(file_path)
                 )
@@ -83,11 +119,28 @@ class PluginManager:
                     logger.warning(f"Plugin spesifikasyonu alınamadı: {file_path}")
                     continue
 
-                # 3. Modülü yükle.
+                # 4. Modülü yükle.
                 module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
+                if self.restricted_exec:
+                    with open(file_path, encoding="utf-8", errors="ignore") as f:
+                        source = f.read()
+                    sandbox = self._validation_pipeline.sandbox if self._validation_pipeline else None
+                    if sandbox:
+                        restricted_module = sandbox.exec_module_restricted(
+                            source, str(file_path)
+                        )
+                        if restricted_module is None:
+                            print(
+                                f"[bold red]✗ Kısıtlı çalıştırma hatası:[/bold red] '{file_path.name}'"
+                            )
+                            continue
+                        module.__dict__.update(restricted_module.__dict__)
+                    else:
+                        spec.loader.exec_module(module)
+                else:
+                    spec.loader.exec_module(module)
 
-                # 3. BasePlugin'den türetilmiş sınıfları bul.
+                # 5. BasePlugin'den türetilmiş sınıfları bul.
                 for name, obj in module.__dict__.items():
                     if (
                         isinstance(obj, type)
@@ -108,6 +161,13 @@ class PluginManager:
                         # Eğer plugin varsayılan olarak aktifse, hook'larını sisteme kaydet.
                         if plugin_instance.Enabled:
                             self._register_hooks(plugin_instance)
+
+                        # POST_PLUGIN_LOAD hook tetikle
+                        self.trigger_hook(
+                            HookType.POST_PLUGIN_LOAD,
+                            plugin_name=plugin_name,
+                            plugin=plugin_instance,
+                        )
 
                         logger.info(
                             f"Plugin yüklendi: {plugin_name} v{plugin_instance.Version}"

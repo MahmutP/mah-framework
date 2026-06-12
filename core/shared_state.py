@@ -1,92 +1,132 @@
+# Geriye uyumluluk katmanı - SharedState singleton artık AppContext wrapper'ıdır.
+# Yeni kod DI (Dependency Injection) ile AppContext/ServiceContainer kullanmalıdır.
+
 from typing import Any
 
-# Uygulamanın çalışma zamanındaki durumunu (state) tutan ve tüm modüllerin erişebildiği merkezi yapı.
-# Singleton tasarım deseni kullanılarak, uygulama genelinde tek bir örneğinin olması garanti altına alınmıştır.
+from core.context import AppContext, get_global_context
 
 
 class SharedState:
     """
-    Paylaşılan Durum (Shared State) Sınıfı.
+    Paylaşılan Durum (Shared State) - Geriye Uyumluluk Wrapper.
 
-    Bu sınıf, uygulamanın farklı parçaları (Konsol, Komut Yöneticisi, Modül Yöneticisi vb.)
-    arasında veri ve nesne paylaşımını sağlar. Global değişken kullanmak yerine bu güvenli yapı tercih edilir.
+    Bu sınıf artık singleton DEĞİLDIR. Global AppContext'e delegate eder.
+    Yeni kod: `container.resolve(AppContext)` veya constructor injection kullanmalı.
+    Eski kod: `from core.shared_state import shared_state` çalışmaya devam eder.
     """
 
-    _instance = None  # Singleton örneğini tutan sınıf değişkeni
+    def __init__(self) -> None:
+        pass
 
-    def __new__(cls) -> "SharedState":
-        """
-        Sınıfın yeni bir örneğini oluşturur.
-        Eğer daha önce oluşturulmuşsa, mevcut örneği döndürür (Singleton Pattern).
-        """
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialize()
-        return cls._instance
+    @property
+    def _ctx(self) -> AppContext:
+        return get_global_context()
 
-    def _initialize(self) -> None:
-        """
-        Paylaşılan değişkenleri varsayılan değerleriyle başlatır.
-        Sadece ilk kez nesne oluşturulduğunda çalışır.
-        """
-        # --- Modül Durumu ---
-        # Kullanıcının o an seçtiği (use komutuyla girdiği) modül nesnesi.
-        self.selected_module: Any = None
+    # --- Modül Durumu ---
+    @property
+    def selected_module(self) -> Any:
+        return self._ctx.selected_module
 
-        # --- Servis Referansları (Service Locator) ---
-        # Döngüsel bağımlılıkları (circular imports) önlemek için yöneticiler buraya sonradan atanır.
+    @selected_module.setter
+    def selected_module(self, value: Any) -> None:
+        self._ctx.selected_module = value
 
-        self.command_manager: Any = None
-        """Komut yöneticisi referansı."""
+    # --- Servis Referansları ---
+    @property
+    def command_manager(self) -> Any:
+        return self._ctx.command_manager
 
-        self.module_manager: Any = None
-        """Modül yöneticisi referansı."""
+    @command_manager.setter
+    def command_manager(self, value: Any) -> None:
+        self._ctx.command_manager = value
 
-        self.console_instance: Any = None
-        """Aktif konsol nesnesi referansı."""
+    @property
+    def module_manager(self) -> Any:
+        return self._ctx.module_manager
 
-        self.plugin_manager: Any = None
-        """Plugin yöneticisi referansı."""
+    @module_manager.setter
+    def module_manager(self, value: Any) -> None:
+        self._ctx.module_manager = value
 
-        self.session_manager: Any = None
-        """Oturum (Session) yöneticisi referansı."""
+    @property
+    def console_instance(self) -> Any:
+        return self._ctx.console_instance
 
-        self.repo_manager: Any = None
-        """Uzak depo (Repository) yöneticisi referansı."""
+    @console_instance.setter
+    def console_instance(self, value: Any) -> None:
+        self._ctx.console_instance = value
 
-        self.module_downloader: Any = None
-        """Modül indirici (Module Downloader) referansı."""
+    @property
+    def plugin_manager(self) -> Any:
+        return self._ctx.plugin_manager
 
-        self.plugin_downloader: Any = None
-        """Eklenti indirici (Plugin Downloader) referansı."""
+    @plugin_manager.setter
+    def plugin_manager(self, value: Any) -> None:
+        self._ctx.plugin_manager = value
 
-        # --- Makro ve Kayıt Özellikleri ---
-        self.is_recording: bool = False
-        """Komut kaydının (makro) açık olup olmadığını belirtir."""
+    @property
+    def session_manager(self) -> Any:
+        return self._ctx.session_manager
 
-        self.recorded_commands: list = []
-        """Kaydedilen komutların listesi."""
+    @session_manager.setter
+    def session_manager(self, value: Any) -> None:
+        self._ctx.session_manager = value
+
+    @property
+    def repo_manager(self) -> Any:
+        return self._ctx.repo_manager
+
+    @repo_manager.setter
+    def repo_manager(self, value: Any) -> None:
+        self._ctx.repo_manager = value
+
+    @property
+    def module_downloader(self) -> Any:
+        return self._ctx.module_downloader
+
+    @module_downloader.setter
+    def module_downloader(self, value: Any) -> None:
+        self._ctx.module_downloader = value
+
+    @property
+    def plugin_downloader(self) -> Any:
+        return self._ctx.plugin_downloader
+
+    @plugin_downloader.setter
+    def plugin_downloader(self, value: Any) -> None:
+        self._ctx.plugin_downloader = value
+
+    # --- Makro ve Kayıt Özellikleri ---
+    @property
+    def is_recording(self) -> bool:
+        return self._ctx.is_recording
+
+    @is_recording.setter
+    def is_recording(self, value: bool) -> None:
+        self._ctx.is_recording = value
+
+    @property
+    def recorded_commands(self) -> list:
+        return self._ctx.recorded_commands
+
+    @recorded_commands.setter
+    def recorded_commands(self, value: list) -> None:
+        self._ctx.recorded_commands = value
 
     def get_selected_module(self) -> Any:
-        """
-        O anki seçili modülü döndürür.
-
-        Returns:
-            Seçili modül nesnesi veya None.
-        """
-        return self.selected_module
+        return self._ctx.get_selected_module()
 
     def set_selected_module(self, module_obj: Any) -> None:
-        """
-        Seçili modülü günceller.
-        'use' komutu çalıştığında bu metod kullanılır.
-
-        Args:
-            module_obj: Yeni seçilen modül nesnesi.
-        """
-        self.selected_module = module_obj
+        self._ctx.set_selected_module(module_obj)
 
 
-# Uygulama genelinde kullanılacak tekil (singleton) nesne.
-# Diğer modüller `from core.shared_state import shared_state` diyerek buna erişir.
+# Geriye uyumluluk için global instance (eski kod bu import ediyor)
 shared_state = SharedState()
+
+
+# Testler için yardımcı fonksiyonlar
+def reset_shared_state() -> None:
+    """Testler arası shared state'i sıfırlar."""
+    from core.context import reset_global_context
+
+    reset_global_context()

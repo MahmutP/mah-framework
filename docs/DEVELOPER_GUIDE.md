@@ -15,6 +15,9 @@ This guide is designed for developers who want to create new modules and plugins
 3. [BaseModule API Reference](#basemodule-api-reference)
 4. [Option Class Usage](#option-class-usage)
 5. [Plugin Development](#plugin-development)
+6. [Custom Commands](#custom-commands)
+7. [Testing & Quality](#testing--quality)
+8. [Related Docs](#related-docs)
 
 ---
 
@@ -94,13 +97,25 @@ class HelloWorld(BaseModule):
 *   **Description** (`str`): Description shown in the `info` command.
 *   **Author** (`str`): Name of the author.
 *   **Category** (`str`): Module category (`exploit`, `scanner`, `forensics`, etc.).
+*   **Version** (`str`): Module version string (default `"1.0"`).
+*   **Requirements** (`Dict[str, List[str]]`): Optional dependency map, e.g. `{"python": ["requests"], "system": ["nmap"]}`.
 *   **Options** (`Dict[str, Option]`): Parameters accepted by the module.
+*   **Path** (`str`): Assigned by `ModuleManager` from the filesystem location — do not set manually.
 
 #### Methods
 *   **run(self, options: Dict[str, Any])**: Main function called when the module is executed (`run` command).
     *   *Args:* `options`: Dictionary containing values set by the user using `set`.
     *   *Returns:* `Union[str, List[str]]` or `True/False`.
 *   **check_required_options(self) -> bool**: Checks if required parameters are filled. Called automatically.
+*   **get_options(self)**: Returns the `Options` dict (used by `show options`).
+*   **get_option_value(self, option_name)**: Returns the current value of one option.
+
+#### Conventions
+* Place files under a meaningful tree: `modules/<category>/.../name.py`.
+* Prefer uppercase option names (`RHOST`, `LPORT`, `FILE`).
+* Use `rich.print` for consistent colored output.
+* After edits, run `reload` (or `reload <path>`) instead of restarting when possible.
+* Keep network I/O timed out; never hardcode secrets.
 
 ---
 
@@ -173,6 +188,75 @@ class SimpleLogger(BasePlugin):
         print(f"[{datetime.now()}] Module {module_path} finished with status: {status}")
 ```
 
+For the full hook table, built-in plugins, and remote install notes, see [PLUGIN_GUIDE.md](PLUGIN_GUIDE.md).
+
+---
+
+### ⌨️ Custom Commands
+
+CLI commands live in `commands/` and inherit `core.command.Command`.
+
+Minimal example (`commands/hello.py`):
+
+```python
+from typing import Any
+from rich import print
+from core.command import Command
+
+class Hello(Command):
+    Name = "hello"
+    Description = "Prints a greeting"
+    Category = "system"
+    Aliases = ["hi"]
+    Usage = "hello [name]"
+    Examples = [
+        "hello",
+        "hello Mahmut",
+    ]
+
+    def execute(self, *args: str, **kwargs: Any) -> bool:
+        name = args[0] if args else "world"
+        print(f"[bold green]Hello, {name}![/bold green]")
+        return True
+```
+
+Notes:
+* `Name` is the primary invoker; `Aliases` are optional shortcuts.
+* Return `True`/`False` for success tracking and hooks.
+* Optional `completer_function` enables Tab completion (see `commands/help.py`, `commands/alias.py`).
+* Access managers via `core.shared_state.shared_state` (e.g. `module_manager`, `session_manager`).
+* Restart or reload command discovery after adding a new file.
+
+---
+
+### 🧪 Testing & Quality
+
+```bash
+pip install -r requirements.txt
+pytest                         # full suite
+pytest tests/path/to/test.py   # focused run
+```
+
+Project tooling (see `pyproject.toml`):
+* **pytest** — unit / integration tests under `tests/`
+* **mypy** — type checks for `core/` and `commands/`
+* **ruff** — lint + format
+
+Chimera-specific scenarios: [CHIMERA_TEST_SCENARIOS.md](CHIMERA_TEST_SCENARIOS.md), [PAYLOAD_TESTING_GUIDE.md](PAYLOAD_TESTING_GUIDE.md).
+
+---
+
+### 📚 Related Docs
+
+| Doc | Topic |
+| --- | ----- |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Managers, hooks, data flow |
+| [COMMANDS.md](COMMANDS.md) | Built-in CLI reference |
+| [MODULES.md](MODULES.md) | Module catalog |
+| [PLUGIN_GUIDE.md](PLUGIN_GUIDE.md) | Plugins in depth |
+| [REPO_AND_DOWNLOAD.md](REPO_AND_DOWNLOAD.md) | Shipping modules via remotes |
+| [QUICKSTART.md](QUICKSTART.md) | End-user quick start |
+
 <br><br>
 
 ---
@@ -189,6 +273,9 @@ Bu rehber, **Mah Framework** için yeni modüller ve pluginler geliştirmek iste
 3. [BaseModule API Referansı](#basemodule-api-referansı)
 4. [Option Sınıfı ve Kullanımı](#option-sınıfı-ve-kullanımı)
 5. [Plugin Geliştirme](#plugin-geliştirme)
+6. [Özel Komutlar](#özel-komutlar)
+7. [Test ve Kalite](#test-ve-kalite)
+8. [İlgili Belgeler](#ilgili-belgeler)
 
 ---
 
@@ -268,13 +355,25 @@ class HelloWorld(BaseModule):
 *   **Description** (`str`): `info` komutunda görünen açıklama.
 *   **Author** (`str`): Yazar adı.
 *   **Category** (`str`): Modül kategorisi (`exploit`, `scanner`, `forensics`, vb.).
+*   **Version** (`str`): Modül sürüm dizesi (varsayılan `"1.0"`).
+*   **Requirements** (`Dict[str, List[str]]`): İsteğe bağlı bağımlılık haritası, örn. `{"python": ["requests"], "system": ["nmap"]}`.
 *   **Options** (`Dict[str, Option]`): Modülün kabul ettiği parametreler.
+*   **Path** (`str`): `ModuleManager` tarafından dosya yolundan atanır — elle doldurmayın.
 
 #### Metotlar (Methods)
 *   **run(self, options: Dict[str, Any])**: Modül çalıştırıldığında (`run` komutu) çağrılan ana fonksiyon.
     *   *Argümanlar:* `options`: Kullanıcının `set` komutuyla belirlediği değerleri içeren sözlük.
     *   *Dönüş:* `Union[str, List[str]]` veya `True/False`.
 *   **check_required_options(self) -> bool**: Zorunlu parametrelerin doluluğunu kontrol eder. Otomatik çağrılır.
+*   **get_options(self)**: `Options` sözlüğünü döner (`show options`).
+*   **get_option_value(self, option_name)**: Tek bir seçeneğin güncel değerini döner.
+
+#### Kurallar
+* Dosyaları anlamlı ağaca koyun: `modules/<kategori>/.../ad.py`.
+* Seçenek adlarında büyük harf tercih edin (`RHOST`, `LPORT`, `FILE`).
+* Renkli çıktı için `rich.print` kullanın.
+* Mümkünse yeniden başlatmak yerine `reload` (veya `reload <yol>`) kullanın.
+* Ağ I/O'sunda timeout kullanın; sırları koda gömmeyin.
 
 ---
 
@@ -350,3 +449,72 @@ class BasitLoglayici(BasePlugin):
         zamani = datetime.now().strftime("%H:%M:%S")
         print(f"[{zamani}] Modül {module_path} durumu: {durum}")
 ```
+
+Tam hook tablosu, yerleşik pluginler ve uzak kurulum notları: [PLUGIN_GUIDE.md](PLUGIN_GUIDE.md).
+
+---
+
+### ⌨️ Özel Komutlar
+
+CLI komutları `commands/` altında yaşar ve `core.command.Command` miras alır.
+
+Minimal örnek (`commands/hello.py`):
+
+```python
+from typing import Any
+from rich import print
+from core.command import Command
+
+class Hello(Command):
+    Name = "hello"
+    Description = "Bir selamlama basar"
+    Category = "system"
+    Aliases = ["hi"]
+    Usage = "hello [isim]"
+    Examples = [
+        "hello",
+        "hello Mahmut",
+    ]
+
+    def execute(self, *args: str, **kwargs: Any) -> bool:
+        name = args[0] if args else "dünya"
+        print(f"[bold green]Merhaba, {name}![/bold green]")
+        return True
+```
+
+Notlar:
+* `Name` birincil çağırıcıdır; `Aliases` isteğe bağlıdır.
+* Başarı takibi ve hook'lar için `True`/`False` döndürün.
+* İsteğe bağlı `completer_function` Tab tamamlamayı açar (`commands/help.py`, `commands/alias.py`).
+* Yöneticilere `core.shared_state.shared_state` üzerinden erişin.
+* Yeni dosyadan sonra komut keşfini yeniden yükleyin / framework'ü restart edin.
+
+---
+
+### 🧪 Test ve Kalite
+
+```bash
+pip install -r requirements.txt
+pytest
+pytest tests/path/to/test.py
+```
+
+Proje araçları (`pyproject.toml`):
+* **pytest** — `tests/` altındaki birim / entegrasyon testleri
+* **mypy** — `core/` ve `commands/` tip kontrolü
+* **ruff** — lint + format
+
+Chimera senaryoları: [CHIMERA_TEST_SCENARIOS.md](CHIMERA_TEST_SCENARIOS.md), [PAYLOAD_TESTING_GUIDE.md](PAYLOAD_TESTING_GUIDE.md).
+
+---
+
+### 📚 İlgili Belgeler
+
+| Belge | Konu |
+| ----- | ---- |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Yöneticiler, hook'lar, veri akışı |
+| [COMMANDS.md](COMMANDS.md) | Yerleşik CLI referansı |
+| [MODULES.md](MODULES.md) | Modül kataloğu |
+| [PLUGIN_GUIDE.md](PLUGIN_GUIDE.md) | Pluginler derinlemesine |
+| [REPO_AND_DOWNLOAD.md](REPO_AND_DOWNLOAD.md) | Uzak depo ile modül dağıtımı |
+| [QUICKSTART.md](QUICKSTART.md) | Son kullanıcı hızlı başlangıç |

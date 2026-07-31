@@ -2,6 +2,8 @@
 
 [🇬🇧 English](#-english) | [🇹🇷 Türkçe](#-türkçe)
 
+> Docs index: [README.md](README.md) · Commands detail: [CHIMERA_COMMANDS_USAGE.md](CHIMERA_COMMANDS_USAGE.md) · In-memory modules: [chimera_module_loading.md](chimera_module_loading.md)
+
 ---
 
 <a name="-english"></a>

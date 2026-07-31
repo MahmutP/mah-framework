@@ -1,4 +1,4 @@
-# 🔌 Plugin Guide / Plugin Rehberi
+# Plugin Guide / Plugin Rehberi
 
 [English](#-english-plugin-guide) | [Türkçe](#-türkçe-plugin-rehberi)
 
@@ -8,70 +8,128 @@
 
 ### What is a Plugin?
 
-Plugins extend Mah Framework functionality through a **hook/event system**. Unlike modules (which are standalone tools), plugins react to framework events like command execution or startup.
+Plugins extend Mah Framework through a **hook / event system**. Unlike modules (standalone tools you `use` and `run`), plugins stay loaded and react to framework events such as startup, command execution, or session open/close.
 
 ### Module vs Plugin
 
-| Feature     | Module           | Plugin                 |
-| ----------- | ---------------- | ---------------------- |
-| Purpose     | Standalone tool  | Extends framework      |
-| Activation  | `use` command    | Auto-loaded at startup |
-| Interaction | Direct execution | Event-driven (hooks)   |
-| Location    | `modules/`       | `plugins/`             |
+| Feature | Module | Plugin |
+| ------- | ------ | ------ |
+| Purpose | Standalone tool | Extends the framework |
+| Activation | `use` + `run` | Auto-loaded at startup |
+| Interaction | Direct execution | Event-driven (hooks) |
+| Location | `modules/` | `plugins/` |
+| Base class | `BaseModule` | `BasePlugin` |
 
 ### Available Hooks
 
-| Hook               | Trigger            | Example Use          |
-| ------------------ | ------------------ | -------------------- |
-| `ON_STARTUP`       | Framework starts   | Initialize resources |
-| `ON_SHUTDOWN`      | Framework closes   | Cleanup operations   |
-| `PRE_COMMAND`      | Before any command | Command logging      |
-| `POST_COMMAND`     | After any command  | Command auditing     |
-| `PRE_MODULE_RUN`   | Before module runs | Validation checks    |
-| `POST_MODULE_RUN`  | After module runs  | Result logging       |
-| `ON_MODULE_SELECT` | Module selected    | Context setup        |
-| `ON_SESSION_OPEN`  | Custom agent connects | Notify user, log IP |
-| `ON_SESSION_CLOSE` | Agent disconnects   | Update status board  |
-| `ON_ERROR`         | Error occurs       | Error reporting      |
+| Hook | Trigger | Example use |
+| ---- | ------- | ----------- |
+| `ON_STARTUP` | Framework starts | Init resources, welcome |
+| `ON_SHUTDOWN` | Framework closes | Cleanup, flush buffers |
+| `PRE_COMMAND` | Before any command | Audit, filter, block |
+| `POST_COMMAND` | After any command | Result logging |
+| `PRE_MODULE_RUN` | Before `run` | Extra validation |
+| `POST_MODULE_RUN` | After `run` | Report / notify |
+| `ON_MODULE_SELECT` | Module selected (`use`) | Context setup |
+| `ON_OPTION_SET` | Option changed (`set`) | Dependent options |
+| `ON_SESSION_OPEN` | Agent connects | Notify, log IP |
+| `ON_SESSION_CLOSE` | Agent disconnects | Status update |
+| `PRE_MODULE_LOAD` | Before module file load | Blacklist / watch |
+| `POST_MODULE_LOAD` | After module load | Metadata index |
+| `PRE_PLUGIN_LOAD` | Before plugin load | Env prep |
+| `POST_PLUGIN_LOAD` | After plugin load | Stats |
+| `ON_ERROR` | Exception occurs | Error reporting |
 
-### Configuration Files
-
-Plugins can optionally use their own YAML/JSON configuration files. By defining a config inside the plugin class, the framework automatically loads it.
+Full enum: `core/hooks.py`. Architecture notes: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ### Plugin Commands
 
 ```bash
-plugins list              # List all plugins
-plugins info "Name"       # Show plugin details
-plugins enable "Name"     # Enable a plugin
-plugins disable "Name"    # Disable a plugin
+plugins list
+plugins info "Name"
+plugins enable "Name"
+plugins disable "Name"
+plugins search <term>
+plugins install <source>
+plugins update [name]
+plugins remove "Name"
 ```
 
 ### Creating a Plugin
 
 1. Copy the template:
-   ```bash
-   cp templates/plugin_template.py plugins/my_plugin.py
-   ```
 
-2. Edit the class properties:
-   ```python
-   class MyPlugin(BasePlugin):
-       Name = "My Plugin"
-       Description = "What it does"
-       Author = "Your Name"
-       Version = "1.0.0"
-   ```
+```bash
+cp templates/plugin_template.py plugins/my_plugin.py
+```
 
-3. Define hooks in `get_hooks()`:
-   ```python
-   def get_hooks(self) -> Dict[HookType, Callable]:
-       return {
-           HookType.PRE_COMMAND: self.on_command,
-       }
-   ```
+2. Edit class metadata:
 
-4. Implement handler methods and restart the framework.
+```python
+class MyPlugin(BasePlugin):
+    Name = "My Plugin"
+    Description = "What it does"
+    Author = "Your Name"
+    Version = "1.0.0"
+    Enabled = True
+    Priority = 100  # lower = earlier
+```
+
+3. Map hooks in `get_hooks()` and implement handlers:
+
+```python
+from collections.abc import Callable
+from typing import Any
+
+from core.hooks import HookType
+from core.plugin import BasePlugin
+
+class SimpleLogger(BasePlugin):
+    Name = "Simple Logger"
+    Description = "Logs all commands"
+    Version = "1.0.0"
+
+    def get_hooks(self) -> dict[HookType, Callable[..., Any]]:
+        return {HookType.POST_COMMAND: self.log_command}
+
+    def log_command(self, command_line: str, **kwargs: Any) -> None:
+        print(f"[LOG] Command executed: {command_line}")
+```
+
+4. Restart the framework (or ensure plugin manager reloads plugins). Use `plugins list` to confirm.
+
+Optional lifecycle hooks on the class:
+
+* `on_load()` — when the plugin is loaded
+* `on_unload()` — when unloaded / framework shutdown
+
+### Configuration Files
+
+Plugins may ship with YAML/JSON config. If the plugin declares a config path/name, the framework loads it at startup so each plugin can keep independent settings.
+
+### Built-in Plugins
+
+#### Audit Logger
+
+* Logs framework activity for auditing.
+* Manage with: `plugins enable "Audit Logger"` / `plugins disable "Audit Logger"`.
+
+#### Resource Monitor
+
+Logs system resource usage (CPU, RAM, Disk, Network) in the background.
+
+* **Default:** disabled
+* **Log file:** `config/logs/resources.log`
+* **Interval:** every 5 seconds
+* **Enable:** `plugins enable resource_monitor` (or the display name shown in `plugins list`)
+* Monitoring starts after enable when subsequent commands run; it stays in the background.
+
+### Tips
+
+* Keep handlers fast — they run on the hot path of every command/module event.
+* Use `Priority` to order cooperating plugins.
+* Prefer logging to files under `config/logs/` for noisy plugins.
+* For module-like one-shot tools, write a **module** instead of a plugin.
 
 ---
 
@@ -79,103 +137,125 @@ plugins disable "Name"    # Disable a plugin
 
 ### Plugin Nedir?
 
-Pluginler, Mah Framework işlevselliğini **hook/event sistemi** üzerinden genişletir. Modüllerden farklı olarak (bağımsız araçlar), pluginler framework olaylarına tepki verir.
+Pluginler, Mah Framework'ü **hook / olay sistemi** ile genişletir. Modüllerden farklı olarak (`use` + `run` ile çalışan araçlar), pluginler yüklü kalır ve başlangıç, komut çalıştırma veya oturum açılma/kapanma gibi olaylara tepki verir.
 
 ### Modül vs Plugin
 
-| Özellik    | Modül               | Plugin                 |
-| ---------- | ------------------- | ---------------------- |
-| Amaç       | Bağımsız araç       | Framework'ü genişletir |
-| Aktivasyon | `use` komutu        | Başlangıçta otomatik   |
-| Etkileşim  | Doğrudan çalıştırma | Olay tabanlı (hook)    |
-| Konum      | `modules/`          | `plugins/`             |
+| Özellik | Modül | Plugin |
+| ------- | ----- | ------ |
+| Amaç | Bağımsız araç | Framework'ü genişletir |
+| Aktivasyon | `use` + `run` | Başlangıçta otomatik |
+| Etkileşim | Doğrudan çalıştırma | Olay tabanlı (hook) |
+| Konum | `modules/` | `plugins/` |
+| Temel sınıf | `BaseModule` | `BasePlugin` |
 
 ### Kullanılabilir Hook'lar
 
-| Hook               | Tetiklenme              | Örnek Kullanım        |
-| ------------------ | ----------------------- | --------------------- |
-| `ON_STARTUP`       | Framework başlar        | Kaynak başlatma       |
-| `ON_SHUTDOWN`      | Framework kapanır       | Temizlik işlemleri    |
-| `PRE_COMMAND`      | Komuttan önce           | Komut loglama         |
-| `POST_COMMAND`     | Komuttan sonra          | Komut denetimi        |
-| `PRE_MODULE_RUN`   | Modül çalışmadan önce   | Doğrulama kontrolleri |
-| `POST_MODULE_RUN`  | Modül çalıştıktan sonra | Sonuç loglama         |
-| `ON_MODULE_SELECT` | Modül seçildiğinde      | Bağlam kurulumu       |
-| `ON_SESSION_OPEN`  | Yeni ajan bağlandığında | Kullanıcıya bildirme  |
-| `ON_SESSION_CLOSE` | Ajan bağlantısı koptuğunda | Durumu güncelleme     |
-| `ON_ERROR`         | Hata oluştuğunda        | Hata raporlama        |
+| Hook | Tetiklenme | Örnek kullanım |
+| ---- | ---------- | -------------- |
+| `ON_STARTUP` | Framework başlar | Kaynak başlatma |
+| `ON_SHUTDOWN` | Framework kapanır | Temizlik |
+| `PRE_COMMAND` | Komuttan önce | Denetim, filtre |
+| `POST_COMMAND` | Komuttan sonra | Sonuç loglama |
+| `PRE_MODULE_RUN` | `run` öncesi | Ek doğrulama |
+| `POST_MODULE_RUN` | `run` sonrası | Rapor / bildirim |
+| `ON_MODULE_SELECT` | Modül seçimi (`use`) | Bağlam kurulumu |
+| `ON_OPTION_SET` | Seçenek değişimi (`set`) | Bağımlı seçenekler |
+| `ON_SESSION_OPEN` | Ajan bağlanır | Bildirim, IP log |
+| `ON_SESSION_CLOSE` | Ajan kopar | Durum güncelleme |
+| `PRE_MODULE_LOAD` | Modül dosyası yüklenmeden önce | Kara liste |
+| `POST_MODULE_LOAD` | Modül yüklendikten sonra | Meta indeks |
+| `PRE_PLUGIN_LOAD` | Plugin yüklenmeden önce | Ortam hazırlığı |
+| `POST_PLUGIN_LOAD` | Plugin yüklendikten sonra | İstatistik |
+| `ON_ERROR` | Hata oluşunca | Hata raporlama |
 
-### Yapılandırma Dosyaları (Configuration)
-
-Plugin'ler kendi YAML/JSON ayar (config) dosyalarını kullanabilirler. Bu sayede her plugin kendi bağımsız ayarlarına sahip olabilir. Sistem bu ayarları açılışta otomatik yükler.
+Tam enum: `core/hooks.py`. Mimari: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ### Plugin Komutları
 
 ```bash
-plugins list              # Tüm pluginleri listele
-plugins info "İsim"       # Plugin detaylarını göster
-plugins enable "İsim"     # Plugini etkinleştir
-plugins disable "İsim"    # Plugini devre dışı bırak
+plugins list
+plugins info "İsim"
+plugins enable "İsim"
+plugins disable "İsim"
+plugins search <terim>
+plugins install <kaynak>
+plugins update [isim]
+plugins remove "İsim"
 ```
 
 ### Plugin Oluşturma
 
 1. Şablonu kopyalayın:
-   ```bash
-   cp templates/plugin_template.py plugins/benim_pluginim.py
-   ```
 
-2. Sınıf özelliklerini düzenleyin:
-   ```python
-   class BenimPluginim(BasePlugin):
-       Name = "Benim Pluginim"
-       Description = "Ne yaptığı"
-       Author = "Adınız"
-       Version = "1.0.0"
-   ```
-
-3. `get_hooks()` metodunda hook'ları tanımlayın:
-   ```python
-   def get_hooks(self) -> Dict[HookType, Callable]:
-       return {
-           HookType.PRE_COMMAND: self.on_command,
-       }
-   ```
-
-4. Handler metodlarını yazın ve framework'ü yeniden başlatın.
-
----
-
+```bash
+cp templates/plugin_template.py plugins/benim_pluginim.py
 ```
 
-### Resource Monitor Plugin
-
-The **Resource Monitor** plugin logs system resource usage (CPU, RAM, Disk, Network) to a file in the background.
-
-- **Status**: Disabled by default.
-- **Log File**: `config/logs/resources.log`
-- **Interval**: Every 5 seconds.
-- **Commands**:
-  - Enable: `plugins enable resource_monitor`
-  - Disable: `plugins disable resource_monitor`
-
-**Note**: The monitoring starts automatically when you run any command after enabling the plugin. It runs silently in the background.
-
----
-
-### Example Plugin / Örnek Plugin
+2. Meta verileri düzenleyin:
 
 ```python
-from core.plugin import BasePlugin
-from core.hooks import HookType
-
-class SimpleLogger(BasePlugin):
-    Name = "Simple Logger"
-    Description = "Logs all commands"
-    
-    def get_hooks(self):
-        return {HookType.POST_COMMAND: self.log_command}
-    
-    def log_command(self, command_line, **kwargs):
-        print(f"[LOG] Command executed: {command_line}")
+class BenimPluginim(BasePlugin):
+    Name = "Benim Pluginim"
+    Description = "Ne yaptığı"
+    Author = "Adınız"
+    Version = "1.0.0"
+    Enabled = True
+    Priority = 100  # düşük = daha önce
 ```
+
+3. `get_hooks()` içinde hook eşlemesi yapın ve handler yazın:
+
+```python
+from collections.abc import Callable
+from typing import Any
+
+from core.hooks import HookType
+from core.plugin import BasePlugin
+
+class BasitLoglayici(BasePlugin):
+    Name = "Basit Loglayıcı"
+    Description = "Tüm komutları loglar"
+    Version = "1.0.0"
+
+    def get_hooks(self) -> dict[HookType, Callable[..., Any]]:
+        return {HookType.POST_COMMAND: self.komut_logla}
+
+    def komut_logla(self, command_line: str, **kwargs: Any) -> None:
+        print(f"[LOG] Çalıştırılan komut: {command_line}")
+```
+
+4. Framework'ü yeniden başlatın. `plugins list` ile doğrulayın.
+
+İsteğe bağlı yaşam döngüsü:
+
+* `on_load()` — yüklenince
+* `on_unload()` — kaldırılınca / kapanırken
+
+### Yapılandırma Dosyaları
+
+Pluginler kendi YAML/JSON ayar dosyalarını kullanabilir. Tanımlanan config açılışta yüklenir; her plugin bağımsız ayar tutabilir.
+
+### Yerleşik Pluginler
+
+#### Audit Logger
+
+* Framework aktivitesini denetim için loglar.
+* Yönetim: `plugins enable "Audit Logger"` / `plugins disable "Audit Logger"`.
+
+#### Resource Monitor
+
+Sistem kaynak kullanımını (CPU, RAM, Disk, Ağ) arka planda loglar.
+
+* **Varsayılan:** kapalı
+* **Log dosyası:** `config/logs/resources.log`
+* **Aralık:** 5 saniye
+* **Açma:** `plugins enable resource_monitor` (`plugins list`teki görünen ad)
+* Etkinleştirmeden sonra komutlar çalıştıkça arka planda sürer.
+
+### İpuçları
+
+* Handler'ları hızlı tutun — her komut/modül olayının sıcak yolundadırlar.
+* Birlikte çalışan pluginlerde sırayı `Priority` ile ayarlayın.
+* Gürültülü pluginler için `config/logs/` altına yazın.
+* Tek seferlik araçlar için **modül** yazın, plugin değil.

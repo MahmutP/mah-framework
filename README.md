@@ -43,10 +43,10 @@
 *   **100%** Test Coverage (`462 items collected`)
 *   **Plugins System**, **Remote Repositories**, **Chimera Agent Builder** & **Advanced Logging**
 
-### � Development Note
+### 💡 Development Note
 The initial version of this project was developed entirely without AI assistance. The current version has been evolved using the **Antigravity IDE**, where AI enhanced the project based on the original codebase I wrote.
 
-### �📦 Available Modules
+### 📦 Available Modules
 Mah Framework comes with built-in modules across various categories:
 *   **Exploit**: `vsftpd_234_backdoor` ...
 *   **Auxiliary**: `scanner/port_scanner`, `scanner/http_dir_buster`, [`recon/github_tracker`](docs/GITHUB_TRACKER.md), `scanner/vsftpd_234_scanner` ...
@@ -56,6 +56,25 @@ Mah Framework comes with built-in modules across various categories:
 *   **Example**: `hash_generator`, `toplama` ...
 *   **Plugins**: `Audit Logger` (System Activity Monitoring) ...
 
+Full catalog: **[Modules Catalog](docs/MODULES.md)**.
+
+### 📚 Documentation
+
+Central index: **[docs/README.md](docs/README.md)**
+
+| Guide | Description |
+| ----- | ----------- |
+| [Quick Start](docs/QUICKSTART.md) | Install and first workflow |
+| [Commands Reference](docs/COMMANDS.md) | All built-in CLI commands |
+| [Architecture](docs/ARCHITECTURE.md) | Core components and data flow |
+| [Modules Catalog](docs/MODULES.md) | Built-in modules by category |
+| [Payloads Guide](docs/PAYLOADS.md) | Payload generation and sessions |
+| [Chimera User Guide](docs/CHIMERA_USER_GUIDE.md) | Chimera agent usage |
+| [Plugin Guide](docs/PLUGIN_GUIDE.md) | Hook system and plugins |
+| [Repo & Download](docs/REPO_AND_DOWNLOAD.md) | Remote module repositories |
+| [Developer Guide](docs/DEVELOPER_GUIDE.md) | Create modules, plugins, commands |
+| [Macro / Resource Files](docs/usage_guide_macro.md) | Record and replay `.rc` scripts |
+
 ### 📂 Project Structure
 
 ```text
@@ -63,13 +82,14 @@ mah-framework/
 ├── core/             # Core framework engine (managers, console, logger)
 ├── commands/         # Standard CLI commands (e.g., help, exit)
 ├── modules/          # External modules
-├── plugins/          # 🔌 System plugins (NEW)
+├── plugins/          # System plugins
 ├── config/           # Configuration files and logs
 │   └── logs/         # Application log files
+├── docs/             # User & developer documentation
 ├── main.py           # Application entry point
 ├── pycache_sil.sh    # Maintenance script (cache & log cleaner)
 ├── requirements.txt  # Python dependencies
-└── README.md         # Documentation
+└── README.md         # Project overview
 ```
 
 ### 🛠️ Installation
@@ -178,8 +198,9 @@ mahmut > sessions -k 1          # Kill session 1
 ### 🤝 Contributing
 Contributions are welcome! Please fork the repository, create a feature branch, and submit a Pull Request.
 
-**Developers**: Check out the **[Developer Guide](docs/DEVELOPER_GUIDE.md)** to learn how to create your own modules!
-**Users**: Read the **[Payloads Guide](docs/PAYLOADS.md)** to learn how to generate and use payloads.
+Start here: **[docs/README.md](docs/README.md)** → **[Quick Start](docs/QUICKSTART.md)**  
+**Developers**: [Developer Guide](docs/DEVELOPER_GUIDE.md) · [Architecture](docs/ARCHITECTURE.md) · [Plugin Guide](docs/PLUGIN_GUIDE.md)  
+**Users**: [Commands](docs/COMMANDS.md) · [Modules](docs/MODULES.md) · [Payloads](docs/PAYLOADS.md) · [Chimera](docs/CHIMERA_USER_GUIDE.md)
 
 ### 🧪 Running Tests
 Ensure high code quality by running the test suite:
@@ -232,6 +253,25 @@ Mah Framework, çeşitli kategorilerde yerleşik modüllerle gelir:
 *   **Example**: `hash_generator`, `toplama` ...
 *   **Plugins**: `Audit Logger` (Sistem Aktivite İzleme) ...
 
+Tam katalog: **[Modül Kataloğu](docs/MODULES.md)**.
+
+### 📚 Dokümantasyon
+
+Merkezi indeks: **[docs/README.md](docs/README.md)**
+
+| Rehber | Açıklama |
+| ------ | -------- |
+| [Hızlı Başlangıç](docs/QUICKSTART.md) | Kurulum ve ilk iş akışı |
+| [Komut Referansı](docs/COMMANDS.md) | Tüm yerleşik CLI komutları |
+| [Mimari](docs/ARCHITECTURE.md) | Çekirdek bileşenler ve veri akışı |
+| [Modül Kataloğu](docs/MODULES.md) | Kategoriye göre yerleşik modüller |
+| [Payloads Rehberi](docs/PAYLOADS.md) | Payload üretimi ve oturumlar |
+| [Chimera Kullanım Rehberi](docs/CHIMERA_USER_GUIDE.md) | Chimera ajan kullanımı |
+| [Plugin Rehberi](docs/PLUGIN_GUIDE.md) | Hook sistemi ve pluginler |
+| [Repo ve Download](docs/REPO_AND_DOWNLOAD.md) | Uzak modül depoları |
+| [Geliştirici Rehberi](docs/DEVELOPER_GUIDE.md) | Modül, plugin ve komut yazma |
+| [Makro / Resource Dosyaları](docs/usage_guide_macro.md) | `.rc` kaydetme ve oynatma |
+
 ### 📂 Proje Yapısı
 
 ```text
@@ -239,13 +279,14 @@ mah-framework/
 ├── core/             # Framework çekirdek dosyaları (yöneticiler, konsol, logger)
 ├── commands/         # Standart CLI komutları (örn: help, exit)
 ├── modules/          # Harici modüller
-├── plugins/          # 🔌 Sistem pluginleri (YENİ)
+├── plugins/          # Sistem pluginleri
 ├── config/           # Ayar dosyaları ve loglar
 │   └── logs/         # Uygulama logları
+├── docs/             # Kullanıcı ve geliştirici dokümantasyonu
 ├── main.py           # Uygulamanın giriş noktası
 ├── pycache_sil.sh    # Bakım betiği (önbellek ve log temizleyici)
 ├── requirements.txt  # Gerekli Python kütüphaneleri
-└── README.md         # Dokümantasyon
+└── README.md         # Proje özeti
 ```
 
 ### 🛠️ Kurulum
@@ -354,8 +395,9 @@ mahmut > sessions -k 1          # 1 numaralı oturumu sonlandır
 ### 🤝 Katkıda Bulunma
 Bu proje açık kaynaklıdır ve katkılara açıktır. Lütfen projeyi fork'layın, yeni bir branch oluşturun ve Pull Request gönderin.
 
-**Geliştiriciler**: Kendi modüllerinizi nasıl oluşturacağınızı öğrenmek için **[Geliştirici Rehberi](docs/DEVELOPER_GUIDE.md)** dosyasına göz atın!
-**Kullanıcılar**: Payload oluşturma ve kullanma hakkında bilgi için **[Payloads Rehberi](docs/PAYLOADS.md)** dosyasına bakın.
+Başlangıç: **[docs/README.md](docs/README.md)** → **[Hızlı Başlangıç](docs/QUICKSTART.md)**  
+**Geliştiriciler**: [Geliştirici Rehberi](docs/DEVELOPER_GUIDE.md) · [Mimari](docs/ARCHITECTURE.md) · [Plugin Rehberi](docs/PLUGIN_GUIDE.md)  
+**Kullanıcılar**: [Komutlar](docs/COMMANDS.md) · [Modüller](docs/MODULES.md) · [Payloads](docs/PAYLOADS.md) · [Chimera](docs/CHIMERA_USER_GUIDE.md)
 
 ### 🧪 Testleri Çalıştırma
 Kod kalitesini korumak için testleri çalıştırın:

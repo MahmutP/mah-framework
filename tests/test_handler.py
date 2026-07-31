@@ -41,6 +41,14 @@ class ConcreteHandler(BaseHandler):
     def handle_connection(self, client_sock, session_id=None):
         self.connections_received.append((client_sock, session_id))
         self.connection_event.set()
+        # Oturum kaydının test edilebilmesi için bağlantı kapanana kadar bekle
+        try:
+            while self.running:
+                data = client_sock.recv(1)
+                if not data:
+                    break
+        except OSError:
+            pass
 
 
 class ConcreteBindHandler(BindHandler):

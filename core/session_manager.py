@@ -1,6 +1,7 @@
 # Framework'ün oturum (session) yönetiminden sorumlu modül.
 # Bağlantı kurulan hedef sistemlerle (exploit sonrası) olan etkileşimleri merkezi olarak yönetir.
 
+import contextlib
 import threading
 import time
 from typing import Any
@@ -80,32 +81,34 @@ class SessionManager:
 
     def remove_session(self, session_id: int) -> None:
         """
-        Belirtilen oturumu sonlandırır ve listeden siler.
+        Belirtilen oturumu listeden siler ve yalnızca o istemci bağlantısını kapatır.
+
+        Multi-client handler'da dinleyiciyi ayakta tutmak için handler.stop()
+        çağrılmaz; tüm dinleyiciyi kapatmak için shutdown_all() kullanılır.
         """
         with self.lock:
-            if session_id in self.sessions:
-                session = self.sessions[session_id]
+            session = self.sessions.pop(session_id, None)
+            if session is None:
+                return
+            handler = session.get("handler")
 
-                # Handler'ın bağlantıyı düzgün kapatması için stop() metodunu çağır.
-                try:
-                    session["handler"].stop()
-                except:
-                    pass  # Zaten kapanmışsa hata verme
+        # Kilit dışında kapat — clients_lock ile deadlock olmasın
+        if handler is not None:
+            close_client = getattr(handler, "close_client", None)
+            if callable(close_client):
+                with contextlib.suppress(BaseException):
+                    close_client(session_id)
 
-                # Listeden kaydı sil
-                del self.sessions[session_id]
+        try:
+            from core.hooks import HookType
+            from core.shared_state import shared_state
 
-                # Eklentilere haber ver
-                try:
-                    from core.hooks import HookType
-                    from core.shared_state import shared_state
-
-                    if shared_state.plugin_manager:
-                        shared_state.plugin_manager.trigger_hook(
-                            HookType.ON_SESSION_CLOSE, session_id=session_id
-                        )
-                except Exception:
-                    pass
+            if shared_state.plugin_manager:
+                shared_state.plugin_manager.trigger_hook(
+                    HookType.ON_SESSION_CLOSE, session_id=session_id
+                )
+        except Exception:
+            pass
 
     def get_session(self, session_id: int) -> dict[str, Any] | None:
         """

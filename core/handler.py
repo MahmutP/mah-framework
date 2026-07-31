@@ -181,6 +181,17 @@ class BaseHandler:
                 if shared_state.session_manager:
                     shared_state.session_manager.remove_session(session_id)
 
+    def close_client(self, session_id: int) -> None:
+        """
+        Belirtilen oturuma ait istemci soketini kapatır.
+        Dinleyici (server) soketine dokunmaz — multi-client için gerekli.
+        """
+        with self.clients_lock:
+            client_info = self.clients.pop(session_id, None)
+        if client_info:
+            with contextlib.suppress(BaseException):
+                client_info["sock"].close()
+
     def stop(self) -> None:
         """
         Dinleyiciyi durdurur ve açık olan tüm soketleri güvenli bir şekilde kapatır.

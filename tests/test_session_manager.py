@@ -30,7 +30,8 @@ class TestSessionManager(unittest.TestCase):
         self.session_manager.remove_session(session_id)
 
         self.assertNotIn(session_id, self.session_manager.sessions)
-        mock_handler.stop.assert_called_once()
+        mock_handler.stop.assert_not_called()
+        mock_handler.close_client.assert_called_once_with(session_id)
 
     def test_get_session(self):
         mock_handler = MagicMock()

@@ -15,6 +15,8 @@ import types
 import unittest
 from unittest.mock import MagicMock, patch
 
+from tests.chimera.helpers import wire_agent_mock_sock
+
 # Proje kökünü path'e ekle
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -50,7 +52,7 @@ class TestChimeraAgentProtocol(unittest.TestCase):
         """send_data, HTTP POST formatında gönderir."""
         # Sahte soket oluştur
         mock_sock = MagicMock()
-        self.agent.sock = mock_sock
+        wire_agent_mock_sock(self.agent, mock_sock)
 
         self.agent.send_data("merhaba")
 
@@ -115,7 +117,7 @@ class TestChimeraAgentProtocol(unittest.TestCase):
                 pass
 
         mock_sock = MockSocket(headers + encoded)
-        self.agent.sock = mock_sock
+        wire_agent_mock_sock(self.agent, mock_sock)
 
         result = self.agent.recv_data()
         self.assertEqual(result, test_msg)
@@ -124,7 +126,7 @@ class TestChimeraAgentProtocol(unittest.TestCase):
         """Bağlantı koparsa recv_data boş string döner."""
         mock_sock = MagicMock()
         mock_sock.recv.return_value = b""
-        self.agent.sock = mock_sock
+        wire_agent_mock_sock(self.agent, mock_sock)
 
         result = self.agent.recv_data()
         self.assertEqual(result, "")
@@ -154,7 +156,7 @@ class TestChimeraAgentConnection(unittest.TestCase):
     def test_close_socket(self):
         """close_socket soketi temizler."""
         mock_sock = MagicMock()
-        self.agent.sock = mock_sock
+        wire_agent_mock_sock(self.agent, mock_sock)
         self.agent.close_socket()
 
         mock_sock.close.assert_called_once()
@@ -169,7 +171,7 @@ class TestChimeraAgentConnection(unittest.TestCase):
         """close_socket, socket.close() hatası fırlatırsa yine de None yapar."""
         mock_sock = MagicMock()
         mock_sock.close.side_effect = Exception("close error")
-        self.agent.sock = mock_sock
+        wire_agent_mock_sock(self.agent, mock_sock)
 
         self.agent.close_socket()
         self.assertIsNone(self.agent.sock)
@@ -214,7 +216,7 @@ class TestChimeraAgentSysinfo(unittest.TestCase):
     def test_send_sysinfo_format(self):
         """send_sysinfo, HTTP POST formatında bilgi gönderir."""
         mock_sock = MagicMock()
-        self.agent.sock = mock_sock
+        wire_agent_mock_sock(self.agent, mock_sock)
 
         self.agent.send_sysinfo()
 
@@ -287,7 +289,7 @@ class TestChimeraAgentRunLoop(unittest.TestCase):
         # recv(len) for body...
 
         self.agent.connect()  # Manually connect to setup self.sock
-        self.agent.sock = mock_sock_instance  # Ensure it set
+        wire_agent_mock_sock(self.agent, mock_sock_instance)  # Ensure channel wired
 
         # Mock recv calls
         # We need a robust mock socket iterator
@@ -434,14 +436,37 @@ class TestChimeraGenerate(unittest.TestCase):
             "multiprocessing",
             "io",
             "tempfile",
+            "contextlib",
             "mss",
             "PIL",
             "winreg",
         }
 
-        # Tüm import satırlarını kontrol et
+        # Tüm import satırlarını kontrol et (try blokları içindekileri atla)
+        in_try_block = False
+        indent_level = 0
+
         for line in code.split("\n"):
             stripped = line.strip()
+            leading_spaces = len(line) - len(line.lstrip())
+
+            if stripped.startswith("try:"):
+                in_try_block = True
+                indent_level = leading_spaces
+                continue
+
+            if in_try_block:
+                if stripped.startswith("except") or stripped.startswith("finally"):
+                    continue
+                if (
+                    leading_spaces <= indent_level
+                    and stripped
+                    and not stripped.startswith("#")
+                ):
+                    in_try_block = False
+                else:
+                    continue
+
             if stripped.startswith("import ") or stripped.startswith("from "):
                 module_name = (
                     stripped.replace("import ", "")

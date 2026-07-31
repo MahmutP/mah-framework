@@ -40,7 +40,7 @@ class TestSendData:
         agent.send_data("test")
 
         sent = mock_sock.sendall.call_args[0][0]
-        assert b"Host: 127.0.0.1" in sent
+        assert b"Host: update.microsoft.com" in sent
 
     def test_send_data_includes_user_agent(self, agent_with_mock_sock):
         """send_data gerçekçi User-Agent header'ı içerir."""

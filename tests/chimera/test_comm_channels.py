@@ -692,7 +692,7 @@ class TestAgentChannelIntegration:
             patch.object(agent.channel_manager, "fallback", return_value=False),
             patch.object(agent, "connect", return_value=True),
             patch.object(agent, "send_sysinfo"),
-            patch("time.sleep"),
+            patch.object(agent, "_sleep_obfuscated"),
         ):
             result = agent.reconnect()
 

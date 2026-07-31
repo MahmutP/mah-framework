@@ -185,7 +185,7 @@ class TestAgentReconnect:
             patch.object(agent.channel_manager, "fallback", return_value=False),
             patch.object(agent, "connect", return_value=True),
             patch.object(agent, "send_sysinfo"),
-            patch("time.sleep"),
+            patch.object(agent, "_sleep_obfuscated"),
         ):
             agent.reconnect()
 
@@ -194,9 +194,10 @@ class TestAgentReconnect:
     def test_reconnect_returns_true_on_success(self, agent):
         """Başarılı reconnect True döner."""
         with (
+            patch.object(agent.channel_manager, "fallback", return_value=False),
             patch.object(agent, "connect", return_value=True),
             patch.object(agent, "send_sysinfo"),
-            patch("time.sleep"),
+            patch.object(agent, "_sleep_obfuscated"),
         ):
             result = agent.reconnect()
 
@@ -205,9 +206,10 @@ class TestAgentReconnect:
     def test_reconnect_sends_sysinfo_on_success(self, agent):
         """Reconnect başarılı olunca sysinfo gönderilir."""
         with (
+            patch.object(agent.channel_manager, "fallback", return_value=False),
             patch.object(agent, "connect", return_value=True) as _,
             patch.object(agent, "send_sysinfo") as mock_sysinfo,
-            patch("time.sleep"),
+            patch.object(agent, "_sleep_obfuscated"),
         ):
             agent.reconnect()
 
@@ -216,7 +218,7 @@ class TestAgentReconnect:
     def test_reconnect_respects_running_flag(self, agent):
         """running=False ise reconnect döngüsü sonlanır."""
         agent.running = False
-        with patch("time.sleep"):
+        with patch.object(agent.channel_manager, "fallback", return_value=False):
             result = agent.reconnect()
         assert result is False
 
@@ -230,9 +232,10 @@ class TestAgentReconnect:
             return call_count >= 3
 
         with (
+            patch.object(agent.channel_manager, "fallback", return_value=False),
             patch.object(agent, "connect", side_effect=mock_connect),
             patch.object(agent, "send_sysinfo"),
-            patch("time.sleep"),
+            patch.object(agent, "_sleep_obfuscated"),
         ):
             result = agent.reconnect()
 

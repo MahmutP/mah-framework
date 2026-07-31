@@ -19,6 +19,8 @@ if PROJECT_ROOT not in sys.path:
 
 from core.shared_state import reset_shared_state, shared_state
 
+from tests.chimera.helpers import clear_agent_mock_sock, wire_agent_mock_sock
+
 # ============================================================
 # Agent Yükleme Yardımcıları
 # ============================================================
@@ -72,12 +74,50 @@ def reset_test_state():
     yield
 
 
+class _AgentSockProxy:
+    """agent.sock atamalarını aktif kanala yönlendirir."""
+
+    __slots__ = ("_agent", "_overrides")
+
+    def __init__(self, agent):
+        object.__setattr__(self, "_agent", agent)
+        object.__setattr__(self, "_overrides", {})
+
+    def __getattr__(self, name):
+        overrides = object.__getattribute__(self, "_overrides")
+        if name in overrides:
+            return overrides[name]
+        return getattr(object.__getattribute__(self, "_agent"), name)
+
+    def __setattr__(self, name, value):
+        if name in ("_agent", "_overrides"):
+            object.__setattr__(self, name, value)
+            return
+        if name == "sock":
+            if value is None:
+                clear_agent_mock_sock(object.__getattribute__(self, "_agent"))
+            else:
+                wire_agent_mock_sock(object.__getattribute__(self, "_agent"), value)
+            return
+        object.__getattribute__(self, "_overrides")[name] = value
+        setattr(object.__getattribute__(self, "_agent"), name, value)
+
+    def __delattr__(self, name):
+        if name == "sock":
+            clear_agent_mock_sock(object.__getattribute__(self, "_agent"))
+            return
+        overrides = object.__getattribute__(self, "_overrides")
+        if name in overrides:
+            del overrides[name]
+        delattr(object.__getattribute__(self, "_agent"), name)
+
+
 @pytest.fixture
 def agent():
     """Temiz bir ChimeraAgent instance'ı döndürür."""
     if ChimeraAgent is None:
         pytest.skip("ChimeraAgent yüklenemedi")
-    a = ChimeraAgent("127.0.0.1", 9999)
+    a = _AgentSockProxy(ChimeraAgent("127.0.0.1", 9999))
     yield a
     a.close_socket()
 
@@ -86,7 +126,7 @@ def agent():
 def agent_with_mock_sock(agent):
     """Mock socket'e sahip bir agent döndürür."""
     mock_sock = MagicMock()
-    agent.sock = mock_sock
+    wire_agent_mock_sock(agent, mock_sock)
     return agent, mock_sock
 
 

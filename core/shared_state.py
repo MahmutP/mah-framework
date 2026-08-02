@@ -82,7 +82,7 @@ class SharedState:
 
             container = get_container()
             if container.is_registered(service_type):
-                instance = container.resolve(service_type)
+                instance: Any = container.resolve(service_type)
                 setattr(self._ctx, attr, instance)
                 return instance
         except Exception:

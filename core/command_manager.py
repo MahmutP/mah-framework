@@ -60,7 +60,7 @@ class CommandManager:
         self._ensure_aliases_file()
 
     @property
-    def plugin_manager(self):
+    def plugin_manager(self) -> Any:
         if self._plugin_manager:
             return self._plugin_manager
         if self._context and hasattr(self._context, "plugin_manager") and self._context.plugin_manager:
@@ -351,7 +351,8 @@ class CommandManager:
                 result = False
                 try:
                     logger.info(f"Komut çalıştırıldı: {resolved_command_name}")
-                    result = bool(command_obj.execute(*args))
+                    exec_result = command_obj.execute(*args)
+                    result = bool(exec_result)
                     return result
                 except TypeError:
                     print(

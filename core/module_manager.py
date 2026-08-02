@@ -193,7 +193,7 @@ class ModuleManager:
         self._module_paths_cache: list[str] | None = None
 
     @property
-    def plugin_manager(self):
+    def plugin_manager(self) -> Any:
         if self._plugin_manager:
             return self._plugin_manager
         if self._context and self._context.plugin_manager:
@@ -201,7 +201,7 @@ class ModuleManager:
         return shared_state.plugin_manager
 
     @plugin_manager.setter
-    def plugin_manager(self, value):
+    def plugin_manager(self, value: Any) -> None:
         self._plugin_manager = value
 
     def _invalidate_path_cache(self) -> None:
@@ -291,15 +291,16 @@ class ModuleManager:
                 except OSError:
                     continue
 
-                meta = extract_module_meta_from_source(
+                extracted = extract_module_meta_from_source(
                     source,
                     module_id,
                     file_path,
                     stat.st_mtime_ns,
                     stat.st_size,
                 )
-                if meta is None:
+                if extracted is None:
                     continue
+                meta = extracted
 
                 is_payload = "payloads" in file_path.parts
                 if not is_payload:
@@ -456,10 +457,17 @@ class ModuleManager:
                 file_path = self.modules_dir / f"{module_path.split('/', 1)[1]}.py"
 
         if not file_path.exists():
+            # Katalogda ölü kayıt kalmasın
+            self.modules.pop(module_path, None)
+            self._catalog.pop(module_path, None)
+            self._invalidate_path_cache()
             return None
 
         instance = self._instantiate_from_file(module_path, file_path)
         if instance is None:
+            # Yükleme başarısız: stub ile yanıltıcı listelemeyi kaldır
+            self.modules.pop(module_path, None)
+            self._invalidate_path_cache()
             return None
 
         self.modules[module_path] = instance

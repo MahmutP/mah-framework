@@ -3,7 +3,6 @@ import os
 import threading
 from typing import Any
 
-import paramiko
 from rich import print
 
 from core.module import BaseModule
@@ -38,24 +37,34 @@ class ssh_brute(BaseModule):
                 "Şifre listesi dosyası",
             ),
             "THREADS": Option("THREADS", 5, True, "Eşzamanlı bağlantı sayısı"),
-            "TIMEOUT": Option("TIMEOUT", 5, False, "Bağlantı zaman aşımı (saniye)"),
+            "TIMEOUT": Option("TIMEOUT", 5, True, "Bağlantı zaman aşımı (saniye)"),
         }
         for option_name, option_obj in self.Options.items():
             setattr(self, option_name, option_obj.value)
 
-        # Sadece auth loglarını bastırmak için
-        log_dir = os.path.join(os.getcwd(), "config", "logs")
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
-        paramiko.util.log_to_file(os.path.join(log_dir, "paramiko.log"), level="ERROR")
         self.stop_event = threading.Event()
         self.success_password = None
+        self._paramiko = None
+
+    def _ensure_paramiko(self):
+        if self._paramiko is None:
+            import paramiko
+
+            log_dir = os.path.join(os.getcwd(), "config", "logs")
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir)
+            paramiko.util.log_to_file(
+                os.path.join(log_dir, "paramiko.log"), level="ERROR"
+            )
+            self._paramiko = paramiko
+        return self._paramiko
 
     def attempt_login(self, target, port, username, password, timeout):
         """Tek bir parola denemesini gerçekleştirir."""
         if self.stop_event.is_set():
             return None
 
+        paramiko = self._ensure_paramiko()
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
@@ -79,6 +88,7 @@ class ssh_brute(BaseModule):
             client.close()
 
     def run(self, options: dict[str, Any]):
+        self._ensure_paramiko()
         rhost = options.get("RHOST")
         rport = int(options.get("RPORT", 22))
         username = options.get("USERNAME")

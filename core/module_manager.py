@@ -264,7 +264,6 @@ class ModuleManager:
         self._invalidate_path_cache()
 
         cached = self._load_manifest()
-        plugin_mgr = self.plugin_manager
 
         for file_path in self.modules_dir.rglob("*.py"):
             if self._should_skip_file(file_path):
@@ -312,23 +311,10 @@ class ModuleManager:
                         )
                         print_scan_report(scan_result)
 
-            if plugin_mgr:
-                plugin_mgr.trigger_hook(
-                    HookType.PRE_MODULE_LOAD,
-                    module_path=module_id,
-                    file_path=str(file_path),
-                )
-
+            # Keşifte hook yok — PRE/POST_MODULE_LOAD yalnızca ensure_loaded sırasında.
             stub = ModuleStub(meta)
             self._catalog[module_id] = meta
             self.modules[module_id] = stub
-
-            if plugin_mgr:
-                plugin_mgr.trigger_hook(
-                    HookType.POST_MODULE_LOAD,
-                    module_path=module_id,
-                    module=stub,
-                )
 
         self._save_manifest()
         self._invalidate_path_cache()
@@ -504,9 +490,13 @@ class ModuleManager:
         logger.info(f"Modül başarıyla yeniden yüklendi: {module_path}")
         return True
 
+    def has_module(self, module_path: str) -> bool:
+        """Katalogda modül var mı (import tetiklemez)."""
+        return module_path in self.modules or module_path in self._catalog
+
     def get_module(self, module_path: str) -> BaseModule | None:
         """Verilen yol ile eşleşen modülü döndürür (gerekirse lazy load)."""
-        if module_path not in self.modules and module_path not in self._catalog:
+        if not self.has_module(module_path):
             return None
         return self.ensure_loaded(module_path)
 

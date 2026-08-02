@@ -1,12 +1,13 @@
 import time
 
-import requests
-from bs4 import BeautifulSoup
 from rich.console import Console
 from rich.table import Table
 
 from core.module import BaseModule
 from core.option import Option
+
+requests = None  # type: ignore[assignment]
+BeautifulSoup = None  # type: ignore[assignment]
 
 
 class GitHubTracker(BaseModule):
@@ -1351,7 +1352,18 @@ class GitHubTracker(BaseModule):
         console.print(table)
         console.print()
 
+    def _ensure_web_deps(self) -> None:
+        """requests / bs4 yalnızca çalışma anında yüklenir."""
+        global requests, BeautifulSoup
+        if requests is None:
+            import requests as _requests
+            from bs4 import BeautifulSoup as _BeautifulSoup
+
+            requests = _requests
+            BeautifulSoup = _BeautifulSoup
+
     def run(self, options):
+        self._ensure_web_deps()
         console = Console()
         username_input = options.get("USERNAME")
         output_file = options.get("OUTPUT")

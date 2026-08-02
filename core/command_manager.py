@@ -1,10 +1,15 @@
 # Bu modül, framework içindeki komutların yüklenmesi, yönetilmesi ve çalıştırılmasından sorumludur.
 # Komutların dinamik olarak yüklenmesi, alias (takma ad) yönetimi ve komut yürütme akışı burada kontrol edilir.
 
+from __future__ import annotations
+
+import ast
 import importlib.util
 import json  # Alias'ları JSON formatında okumak ve yazmak için kullanılır.
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from rich import print
 
@@ -14,12 +19,128 @@ from core.command import Command  # Temel Komut sınıfı
 # Sabitler: Alias dosya yolu ve komut kategorileri
 from core.cont import ALIASES_FILE
 from core.hooks import HookType
+from core.plugin_manager import PluginManager as PluginManagerType
 from core.shared_state import shared_state
 
 
-from typing import Any
+@dataclass
+class CommandMeta:
+    name: str
+    description: str
+    category: str
+    aliases: list[str] = field(default_factory=list)
+    usage: str = ""
+    examples: list[str] = field(default_factory=list)
+    file_path: str = ""
+    class_name: str = ""
 
-from core.plugin_manager import PluginManager as PluginManagerType
+
+def _ast_const(node: ast.AST | None) -> Any:
+    if isinstance(node, ast.Constant):
+        return node.value
+    return None
+
+
+def _ast_str_list(node: ast.AST | None) -> list[str]:
+    if not isinstance(node, (ast.List, ast.Tuple)):
+        return []
+    out: list[str] = []
+    for elt in node.elts:
+        val = _ast_const(elt)
+        if isinstance(val, str):
+            out.append(val)
+    return out
+
+
+def extract_command_meta(source: str, file_path: Path) -> CommandMeta | None:
+    """Command alt sınıfı metadata'sını AST ile çıkarır (exec yok)."""
+    if "Command" not in source:
+        return None
+    try:
+        tree = ast.parse(source, filename=str(file_path))
+    except SyntaxError:
+        return None
+
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        base_names = []
+        for base in node.bases:
+            if isinstance(base, ast.Name):
+                base_names.append(base.id)
+            elif isinstance(base, ast.Attribute):
+                base_names.append(base.attr)
+        if "Command" not in base_names:
+            continue
+
+        fields: dict[str, Any] = {
+            "Name": file_path.stem,
+            "Description": "",
+            "Category": "core",
+            "Aliases": [],
+            "Usage": "",
+            "Examples": [],
+        }
+        for item in node.body:
+            if isinstance(item, ast.Assign):
+                for target in item.targets:
+                    if isinstance(target, ast.Name) and target.id in fields:
+                        if target.id in ("Aliases", "Examples"):
+                            fields[target.id] = _ast_str_list(item.value)
+                        else:
+                            val = _ast_const(item.value)
+                            if isinstance(val, str):
+                                fields[target.id] = val
+            elif isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+                if item.target.id in fields and item.value is not None:
+                    if item.target.id in ("Aliases", "Examples"):
+                        fields[item.target.id] = _ast_str_list(item.value)
+                    else:
+                        val = _ast_const(item.value)
+                        if isinstance(val, str):
+                            fields[item.target.id] = val
+
+        return CommandMeta(
+            name=fields["Name"],
+            description=fields["Description"],
+            category=fields["Category"],
+            aliases=list(fields["Aliases"]),
+            usage=fields["Usage"],
+            examples=list(fields["Examples"]),
+            file_path=str(file_path),
+            class_name=node.name,
+        )
+    return None
+
+
+class CommandStub(Command):
+    """help/completer için hafif stub; execute anında gerçek komut yüklenir."""
+
+    def __init__(self, meta: CommandMeta, manager: CommandManager) -> None:
+        self.Name = meta.name
+        self.Description = meta.description
+        self.Category = meta.category
+        self.Aliases = list(meta.aliases)
+        self.Usage = meta.usage
+        self.Examples = list(meta.examples)
+        self._meta = meta
+        self._manager = manager
+        self._is_stub = True
+        self.shared_state = shared_state
+        self.completer_function = None
+
+    def execute(self, *args: str, **kwargs: Any) -> bool:
+        real = self._manager.ensure_loaded(self.Name)
+        if real is None:
+            print(f"[bold red]Komut yüklenemedi:[/bold red] {self.Name}")
+            return False
+        return bool(real.execute(*args, **kwargs))
+
+    def get_completions(self, text: str, word_before_cursor: str) -> list[str]:
+        real = self._manager.ensure_loaded(self.Name)
+        if real is None:
+            return []
+        return real.get_completions(text, word_before_cursor)
 
 
 class CommandManager:
@@ -177,89 +298,85 @@ class CommandManager:
 
     def load_commands(self) -> None:
         """
-        Commands dizinindeki tüm Python dosyalarını tarar ve bu dosyalardaki
-        Command sınıfından türetilmiş sınıfları bularak yükler.
-
-        Bu metod, Python'un dinamik import yeteneklerini kullanır (importlib),
-        böylece yeni komut dosyaları eklendiğinde ana kodu değiştirmeye gerek kalmaz.
+        Commands dizinindeki komutları AST ile indeksler (lazy load).
+        Gerçek import yalnızca execute / completer sırasında yapılır.
         """
         self.commands.clear()
-
-        # Önce kullanıcı tanımlı aliasları yükle.
-        # Bu işlem komut yüklemesinden önce yapılır, ancak komutlar yüklenirken
-        # alias kontrolleri tekrar yapılabilir.
         self.load_aliases()
 
-        # commands dizinindeki tüm .py dosyalarını gez
         for file_path in self.commands_dir.glob("*.py"):
-            # __init__.py dosyasını atla, o bir komut değildir.
             if file_path.name == "__init__.py":
                 continue
-
-            command_name = (
-                file_path.stem
-            )  # Dosya adını uzantısız (örn: 'list.py' -> 'list') alır
-
             try:
-                # 1. Modül spesifikasyonunu oluştur
-                spec = importlib.util.spec_from_file_location(
-                    command_name, str(file_path)
-                )
-                if spec is None or spec.loader is None:
-                    print(f"Komut spesifikasyonu alınamadı: {file_path}")
+                source = file_path.read_text(encoding="utf-8")
+                meta = extract_command_meta(source, file_path)
+                if meta is None:
                     continue
-
-                # 2. Modülü spesifikasyondan oluştur
-                command_module = importlib.util.module_from_spec(spec)
-
-                # 3. Modülü çalıştır (kodunu execute et)
-                spec.loader.exec_module(command_module)
-
-                # 4. Modül içindeki nesneleri tara
-                for name, obj in command_module.__dict__.items():
-                    # Eğer nesne bir sınıfsa VE Command sınıfından türetilmişse VE Command sınıfının kendisi değilse
-                    if (
-                        isinstance(obj, type)
-                        and issubclass(obj, Command)
-                        and obj is not Command
-                    ):
-                        # Komut sınıfından bir örnek (instance) oluştur.
-                        command_instance = obj()
-
-                        # Komutu yönetici sözlüğüne ekle.
-                        self.commands[command_instance.Name] = command_instance
-
-                        # Built-in alias'ları belleğe ekle; her biri için disk yazma yok.
-                        for alias in command_instance.Aliases:
-                            self.add_alias(
-                                alias, command_instance.Name, persist=False
-                            )
-
-                        break
-
+                key = meta.name.lower()
+                self.commands[key] = CommandStub(meta, self)
+                for alias in meta.aliases:
+                    self.add_alias(alias.lower(), meta.name, persist=False)
             except SyntaxError:
                 print(
                     f"[bold red]Sözdizimi hatası:[/bold red] '{file_path.name}' dosyasında hata var."
                 )
-                logger.exception(f"Komut yüklenirken sözdizimi hatası '{file_path}'")
-            except ImportError as e:
-                print(
-                    f"[bold red]İçe aktarma hatası:[/bold red] '{file_path.name}' - {e}"
-                )
-                logger.exception(f"Komut yüklenirken import hatası '{file_path}'")
-            except AttributeError:
-                print(
-                    f"[bold red]Öznitelik hatası:[/bold red] '{file_path.name}' - Komut sınıfı doğru tanımlanmamış."
-                )
-                logger.exception(f"Komut yüklenirken öznitelik hatası '{file_path}'")
+                logger.exception(f"Komut taranırken sözdizimi hatası '{file_path}'")
             except Exception:
                 print(
-                    f"[bold red]Beklenmeyen hata:[/bold red] '{file_path.name}' yüklenirken hata oluştu."
+                    f"[bold red]Beklenmeyen hata:[/bold red] '{file_path.name}' taranırken hata oluştu."
                 )
-                logger.exception(f"Komut yüklenirken beklenmeyen hata '{file_path}'")
+                logger.exception(f"Komut taranırken beklenmeyen hata '{file_path}'")
 
         self._invalidate_completion_cache()
-        logger.info(f"{len(self.commands)} komut yüklendi")
+        logger.info(f"{len(self.commands)} komut indekslendi")
+
+    def ensure_loaded(self, name: str) -> Command | None:
+        """İsim verilen komutu gerçek sınıf olarak yükler (stub ise)."""
+        key = name.lower()
+        cmd = self.commands.get(key)
+        if cmd is None:
+            return None
+        if not getattr(cmd, "_is_stub", False):
+            return cmd
+
+        meta: CommandMeta = cmd._meta  # type: ignore[attr-defined]
+        file_path = Path(meta.file_path)
+        try:
+            spec = importlib.util.spec_from_file_location(file_path.stem, str(file_path))
+            if spec is None or spec.loader is None:
+                print(f"Komut spesifikasyonu alınamadı: {file_path}")
+                return None
+
+            command_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(command_module)
+
+            command_instance: Command | None = None
+            for _name, obj in command_module.__dict__.items():
+                if (
+                    isinstance(obj, type)
+                    and issubclass(obj, Command)
+                    and obj is not Command
+                    and obj is not CommandStub
+                ):
+                    command_instance = obj()
+                    break
+
+            if command_instance is None:
+                print(f"[bold red]Komut sınıfı bulunamadı:[/bold red] {meta.name}")
+                return None
+
+            self.commands[key] = command_instance
+            for alias in getattr(command_instance, "Aliases", []) or []:
+                self.add_alias(alias.lower(), command_instance.Name, persist=False)
+            self._invalidate_completion_cache()
+            logger.debug(f"Komut yüklendi: {key}")
+            return command_instance
+        except Exception as e:
+            print(
+                f"[bold red]Hata:[/bold red] Komut '{meta.name}' yüklenirken sorun oluştu: {e}"
+            )
+            logger.exception(f"Komut yükleme hatası ({meta.name}): {e}")
+            return None
 
     def resolve_command(self, command_input: str) -> tuple[str | None, bool]:
         """
@@ -273,12 +390,11 @@ class CommandManager:
                 - str: Çözümlenen komutun veya alias'ın hedef değeri. Bulunamazsa None.
                 - bool: True ise bir alias bulundu, False ise doğrudan komut bulundu.
         """
-        if command_input in self.commands:
-            # Doğrudan bir komut adı (örn: 'help')
-            return command_input, False
-        elif command_input in self.aliases:
-            # Bir alias (örn: 'h' -> 'help')
-            return self.aliases[command_input], True
+        key = command_input.lower()
+        if key in self.commands:
+            return key, False
+        elif key in self.aliases:
+            return self.aliases[key], True
 
         return None, False
 

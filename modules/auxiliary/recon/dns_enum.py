@@ -1,6 +1,5 @@
 from typing import Any
 
-import dns.resolver
 from rich import print
 from rich.table import Table
 
@@ -39,6 +38,9 @@ class dns_enum(BaseModule):
             return False
 
         print(f"[bold cyan][*] '{domain}' için DNS kayıtları aranıyor...[/bold cyan]")
+
+        import dns.exception
+        import dns.resolver
 
         record_types = ["A", "MX", "NS", "TXT", "CNAME"]
         table = Table(

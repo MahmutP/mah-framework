@@ -144,19 +144,18 @@ class BaseModule:
     def check_dependencies(self) -> bool:
         """
         Modülün tanımladığı Python ve sistem bağımlılıklarının
-        yüklü olup olmadığını kontrol eder.
-
-        Returns:
-            bool: Tüm bağımlılıklar sağlanmışsa True, eksik varsa False.
+        yüklü olup olmadığını kontrol eder. Sonuç örnek üzerinde cache'lenir.
         """
-        # Python paketi kontrolü
+        cached = getattr(self, "_deps_ok_cache", None)
+        if cached is not None:
+            return cached
+
         python_deps = self.Requirements.get("python", [])
         missing_python = []
         for pkg in python_deps:
             if importlib.util.find_spec(pkg) is None:
                 missing_python.append(pkg)
 
-        # Sistem komutu kontrolü
         system_deps = self.Requirements.get("system", [])
         missing_system = []
         for cmd in system_deps:
@@ -172,4 +171,6 @@ class BaseModule:
                 f"[{self.Name}] Eksik sistem araçları: {', '.join(missing_system)} (apt/brew ile kurun)"
             )
 
-        return len(missing_python) == 0 and len(missing_system) == 0
+        ok = len(missing_python) == 0 and len(missing_system) == 0
+        self._deps_ok_cache = ok
+        return ok

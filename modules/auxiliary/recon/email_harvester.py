@@ -1,7 +1,6 @@
 import re
 from typing import Any
 
-import requests
 from rich import print
 from rich.table import Table
 
@@ -49,6 +48,8 @@ class email_harvester(BaseModule):
         print(
             f"[bold cyan][*] '{url}' üzerinden e-posta taraması yapılıyor...[/bold cyan]"
         )
+
+        import requests
 
         try:
             headers = {

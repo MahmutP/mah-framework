@@ -14,8 +14,6 @@
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
-import requests  # type: ignore
-from bs4 import BeautifulSoup  # type: ignore
 from rich import print
 from rich.console import Console
 from rich.panel import Panel
@@ -24,6 +22,9 @@ from rich.table import Table
 from core import logger
 from core.module import BaseModule
 from core.option import Option
+
+requests = None  # type: ignore[assignment]
+BeautifulSoup = None  # type: ignore[assignment]
 
 
 class web_crawler(BaseModule):
@@ -103,6 +104,16 @@ class web_crawler(BaseModule):
 
     # ── YARDIMCI ─────────────────────────────────────────────────────────────
 
+    def _ensure_http_deps(self) -> None:
+        """requests / bs4 yalnızca çalışma anında yüklenir."""
+        global requests, BeautifulSoup
+        if requests is None:
+            import requests as _requests
+            from bs4 import BeautifulSoup as _BeautifulSoup
+
+            requests = _requests
+            BeautifulSoup = _BeautifulSoup
+
     @staticmethod
     def _same_domain(base_url: str, target_url: str) -> bool:
         """İki URL aynı domain'e mi ait?"""
@@ -116,6 +127,7 @@ class web_crawler(BaseModule):
 
     def _fetch_page(self, url: str, timeout: int, user_agent: str) -> tuple[str, int]:
         """Sayfa HTML içeriğini ve HTTP durum kodunu döner."""
+        self._ensure_http_deps()
         try:
             resp = requests.get(
                 url,
@@ -130,6 +142,7 @@ class web_crawler(BaseModule):
 
     def _extract_links(self, html: str, base_url: str) -> list[str]:
         """HTML'den tüm <a href> linklerini çıkarır."""
+        self._ensure_http_deps()
         links: list[str] = []
         try:
             soup = BeautifulSoup(html, "html.parser")
@@ -145,6 +158,7 @@ class web_crawler(BaseModule):
 
     def _extract_forms(self, html: str, base_url: str) -> list[dict[str, Any]]:
         """HTML'den form bilgilerini çıkarır."""
+        self._ensure_http_deps()
         forms: list[dict[str, Any]] = []
         try:
             soup = BeautifulSoup(html, "html.parser")
@@ -174,6 +188,7 @@ class web_crawler(BaseModule):
 
     def _extract_meta(self, html: str) -> dict[str, str]:
         """HTML'den başlık ve meta etiketlerini çıkarır."""
+        self._ensure_http_deps()
         meta: dict[str, str] = {}
         try:
             soup = BeautifulSoup(html, "html.parser")
@@ -191,6 +206,7 @@ class web_crawler(BaseModule):
 
     def _check_robots(self, base_url: str, timeout: int, user_agent: str) -> list[str]:
         """Robots.txt içeriğini çeker ve disallow kurallarını döner."""
+        self._ensure_http_deps()
         robots_url = urljoin(base_url, "/robots.txt")
         disallows: list[str] = []
         try:

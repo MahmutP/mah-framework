@@ -28,8 +28,6 @@ from prompt_toolkit.styles import Style  # Terminaldeki renk ve stilleri tanıml
 from prompt_toolkit.validation import ValidationError, Validator
 from rich import print
 
-from typing import Any
-
 from core import logger
 from core.command_manager import CommandManager
 from core.completer import CLICompleter  # Özel tamamlama mantığı
@@ -39,6 +37,24 @@ from core.module_manager import ModuleManager
 
 # Framework'ün diğer bileşenleri
 from core.shared_state import shared_state
+
+MAX_HISTORY_LINES = 2000
+_PROMPT_UNSET = object()
+
+
+def _trim_history_file(history_file: str, max_lines: int = MAX_HISTORY_LINES) -> None:
+    """Büyük .mah_history dosyasını son N satıra indirger (prompt gecikmesini keser)."""
+    try:
+        if not os.path.exists(history_file):
+            return
+        with open(history_file, encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
+        if len(lines) <= max_lines:
+            return
+        with open(history_file, "w", encoding="utf-8") as f:
+            f.writelines(lines[-max_lines:])
+    except OSError:
+        pass
 
 
 class CLIValidator(Validator):
@@ -106,9 +122,15 @@ class CLIValidator(Validator):
                     cursor_position=len(text),
                 )
 
-            # Girilen modül yolu geçerli mi kontrol et.
+            # Katalogda var mı bak (lazy load tetikleme — get_module kullanma).
             module_path = args.strip()
-            if not self.module_manager.get_module(module_path):
+            has_module = getattr(self.module_manager, "has_module", None)
+            exists = (
+                has_module(module_path)
+                if callable(has_module)
+                else module_path in self.module_manager.get_all_modules()
+            )
+            if not exists:
                 raise ValidationError(
                     message=f"Hata: '{module_path}' modülü bulunamadı.",
                     cursor_position=len(text),
@@ -138,11 +160,14 @@ class Console:
         self.command_manager = command_manager
         self.module_manager = module_manager
         self._context = context
+        self._prompt_cache_key: Any = _PROMPT_UNSET
+        self._prompt_cache: HTML | None = None
 
         # Komut geçmişini başlat (Kalıcı olarak dosyada tutulur)
         # Framework root dizinini bul (core klasörünün bir üstü)
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         history_file = os.path.join(base_dir, ".mah_history")
+        _trim_history_file(history_file, max_lines=2000)
         self.history = FileHistory(history_file)
 
         # Otomatik tamamlama nesnesini oluştur
@@ -203,20 +228,24 @@ class Console:
     def _get_prompt_string(self) -> HTML:
         """
         Kullanıcıya gösterilecek komut istemi (prompt) metnini dinamik olarak oluşturur.
-        Örnek: 'mahmut (exploit/multi/handler) > '
-
-        Returns:
-            HTML: Biçimlendirilmiş prompt metni.
+        Modül seçimi değişmedikçe cache'lenir.
         """
-        # Eğer bir modül seçiliyse, modül yolunu prompt'ta göster
         selected_module = shared_state.get_selected_module()
+        cache_key = selected_module.Path if selected_module else None
+        if cache_key == self._prompt_cache_key and self._prompt_cache is not None:
+            return self._prompt_cache
+
         if selected_module:
             module_path = selected_module.Path
-            # Modül yolunu kırmızı renkte (<style fg="ansired">) göster
-            return HTML(f'<u>mahmut</u> (<style fg="ansired">{module_path}</style>) > ')
+            prompt = HTML(
+                f'<u>mahmut</u> (<style fg="ansired">{module_path}</style>) > '
+            )
+        else:
+            prompt = HTML("<u>mahmut</u> > ")
 
-        # Modül seçili değilse standart prompt
-        return HTML("<u>mahmut</u> > ")
+        self._prompt_cache_key = cache_key
+        self._prompt_cache = prompt
+        return prompt
 
     def get_terminal_width(self) -> int:
         """

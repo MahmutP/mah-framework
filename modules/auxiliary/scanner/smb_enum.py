@@ -2,7 +2,6 @@ import socket
 from typing import Any
 
 from rich import print
-from smb.SMBConnection import SMBConnection
 
 from core.module import BaseModule
 from core.option import Option
@@ -53,6 +52,8 @@ class smb_enum(BaseModule):
             return False
 
         try:
+            from smb.SMBConnection import SMBConnection
+
             # pysmb kullanarak list shares
             conn = SMBConnection(
                 "", "", "mah-framework", "remote-host", use_ntlm_v2=True

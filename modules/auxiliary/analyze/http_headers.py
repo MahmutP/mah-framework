@@ -1,6 +1,5 @@
 import logging
 
-import requests
 from rich import print
 from rich.table import Table
 
@@ -46,6 +45,8 @@ class HttpHeaderAnalyzer(BaseModule):
         timeout = int(options.get("TIMEOUT"))
 
         print(f"[bold blue][*][/bold blue] Hedef: {target_url} analiz ediliyor...")
+
+        import requests
 
         try:
             # İsteği gönder (HEAD isteği genellikle sadece başlıkları almak için yeterlidir ve daha hızlıdır)

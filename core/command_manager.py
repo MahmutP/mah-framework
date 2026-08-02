@@ -114,7 +114,7 @@ def extract_command_meta(source: str, file_path: Path) -> CommandMeta | None:
 
 
 class CommandStub(Command):
-    """help/completer için hafif stub; execute anında gerçek komut yüklenir."""
+    """help/completer için hafif stub; execute/completer anında gerçek komut yüklenir."""
 
     def __init__(self, meta: CommandMeta, manager: CommandManager) -> None:
         self.Name = meta.name
@@ -127,7 +127,15 @@ class CommandStub(Command):
         self._manager = manager
         self._is_stub = True
         self.shared_state = shared_state
-        self.completer_function = None
+        # CLICompleter önce completer_function truthy mi bakar; stub'da boş olursa
+        # get_completions hiç çağrılmaz ve Tab sessizce çalışmaz.
+        self.completer_function = self._lazy_completer
+
+    def _lazy_completer(self, text: str, word_before_cursor: str) -> list[Any]:
+        real = self._manager.ensure_loaded(self.Name)
+        if real is None:
+            return []
+        return real.get_completions(text, word_before_cursor)
 
     def execute(self, *args: str, **kwargs: Any) -> bool:
         real = self._manager.ensure_loaded(self.Name)
@@ -137,10 +145,7 @@ class CommandStub(Command):
         return bool(real.execute(*args, **kwargs))
 
     def get_completions(self, text: str, word_before_cursor: str) -> list[str]:
-        real = self._manager.ensure_loaded(self.Name)
-        if real is None:
-            return []
-        return real.get_completions(text, word_before_cursor)
+        return self._lazy_completer(text, word_before_cursor)
 
 
 class CommandManager:

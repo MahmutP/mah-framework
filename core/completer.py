@@ -75,31 +75,26 @@ class CLICompleter(Completer):
             )
 
             if resolved_command_name:
-                # Komut nesnesini bul.
-                command_obj: Command | None = (
-                    self.command_manager.get_all_commands().get(resolved_command_name)
-                )
+                # Lazy stub ise önce gerçek komutu yükle (completer_function ancak o zaman gelir).
+                ensure = getattr(self.command_manager, "ensure_loaded", None)
+                if callable(ensure):
+                    command_obj = ensure(resolved_command_name)
+                else:
+                    command_obj = self.command_manager.get_all_commands().get(
+                        resolved_command_name
+                    )
 
-                if command_obj:
-                    # Eğer komutun kendine ait özel bir tamamlama fonksiyonu varsa (completer_function),
-                    # kontrolü o fonksiyona devret. (Örn: 'use' komutu modül yollarını tamamlar)
-                    if command_obj.completer_function:
-                        completions = command_obj.get_completions(
-                            text_before_cursor, document.get_word_before_cursor()
-                        )
-                        for comp in completions:
-                            if isinstance(comp, Completion):
-                                yield comp
-                            else:
-                                # Eğer fonksiyon sadece string listesi döndürdüyse, Completion nesnesine çevir.
-                                word_len = len(document.get_word_before_cursor())
-                                yield Completion(comp, start_position=-word_len)
-                    else:
-                        # Komutun özel bir tamamlayıcısı yoksa bir şey yapma.
-                        pass
-            else:
-                # İlk kelime bilinen bir komut değilse tamamlama yapma.
-                pass
+                if command_obj and command_obj.completer_function:
+                    # Özel tamamlama (örn: 'use' → modül yolları, 'show' → modules/options)
+                    completions = command_obj.get_completions(
+                        text_before_cursor, document.get_word_before_cursor()
+                    )
+                    for comp in completions:
+                        if isinstance(comp, Completion):
+                            yield comp
+                        else:
+                            word_len = len(document.get_word_before_cursor())
+                            yield Completion(comp, start_position=-word_len)
 
     def _get_command_completions(self, current_word: str) -> Iterable[Completion]:
         """

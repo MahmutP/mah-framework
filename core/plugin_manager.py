@@ -160,7 +160,7 @@ class PluginManager:
 
                         # Eğer plugin varsayılan olarak aktifse, hook'larını sisteme kaydet.
                         if plugin_instance.Enabled:
-                            self._register_hooks(plugin_instance)
+                            self._register_hooks(plugin_instance, sort_now=False)
 
                         # POST_PLUGIN_LOAD hook tetikle
                         self.trigger_hook(
@@ -181,25 +181,26 @@ class PluginManager:
             except Exception:
                 logger.exception(f"Plugin yüklenirken beklenmeyen hata '{file_path}'")
 
+        # Tüm kayıtlar bittikten sonra hook listelerini bir kez sırala
+        for hook_type in self.hooks:
+            self.hooks[hook_type].sort(key=lambda x: x[0])
+
         logger.info(f"{len(self.plugins)} plugin yüklendi")
 
-    def _register_hooks(self, plugin: BasePlugin) -> None:
+    def _register_hooks(self, plugin: BasePlugin, *, sort_now: bool = True) -> None:
         """
         Bir eklentinin dinlemek istediği olayları (hook'ları) sisteme kaydeder.
 
         Args:
             plugin: Kaydedilecek eklenti nesnesi.
+            sort_now: False ise sıralamayı çağırana bırakır (toplu yükleme).
         """
-        # Eklentiden dinleyeceği hook'ları al.
         plugin_hooks = plugin.get_hooks()
 
         for hook_type, handler in plugin_hooks.items():
-            # (Öncelik, İşleyici Fonksiyon) şeklinde listeye ekle.
             self.hooks[hook_type].append((plugin.Priority, handler))
-
-            # Öncelik değerine (Priority) göre listeyi sırala.
-            # Düşük sayı (örn: 10) = Yüksek Öncelik (Listenin başında yer alır).
-            self.hooks[hook_type].sort(key=lambda x: x[0])
+            if sort_now:
+                self.hooks[hook_type].sort(key=lambda x: x[0])
 
     def _unregister_hooks(self, plugin: BasePlugin) -> None:
         """

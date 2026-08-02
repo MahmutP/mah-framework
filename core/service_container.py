@@ -74,26 +74,34 @@ class ServiceContainer:
         Raises:
             KeyError: Servis kayıtlı değilse.
         """
+        # Factory çağrılarını kilit dışında yap (reentrant deadlock önlemi).
+        factory: Callable[[], Any] | None = None
+        is_singleton = False
+
         with self._lock:
-            # 1. Doğrudan instance
             if service_type in self._services:
                 return self._services[service_type]
 
-            # 2. Singleton factory
             if service_type in self._singletons:
                 factory = self._singletons[service_type]
-                instance = factory()
-                # Cache'e taşı (bir sonraki çağrılarda doğrudan instance olarak dönsün)
-                self._services[service_type] = instance
-                del self._singletons[service_type]
-                return instance
-
-            # 3. Transient factory
-            if service_type in self._factories:
+                is_singleton = True
+            elif service_type in self._factories:
                 factory = self._factories[service_type]
-                return factory()
+            else:
+                raise KeyError(f"Servis bulunamadı: {service_type}")
 
-            raise KeyError(f"Servis bulunamadı: {service_type}")
+        assert factory is not None
+        instance = factory()
+
+        if is_singleton:
+            with self._lock:
+                # Başka thread önce oluşturduysa onu kullan
+                if service_type in self._services:
+                    return self._services[service_type]
+                self._services[service_type] = instance
+                self._singletons.pop(service_type, None)
+
+        return instance
 
     def try_resolve(self, service_type: type[T]) -> T | None:
         """

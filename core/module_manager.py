@@ -2,29 +2,172 @@
 # Bu modül, sistemdeki tüm modüllerin (exploit, scanner vb.) bulunmasını, yüklenmesini,
 # yönetilmesini ve çalıştırılmasını sağlar. Ayrıca eklenti (plugin) sistemiyle entegre çalışır.
 
+from __future__ import annotations
+
+import ast
+import hashlib
 import importlib.util
+import json
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
 from rich import print
 
 from core import logger
-from core.code_scanner import print_scan_report, scan_file
+from core.code_scanner import print_scan_report, scan_source
 from core.hooks import HookType
 from core.module import BaseModule
 from core.plugin_manager import PluginManager as PluginManagerType
 from core.shared_state import shared_state
 from core.validation_pipeline import ValidationPipeline, print_validation_report
 
+MANIFEST_VERSION = 1
+DEFAULT_MANIFEST_PATH = Path("config/module_manifest.json")
+
+# Seçilebilir framework modülü olmayan destek dosya adları (yine de BaseModule varsa yüklenir).
+_SUPPORT_FILENAMES = frozenset(
+    {"agent.py", "__init__.py", "conftest.py"}
+)
+
+
+@dataclass
+class ModuleMeta:
+    """Disk keşfinden gelen hafif modül meta verisi (exec olmadan)."""
+
+    path: str
+    file_path: str
+    name: str
+    description: str
+    author: str
+    category: str
+    mtime_ns: int
+    size: int
+    content_hash: str
+    class_name: str
+    scan_ok: bool = True
+
+
+class ModuleStub(BaseModule):
+    """show/search için hafif stub; gerçek kod get_module ile yüklenir."""
+
+    def __init__(self, meta: ModuleMeta) -> None:
+        self.Name = meta.name
+        self.Description = meta.description
+        self.Author = meta.author
+        self.Category = meta.category or "uncategorized"
+        self.Path = meta.path
+        self.Options = {}
+        self._meta = meta
+        self._is_stub = True
+        super().__init__()
+
+    def run(self, options: dict[str, Any]) -> bool:
+        raise RuntimeError(f"Modül henüz yüklenmedi: {self.Path}")
+
+
+def _ast_str(node: ast.AST | None) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
+
+
+def _base_names(bases: list[ast.expr]) -> list[str]:
+    names: list[str] = []
+    for base in bases:
+        if isinstance(base, ast.Name):
+            names.append(base.id)
+        elif isinstance(base, ast.Attribute):
+            names.append(base.attr)
+    return names
+
+
+def extract_module_meta_from_source(
+    source: str, module_path: str, file_path: Path, mtime_ns: int, size: int
+) -> ModuleMeta | None:
+    """Kaynak koddan BaseModule alt sınıfı ve metadata çıkarır (exec yok)."""
+    if "BaseModule" not in source:
+        return None
+
+    # Saf template dosyaları (generator değilse) atla
+    if "{{" in source and "}}" in source and "class " not in source:
+        return None
+
+    try:
+        tree = ast.parse(source, filename=str(file_path))
+    except SyntaxError:
+        return None
+
+    content_hash = hashlib.sha256(source.encode("utf-8", errors="ignore")).hexdigest()
+
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        if "BaseModule" not in _base_names(node.bases):
+            continue
+
+        fields = {
+            "Name": None,
+            "Description": None,
+            "Author": "Unknown",
+            "Category": "uncategorized",
+        }
+
+        for item in node.body:
+            if isinstance(item, ast.Assign):
+                for target in item.targets:
+                    if isinstance(target, ast.Name) and target.id in fields:
+                        value = _ast_str(item.value)
+                        if value is not None:
+                            fields[target.id] = value
+            elif isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+                if item.target.id in fields and item.value is not None:
+                    value = _ast_str(item.value)
+                    if value is not None:
+                        fields[item.target.id] = value
+            elif isinstance(item, ast.FunctionDef) and item.name == "__init__":
+                for stmt in item.body:
+                    if not isinstance(stmt, ast.Assign):
+                        continue
+                    for target in stmt.targets:
+                        if (
+                            isinstance(target, ast.Attribute)
+                            and isinstance(target.value, ast.Name)
+                            and target.value.id == "self"
+                            and target.attr in fields
+                        ):
+                            value = _ast_str(stmt.value)
+                            if value is not None:
+                                fields[target.attr] = value
+
+        name = fields["Name"] or Path(module_path).name
+        description = fields["Description"] or ""
+        author = fields["Author"] or "Unknown"
+        category = fields["Category"] or "uncategorized"
+
+        return ModuleMeta(
+            path=module_path,
+            file_path=str(file_path),
+            name=name,
+            description=description,
+            author=author,
+            category=category,
+            mtime_ns=mtime_ns,
+            size=size,
+            content_hash=content_hash,
+            class_name=node.name,
+            scan_ok=True,
+        )
+
+    return None
+
 
 class ModuleManager:
     """
     Modül Yönetim Sınıfı.
 
-    Görevleri:
-    1. Belirtilen dizindeki tüm Python dosyalarını taramak.
-    2. Bu dosyaları modül olarak yüklemek ve hafızada tutmak.
-    3. Kullanıcı talebine göre modülleri bulmak, bilgilerini getirmek ve çalıştırmak.
+    Açılışta dosyaları AST ile indeksler (lazy catalog); gerçek import
+    yalnızca use/run/info sırasında yapılır.
     """
 
     def __init__(
@@ -34,19 +177,11 @@ class ModuleManager:
         context: Any = None,
         use_validation_pipeline: bool = False,
         restricted_exec: bool = False,
+        manifest_path: str | Path | None = None,
     ) -> None:
-        """
-        ModuleManager başlatıcı.
-
-        Args:
-            modules_dir (str, optional): Modüllerin aranacağı kök dizin. Varsayılan: "modules".
-            plugin_manager (PluginManager | None, optional): DI ile enjekte edilen plugin yöneticisi.
-            context (Any, optional): AppContext örneği (DI için).
-            use_validation_pipeline (bool): Validation pipeline kullanılsın mı.
-            restricted_exec (bool): Güvenilmeyen modüller için kısıtlı çalıştırma.
-        """
         self.modules_dir = Path(modules_dir)
         self.modules: dict[str, BaseModule] = {}
+        self._catalog: dict[str, ModuleMeta] = {}
         self._plugin_manager = plugin_manager
         self._context = context
         self.use_validation_pipeline = use_validation_pipeline
@@ -54,10 +189,11 @@ class ModuleManager:
         self._validation_pipeline: ValidationPipeline | None = (
             ValidationPipeline() if use_validation_pipeline else None
         )
+        self.manifest_path = Path(manifest_path) if manifest_path else DEFAULT_MANIFEST_PATH
+        self._module_paths_cache: list[str] | None = None
 
     @property
     def plugin_manager(self):
-        """Plugin manager referansını döndürür (DI veya shared_state fallback)."""
         if self._plugin_manager:
             return self._plugin_manager
         if self._context and self._context.plugin_manager:
@@ -68,396 +204,387 @@ class ModuleManager:
     def plugin_manager(self, value):
         self._plugin_manager = value
 
-    def load_modules(self) -> None:
-        """
-        Tüm modülleri diskten okuyup belleğe yükleyen ana metod.
-        Bu işlem genellikle uygulama başlangıcında veya 'reload' komutuyla yapılır.
-        """
-        self.modules.clear()  # Önceki yüklemeleri temizle (reload desteği için)
+    def _invalidate_path_cache(self) -> None:
+        self._module_paths_cache = None
 
-        # rglob('*.py') ile tüm alt klasörlerdeki .py dosyalarını özyineli (recursive) olarak bul.
+    def get_module_paths(self) -> list[str]:
+        """Sıralı modül yolu listesi (completer cache)."""
+        if self._module_paths_cache is None:
+            self._module_paths_cache = sorted(self.modules.keys())
+        return self._module_paths_cache
+
+    def _load_manifest(self) -> dict[str, ModuleMeta]:
+        if not self.manifest_path.exists():
+            return {}
+        try:
+            with open(self.manifest_path, encoding="utf-8") as f:
+                data = json.load(f)
+            if data.get("version") != MANIFEST_VERSION:
+                return {}
+            entries: dict[str, ModuleMeta] = {}
+            for path, raw in data.get("entries", {}).items():
+                entries[path] = ModuleMeta(**raw)
+            return entries
+        except Exception:
+            logger.debug("Modül manifest okunamadı; yeniden oluşturulacak")
+            return {}
+
+    def _save_manifest(self) -> None:
+        try:
+            self.manifest_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "version": MANIFEST_VERSION,
+                "entries": {path: asdict(meta) for path, meta in self._catalog.items()},
+            }
+            tmp = self.manifest_path.with_suffix(".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2, ensure_ascii=False)
+            tmp.replace(self.manifest_path)
+        except Exception:
+            logger.debug("Modül manifest yazılamadı")
+
+    def _module_id_for_file(self, file_path: Path) -> str:
+        relative_path = file_path.relative_to(self.modules_dir)
+        module_id = relative_path.with_suffix("").as_posix()
+        if "/" not in module_id:
+            module_id = f"uncategorized/{module_id}"
+        return module_id
+
+    def _should_skip_file(self, file_path: Path) -> bool:
+        if file_path.name in _SUPPORT_FILENAMES:
+            return True
+        if "examples" in file_path.parts:
+            return True
+        return False
+
+    def load_modules(self) -> None:
+        """Modül kataloğunu diskten oluşturur (lazy; exec yok)."""
+        self.modules.clear()
+        self._catalog.clear()
+        self._invalidate_path_cache()
+
+        cached = self._load_manifest()
+        plugin_mgr = self.plugin_manager
+
         for file_path in self.modules_dir.rglob("*.py"):
-            # __init__.py dosyaları Python paket dosyalarıdır, modül değildir. Atla.
-            if file_path.name == "__init__.py":
+            if self._should_skip_file(file_path):
                 continue
 
-            # Şablon (Template) dosyalarını kontrol et.
-            # Bazı payload oluşturucular, içinde {{DEGISKEN}} barındıran şablon dosyaları kullanır.
-            # Bunlar geçerli Python kodu olmayabilir veya doğrudan çalıştırılmaması gerekir.
             try:
-                content = file_path.read_text(encoding="utf-8", errors="ignore")
-                if "{{" in content and "}}" in content:
-                    # Dosya BaseModule alt sınıfı tanımlıyorsa (örn: payload generator), modül olarak yükle.
-                    if "BaseModule" not in content:
-                        logger.debug(f"Template dosyası atlandı: {file_path}")
-                        continue
-                    else:
-                        logger.debug(
-                            f"Template içeren modül dosyası yükleniyor: {file_path}"
-                        )
-            except Exception:
-                pass  # Dosya okuma hatası olursa (izin vb.) yoksay ve devam et.
+                stat = file_path.stat()
+            except OSError:
+                continue
 
-            # Modülün bağıl yolunu (relative path) hesapla.
-            # Örn: /full/path/to/modules/exploit/linux/overflow.py -> exploit/linux/overflow.py
-            relative_path = file_path.relative_to(self.modules_dir)
+            module_id = self._module_id_for_file(file_path)
+            cached_meta = cached.get(module_id)
 
-            # Dosya uzantısını (.py) kaldır ve dizin ayırıcılarını POSIX formatına (/) çevir.
-            # Bu, modülün framework içindeki benzersiz kimliği (ID) olacaktır.
-            # Örn: exploit/linux/overflow
-            module_name_for_dict = relative_path.with_suffix("").as_posix()
+            if (
+                cached_meta
+                and cached_meta.mtime_ns == stat.st_mtime_ns
+                and cached_meta.size == stat.st_size
+            ):
+                meta = cached_meta
+                meta.file_path = str(file_path)
+            else:
+                try:
+                    source = file_path.read_text(encoding="utf-8", errors="ignore")
+                except OSError:
+                    continue
 
-            # Eğer modül kök dizindeyse (hiç / yoksa), 'uncategorized' kategorisine at.
-            if "/" not in module_name_for_dict:
-                module_name_for_dict = f"uncategorized/{module_name_for_dict}"
+                meta = extract_module_meta_from_source(
+                    source,
+                    module_id,
+                    file_path,
+                    stat.st_mtime_ns,
+                    stat.st_size,
+                )
+                if meta is None:
+                    continue
 
-            try:
-                # PRE_MODULE_LOAD hook tetikle
-                if self.plugin_manager:
-                    self.plugin_manager.trigger_hook(
-                        HookType.PRE_MODULE_LOAD,
-                        module_path=module_name_for_dict,
-                        file_path=str(file_path),
-                    )
-
-                # 1. Validation Pipeline (opsiyonel)
                 is_payload = "payloads" in file_path.parts
-                if not is_payload and self._validation_pipeline:
-                    vresult = self._validation_pipeline.validate_module_file(
-                        str(file_path), strict_scan=False, sandbox=self.restricted_exec
-                    )
-                    if not vresult.is_valid:
-                        print(
-                            f"[bold red]✗ Doğrulama hatası:[/bold red] '{file_path.name}'"
-                        )
-                        print_validation_report(vresult)
-                        continue
-
-                # 2. AST tabanlı statik güvenlik taraması (payload dosyaları hedef kodudur, atlanır).
                 if not is_payload:
-                    scan_result = scan_file(str(file_path), strict=False)
+                    scan_result = scan_source(source, str(file_path), strict=False)
+                    meta.scan_ok = scan_result.is_safe
                     if not scan_result.is_safe:
                         print(
                             f"[bold yellow]⚠ Güvenlik uyarısı:[/bold yellow] '{file_path.name}'"
                         )
                         print_scan_report(scan_result)
 
-                # 3. Python'un import mekanizmasını kullanarak dosyadan modül spesifikasyonu oluştur.
-                spec = importlib.util.spec_from_file_location(
-                    module_name_for_dict, str(file_path)
+            if plugin_mgr:
+                plugin_mgr.trigger_hook(
+                    HookType.PRE_MODULE_LOAD,
+                    module_path=module_id,
+                    file_path=str(file_path),
                 )
-                if spec is None or spec.loader is None:
-                    print(f"Modül spesifikasyonu alınamadı: {file_path}")
-                    continue
 
-                # 4. Modülü spesifikasyondan oluştur (Henüz kod çalıştırılmadı).
-                module = importlib.util.module_from_spec(spec)
+            stub = ModuleStub(meta)
+            self._catalog[module_id] = meta
+            self.modules[module_id] = stub
 
-                # 5. Modül kodunu çalıştır (Class tanımları belleğe yüklenir).
-                if self.restricted_exec and not is_payload:
-                    with open(file_path, encoding="utf-8", errors="ignore") as f:
-                        source = f.read()
-                    sandbox = self._validation_pipeline.sandbox if self._validation_pipeline else None
-                    if sandbox:
-                        restricted_module = sandbox.exec_module_restricted(
-                            source, str(file_path)
+            if plugin_mgr:
+                plugin_mgr.trigger_hook(
+                    HookType.POST_MODULE_LOAD,
+                    module_path=module_id,
+                    module=stub,
+                )
+
+        self._save_manifest()
+        self._invalidate_path_cache()
+        logger.info(f"{len(self.modules)} modül indekslendi (lazy)")
+
+    def _instantiate_from_file(self, module_path: str, file_path: Path) -> BaseModule | None:
+        """Dosyayı import edip BaseModule örneği oluşturur."""
+        is_payload = "payloads" in file_path.parts
+
+        if plugin_mgr := self.plugin_manager:
+            plugin_mgr.trigger_hook(
+                HookType.PRE_MODULE_LOAD,
+                module_path=module_path,
+                file_path=str(file_path),
+            )
+
+        try:
+            source = file_path.read_text(encoding="utf-8", errors="ignore")
+        except OSError as e:
+            print(f"[bold red]Dosya okunamadı:[/bold red] {file_path} ({e})")
+            return None
+
+        if not is_payload and self._validation_pipeline:
+            # Validation pipeline dosyayı kendi okur; keşifte zaten tarandı.
+            vresult = self._validation_pipeline.validate_module_file(
+                str(file_path), strict_scan=False, sandbox=self.restricted_exec
+            )
+            if not vresult.is_valid:
+                print(f"[bold red]✗ Doğrulama hatası:[/bold red] '{file_path.name}'")
+                print_validation_report(vresult)
+                return None
+
+        try:
+            spec = importlib.util.spec_from_file_location(module_path, str(file_path))
+            if spec is None or spec.loader is None:
+                print(f"Modül spesifikasyonu alınamadı: {file_path}")
+                return None
+
+            module = importlib.util.module_from_spec(spec)
+
+            if self.restricted_exec and not is_payload:
+                sandbox = (
+                    self._validation_pipeline.sandbox
+                    if self._validation_pipeline
+                    else None
+                )
+                if sandbox:
+                    restricted_module = sandbox.exec_module_restricted(
+                        source, str(file_path)
+                    )
+                    if restricted_module is None:
+                        print(
+                            f"[bold red]✗ Kısıtlı çalıştırma hatası:[/bold red] '{file_path.name}'"
                         )
-                        if restricted_module is None:
-                            print(
-                                f"[bold red]✗ Kısıtlı çalıştırma hatası:[/bold red] '{file_path.name}'"
-                            )
-                            continue
-                        module.__dict__.update(restricted_module.__dict__)
-                    else:
-                        spec.loader.exec_module(module)
+                        return None
+                    module.__dict__.update(restricted_module.__dict__)
                 else:
                     spec.loader.exec_module(module)
+            else:
+                spec.loader.exec_module(module)
 
-                # 6. Modül içindeki sınıfları tara ve BaseModule türevi olanı bul.
-                for name, obj in module.__dict__.items():
-                    # BaseModule'den türetilmiş OLACAK ama BaseModule'ün kendisi OLMAYACAK.
+            for _name, obj in module.__dict__.items():
+                if (
+                    isinstance(obj, type)
+                    and issubclass(obj, BaseModule)
+                    and obj is not BaseModule
+                    and obj is not ModuleStub
+                ):
+                    module_instance = obj()
+                    if not module_instance.Category:
+                        module_instance.Category = "uncategorized"
+                    module_instance.Path = module_path
+
                     if (
-                        isinstance(obj, type)
-                        and issubclass(obj, BaseModule)
-                        and obj is not BaseModule
+                        module_instance.Name == "Default Module Name"
+                        or not module_instance.Description
+                        or module_instance.Description == "description for module"
                     ):
-                        # Sınıftan bir örnek (instance) oluştur.
-                        module_instance = obj()
+                        logger.warning(
+                            f"Modül metadata değerleri varsayılan veya eksik: {file_path}."
+                        )
 
-                        # Kategori tanımlanmamışsa varsayılanı ata.
-                        if not module_instance.Category:
-                            module_instance.Category = "uncategorized"
+                    if self.plugin_manager:
+                        self.plugin_manager.trigger_hook(
+                            HookType.POST_MODULE_LOAD,
+                            module_path=module_path,
+                            module=module_instance,
+                        )
+                    return module_instance
 
-                        # Modülün diskteki yolunu nesneye kaydet (Referans için).
-                        module_instance.Path = module_name_for_dict
+        except SyntaxError:
+            print(
+                f"[bold red]Sözdizimi hatası:[/bold red] '{file_path.name}' dosyasında hata var."
+            )
+            logger.exception(f"Modül yüklenirken sözdizimi hatası '{file_path}'")
+        except ImportError as e:
+            print(
+                f"[bold red]İçe aktarma hatası:[/bold red] '{file_path.name}' - {e}"
+            )
+            logger.exception(f"Modül yüklenirken import hatası '{file_path}'")
+        except AttributeError:
+            print(
+                f"[bold red]Öznitelik hatası:[/bold red] '{file_path.name}' - Modül sınıfı doğru tanımlanmamış."
+            )
+            logger.exception(f"Modül yüklenirken öznitelik hatası '{file_path}'")
+        except Exception:
+            print(
+                f"[bold red]Beklenmeyen hata:[/bold red] '{file_path.name}' yüklenirken hata oluştu."
+            )
+            logger.exception(f"Modül yüklenirken beklenmeyen hata '{file_path}'")
 
-                        # Modülün adını (module_instance.Name) elle değiştirmiyoruz,
-                        # sınıf içinde tanımlanan 'Name' özelliğini kullanıyoruz.
+        return None
 
-                        # --- ZORUNLU METADATA KONTROLÜ ---
-                        if (
-                            module_instance.Name == "Default Module Name"
-                            or not module_instance.Description
-                            or module_instance.Description == "description for module"
-                        ):
-                            logger.warning(
-                                f"Modül metadata değerleri varsayılan veya eksik: {file_path}. Lütfen (Name, Description) alanlarını güncelleyin."
-                            )
+    def ensure_loaded(self, module_path: str) -> BaseModule | None:
+        """Stub ise gerçek modülü yükler ve cache'ler."""
+        current = self.modules.get(module_path)
+        if current is not None and not getattr(current, "_is_stub", False):
+            return current
 
-                        self.modules[module_name_for_dict] = module_instance
+        meta = self._catalog.get(module_path)
+        if meta is not None:
+            file_path = Path(meta.file_path)
+        else:
+            file_path = self.modules_dir / f"{module_path}.py"
+            if not file_path.exists() and module_path.startswith("uncategorized/"):
+                file_path = self.modules_dir / f"{module_path.split('/', 1)[1]}.py"
 
-                        # POST_MODULE_LOAD hook tetikle
-                        if self.plugin_manager:
-                            self.plugin_manager.trigger_hook(
-                                HookType.POST_MODULE_LOAD,
-                                module_path=module_name_for_dict,
-                                module=module_instance,
-                            )
+        if not file_path.exists():
+            return None
 
-                        break  # Bir dosyada bir modül sınıfı bekliyoruz, bulduktan sonra çık.
+        instance = self._instantiate_from_file(module_path, file_path)
+        if instance is None:
+            return None
 
-            except SyntaxError:
-                # Modül kodunda yazım hatası varsa
-                print(
-                    f"[bold red]Sözdizimi hatası:[/bold red] '{file_path.name}' dosyasında hata var."
-                )
-                logger.exception(f"Modül yüklenirken sözdizimi hatası '{file_path}'")
-            except ImportError as e:
-                # Modülün bağımlılıkları eksikse
-                print(
-                    f"[bold red]İçe aktarma hatası:[/bold red] '{file_path.name}' - {e}"
-                )
-                logger.exception(f"Modül yüklenirken import hatası '{file_path}'")
-            except AttributeError:
-                # Modül sınıfı eksik veya hatalı tanımlanmışsa
-                print(
-                    f"[bold red]Öznitelik hatası:[/bold red] '{file_path.name}' - Modül sınıfı doğru tanımlanmamış."
-                )
-                logger.exception(f"Modül yüklenirken öznitelik hatası '{file_path}'")
-            except Exception:
-                # Diğer tüm hatalar
-                print(
-                    f"[bold red]Beklenmeyen hata:[/bold red] '{file_path.name}' yüklenirken hata oluştu."
-                )
-                logger.exception(f"Modül yüklenirken beklenmeyen hata '{file_path}'")
-
-        logger.info(f"{len(self.modules)} modül yüklendi")
+        self.modules[module_path] = instance
+        return instance
 
     def reload_module(self, module_path: str) -> bool:
-        """
-        Belirtilen modülü diskten okuyup yeniden belleğe yükler. (Hot-Reload)
-        Geliştiricinin framework kapatmadan güncellemeleri görmesini sağlar.
-        """
-        # Daha önce yüklü bir modül ise objesini sil.
-        if module_path in self.modules:
-            del self.modules[module_path]
+        """Belirtilen modülü diskten yeniden yükler (hot-reload)."""
+        self.modules.pop(module_path, None)
+        self._catalog.pop(module_path, None)
 
         full_path = self.modules_dir / f"{module_path}.py"
-
         if not full_path.exists():
             print(f"[bold red]Modül dosyası bulunamadı:[/bold red] {full_path}")
             return False
 
         try:
-            spec = importlib.util.spec_from_file_location(module_path, str(full_path))
-            if spec is None or spec.loader is None:
-                print(f"Modül spesifikasyonu alınamadı: {full_path}")
-                return False
+            source = full_path.read_text(encoding="utf-8", errors="ignore")
+            stat = full_path.stat()
+            meta = extract_module_meta_from_source(
+                source, module_path, full_path, stat.st_mtime_ns, stat.st_size
+            )
+            if meta:
+                self._catalog[module_path] = meta
+                self._save_manifest()
+        except OSError:
+            pass
 
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+        instance = self._instantiate_from_file(module_path, full_path)
+        if instance is None:
+            return False
 
-            for name, obj in module.__dict__.items():
-                if (
-                    isinstance(obj, type)
-                    and issubclass(obj, BaseModule)
-                    and obj is not BaseModule
-                ):
-                    module_instance = obj()
-
-                    if not module_instance.Category:
-                        module_instance.Category = "uncategorized"
-
-                    module_instance.Path = module_path
-                    self.modules[module_path] = module_instance
-
-                    logger.info(f"Modül başarıyla yeniden yüklendi: {module_path}")
-                    return True
-
-        except Exception as e:
-            logger.exception(f"Modül yeniden yüklenirken hata: {full_path}")
-            print(f"[bold red]Reload hatası:[/bold red] {e}")
-
-        return False
+        self.modules[module_path] = instance
+        self._invalidate_path_cache()
+        logger.info(f"Modül başarıyla yeniden yüklendi: {module_path}")
+        return True
 
     def get_module(self, module_path: str) -> BaseModule | None:
-        """
-        Verilen yol (path) ile eşleşen modül nesnesini döndürür.
-
-        Args:
-            module_path (str): Modülün yolu (örn: exploit/linux/ssh_brute).
-
-        Returns:
-            Optional[BaseModule]: Modül nesnesi veya bulunamazsa None.
-        """
-        return self.modules.get(module_path)
+        """Verilen yol ile eşleşen modülü döndürür (gerekirse lazy load)."""
+        if module_path not in self.modules and module_path not in self._catalog:
+            return None
+        return self.ensure_loaded(module_path)
 
     def get_all_modules(self) -> dict[str, BaseModule]:
-        """
-        Yüklü tüm modülleri döndürür.
-
-        Returns:
-            Dict[str, BaseModule]: Modül Yolu -> Modül Nesnesi sözlüğü.
-        """
+        """Katalogdaki tüm modülleri döndürür (stub veya loaded)."""
         return self.modules
 
     def get_modules_by_category(self) -> dict[str, dict[str, BaseModule]]:
-        """
-        Modülleri kategorilerine göre gruplayarak döndürür.
-        'show' veya 'search' komutlarında listeleme yapmak için kullanılır.
-
-        Returns:
-            Dict[str, Dict[str, BaseModule]]: Kategori Adı -> (Modül Yolu -> Modül Nesnesi)
-        """
         categorized_modules: dict[str, dict[str, BaseModule]] = {}
         for module_path, module_obj in self.modules.items():
-            # Kategori adının baş harfini büyüt (Görsellik için).
             category = module_obj.Category.capitalize()
-
             if category not in categorized_modules:
                 categorized_modules[category] = {}
-
             categorized_modules[category][module_path] = module_obj
-
         return categorized_modules
 
     def run_module(self, module_path: str) -> bool:
-        """
-        Belirtilen modülü çalıştırır (Execute).
-        Bu metod, modül çalıştırma sürecinin (Lifecycle) tamamını yönetir:
-        1. Modülü bulur.
-        2. Zorunlu seçeneklerin (Options) dolu olup olmadığını kontrol eder.
-        3. Pre-run hook'larını tetikler.
-        4. Modüle seçenekleri geçirir ve çalıştırır.
-        5. Post-run hook'larını tetikler.
-        6. Hataları yakalar.
-
-        Args:
-            module_path (str): Çalıştırılacak modülün yolu.
-
-        Returns:
-            bool: Modül başarıyla tamamlandıysa True, hata aldıysa False.
-        """
         module = self.get_module(module_path)
 
-        # Modül yoksa hata ver ve çık.
         if not module:
             print(f"Modül bulunamadı: {module_path}")
             logger.warning(f"Modül bulunamadı: {module_path}")
             return False
 
-        # Zorunlu seçenekler (Required Options) kontrolü.
         if not module.check_required_options():
             logger.warning(f"Modül çalıştırılamadı (eksik seçenekler): {module_path}")
             return False
 
-        # Zorunlu Bağımlılık (Requirements) kontrolü.
         if not module.check_dependencies():
             logger.warning(
                 f"Modül çalıştırılamadı (eksik bağımlılıklar): {module_path}"
             )
             return False
 
-        # Modül çalışmadan ÖNCE (PRE_MODULE_RUN) eklenti hook'unu tetikle.
-        # Bu, eklentilerin araya girip doğrulama yapmasına veya çalıştırmayı engellemesine izin verir.
-        if self.plugin_manager:
-            self.plugin_manager.trigger_hook(
+        plugin_mgr = self.plugin_manager
+        if plugin_mgr:
+            plugin_mgr.trigger_hook(
                 HookType.PRE_MODULE_RUN, module_path=module_path, module=module
             )
 
+        success = False
         try:
-            # Modül seçeneklerinin SADECE değerlerini içeren temiz bir sözlük oluştur.
-            # Modülün run metodu Option nesnelerine değil, doğrudan değerlere ihtiyaç duyar.
             current_options = {
                 name: opt.value for name, opt in module.get_options().items()
             }
-
             logger.info(f"Modül çalıştırılıyor: {module_path}")
-
-            # --- MODÜLÜN ASIL ÇALIŞTIĞI YER ---
             module.run(current_options)
-            # ----------------------------------
-
-            # Modül çalıştıktan SONRA (POST_MODULE_RUN) başarılı hook'unu tetikle.
-            if self.plugin_manager:
-                self.plugin_manager.trigger_hook(
-                    HookType.POST_MODULE_RUN,
-                    module_path=module_path,
-                    module=module,
-                    success=True,
-                )
+            success = True
             return True
 
         except TypeError:
-            # Modüle yanlış tipte veya sayıda argüman giderse.
             print(
                 "[bold red]Argüman hatası:[/bold red] Modüle yanlış seçenek değeri verildi."
             )
             logger.exception(f"Modül '{module_path}' çalıştırılırken TypeError")
-
-            # Hata durumunda hook tetikle.
-            if self.plugin_manager:
-                self.plugin_manager.trigger_hook(
-                    HookType.POST_MODULE_RUN,
-                    module_path=module_path,
-                    module=module,
-                    success=False,
-                )
             return False
 
         except KeyboardInterrupt:
-            # Kullanıcı Ctrl+C ile modülü durdurursa.
             print("\nModül çalışması kullanıcı tarafından kesildi.")
             logger.info(f"Modül '{module_path}' kullanıcı tarafından kesildi")
-
-            if self.plugin_manager:
-                self.plugin_manager.trigger_hook(
-                    HookType.POST_MODULE_RUN,
-                    module_path=module_path,
-                    module=module,
-                    success=False,
-                )
             return False
 
         except Exception:
-            # Modül içinde herhangi bir beklenmedik hata oluşursa.
-            # Modül geliştiricisi hatayı yakalamamış olabilir, framework çökmümemeli.
             print(
                 f"[bold red]Kritik hata:[/bold red] '{module_path}' çalıştırılırken beklenmeyen hata."
             )
             logger.exception(f"Modül '{module_path}' çalıştırılırken beklenmeyen hata")
+            return False
 
-            if self.plugin_manager:
-                self.plugin_manager.trigger_hook(
+        finally:
+            if plugin_mgr:
+                plugin_mgr.trigger_hook(
                     HookType.POST_MODULE_RUN,
                     module_path=module_path,
                     module=module,
-                    success=False,
+                    success=success,
                 )
-            return False
 
     def get_module_info(self, module_path: str) -> tuple[str, str, str, str] | None:
-        """
-        Belirtilen modülün temel bilgilerini (metadata) döndürür.
-        'info' veya 'search' komutları tarafından kullanılır.
-
-        Args:
-            module_path (str): Modül yolu.
-
-        Returns:
-            Optional[Tuple[str, str, str, str]]: (Ad, Açıklama, Yazar, Kategori) demeti.
-        """
-        module = self.get_module(module_path)
-        if module:
-            return (module.Name, module.Description, module.Author, module.Category)
-        return None
+        # info için stub yeterli; gerekirse yüklü nesne kullan
+        module = self.modules.get(module_path)
+        if module is None:
+            return None
+        if getattr(module, "_is_stub", False):
+            loaded = self.ensure_loaded(module_path)
+            if loaded is None:
+                return (module.Name, module.Description, module.Author, module.Category)
+            module = loaded
+        return (module.Name, module.Description, module.Author, module.Category)

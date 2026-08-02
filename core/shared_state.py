@@ -72,9 +72,28 @@ class SharedState:
     def session_manager(self, value: Any) -> None:
         self._ctx.session_manager = value
 
+    def _lazy_resolve(self, attr: str, service_type: type) -> Any:
+        """İlk erişimde ServiceContainer singleton factory'sinden çözer."""
+        current = getattr(self._ctx, attr)
+        if current is not None:
+            return current
+        try:
+            from core.service_container import get_container
+
+            container = get_container()
+            if container.is_registered(service_type):
+                instance = container.resolve(service_type)
+                setattr(self._ctx, attr, instance)
+                return instance
+        except Exception:
+            pass
+        return None
+
     @property
     def repo_manager(self) -> Any:
-        return self._ctx.repo_manager
+        from core.repo_manager import RepoManager
+
+        return self._lazy_resolve("repo_manager", RepoManager)
 
     @repo_manager.setter
     def repo_manager(self, value: Any) -> None:
@@ -82,7 +101,9 @@ class SharedState:
 
     @property
     def module_downloader(self) -> Any:
-        return self._ctx.module_downloader
+        from core.module_downloader import ModuleDownloader
+
+        return self._lazy_resolve("module_downloader", ModuleDownloader)
 
     @module_downloader.setter
     def module_downloader(self, value: Any) -> None:
@@ -90,7 +111,9 @@ class SharedState:
 
     @property
     def plugin_downloader(self) -> Any:
-        return self._ctx.plugin_downloader
+        from core.plugin_downloader import PluginDownloader
+
+        return self._lazy_resolve("plugin_downloader", PluginDownloader)
 
     @plugin_downloader.setter
     def plugin_downloader(self, value: Any) -> None:

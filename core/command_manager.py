@@ -55,6 +55,9 @@ class CommandManager:
         ] = {}  # Yüklenen alias'ları tutan sözlük (Alias -> Hedef Komut)
         self._plugin_manager = plugin_manager
         self._context = context
+        self._completion_names_cache: list[str] | None = None
+        # Alias dosyasının varlığından emin ol, yoksa oluştur.
+        self._ensure_aliases_file()
 
     @property
     def plugin_manager(self):
@@ -64,8 +67,16 @@ class CommandManager:
             return self._context.plugin_manager
         return shared_state.plugin_manager
 
-        # Alias dosyasının varlığından emin ol, yoksa oluştur.
-        self._ensure_aliases_file()
+    def _invalidate_completion_cache(self) -> None:
+        self._completion_names_cache = None
+
+    def get_completion_names(self) -> list[str]:
+        """Komut + alias isimlerinin sıralı anlık görüntüsü."""
+        if self._completion_names_cache is None:
+            names = set(self.commands.keys())
+            names.update(self.aliases.keys())
+            self._completion_names_cache = sorted(names)
+        return self._completion_names_cache
 
     def _ensure_aliases_file(self) -> None:
         """
@@ -125,43 +136,34 @@ class CommandManager:
             print(f"Aliaslar kaydedilirken dosya hatası oluştu: {e}")
             logger.exception("Alias dosyası yazma hatası")
 
-    def add_alias(self, alias_name: str, target_command: str) -> bool:
+    def add_alias(
+        self, alias_name: str, target_command: str, *, persist: bool = True
+    ) -> bool:
         """
-        Yeni bir alias ekler ve dosyaya kaydeder.
+        Yeni bir alias ekler.
 
         Args:
-            alias_name (str): Kullanıcının kullanacağı kısa ad (örn: 'ls').
-            target_command (str): Alias'ın çalıştıracağı asıl komut (örn: 'list files').
-
-        Returns:
-            bool: Ekleme başarılı ise True, alias zaten varsa False döner.
+            alias_name: Kullanıcının kullanacağı kısa ad (örn: 'ls').
+            target_command: Alias'ın çalıştıracağı asıl komut.
+            persist: True ise disk dosyasına yazar (kullanıcı alias'ları).
+                     False ise yalnızca belleğe ekler (built-in alias yükleme).
         """
-        # Eğer bu isimde bir komut veya başka bir alias zaten varsa eklemeye izin verme.
         if alias_name in self.commands or alias_name in self.aliases:
-            # print(f"'{alias_name}' zaten bir komut veya alias olarak mevcut.")
             return False
 
         self.aliases[alias_name] = target_command
-        self.save_aliases()  # Değişikliği kalıcı hale getir.
-        # print(f"Alias '{alias_name}' -> '{target_command}' eklendi.")
+        self._invalidate_completion_cache()
+        if persist:
+            self.save_aliases()
         return True
 
     def remove_alias(self, alias_name: str) -> bool:
-        """
-        Mevcut bir alias'ı siler ve dosyayı günceller.
-
-        Args:
-            alias_name (str): Silinecek alias'ın adı.
-
-        Returns:
-            bool: Silme başarılı ise True, alias bulunamazsa False döner.
-        """
+        """Mevcut bir alias'ı siler ve dosyayı günceller."""
         if alias_name in self.aliases:
             del self.aliases[alias_name]
-            self.save_aliases()  # Değişikliği kalıcı hale getir.
-            # (f"Alias '{alias_name}' kaldırıldı.")
+            self._invalidate_completion_cache()
+            self.save_aliases()
             return True
-        # (f"Alias '{alias_name}' bulunamadı.")
         return False
 
     def get_aliases(self) -> dict[str, str]:
@@ -227,39 +229,36 @@ class CommandManager:
                         # Komutu yönetici sözlüğüne ekle.
                         self.commands[command_instance.Name] = command_instance
 
-                        # Komut içinde kodlanmış (hardcoded) alias'ları da sisteme ekle.
+                        # Built-in alias'ları belleğe ekle; her biri için disk yazma yok.
                         for alias in command_instance.Aliases:
-                            self.add_alias(alias, command_instance.Name)
+                            self.add_alias(
+                                alias, command_instance.Name, persist=False
+                            )
 
-                        # Bir dosyada birden fazla komut sınıfı olabilir ama genelde bir tane olur,
-                        # ilk bulduğumuzu alıp çıkıyoruz (break). Eğer birden fazla desteklenecekse break kaldırılmalı.
                         break
 
             except SyntaxError:
-                # Kodda yazım hatası varsa
                 print(
                     f"[bold red]Sözdizimi hatası:[/bold red] '{file_path.name}' dosyasında hata var."
                 )
                 logger.exception(f"Komut yüklenirken sözdizimi hatası '{file_path}'")
             except ImportError as e:
-                # Modül yüklenirken başka bir modülü bulamazsa
                 print(
                     f"[bold red]İçe aktarma hatası:[/bold red] '{file_path.name}' - {e}"
                 )
                 logger.exception(f"Komut yüklenirken import hatası '{file_path}'")
             except AttributeError:
-                # Komut sınıfı beklenen özellikleri sağlamıyorsa
                 print(
                     f"[bold red]Öznitelik hatası:[/bold red] '{file_path.name}' - Komut sınıfı doğru tanımlanmamış."
                 )
                 logger.exception(f"Komut yüklenirken öznitelik hatası '{file_path}'")
             except Exception:
-                # Diğer tüm hatalar
                 print(
                     f"[bold red]Beklenmeyen hata:[/bold red] '{file_path.name}' yüklenirken hata oluştu."
                 )
                 logger.exception(f"Komut yüklenirken beklenmeyen hata '{file_path}'")
 
+        self._invalidate_completion_cache()
         logger.info(f"{len(self.commands)} komut yüklendi")
 
     def resolve_command(self, command_input: str) -> tuple[str | None, bool]:
@@ -349,75 +348,45 @@ class CommandManager:
             command_obj = self.commands.get(resolved_command_name)
 
             if command_obj:
+                result = False
                 try:
                     logger.info(f"Komut çalıştırıldı: {resolved_command_name}")
-                    # Komutu çalıştır (*args ile listeyi argümanlara dök)
-                    result = command_obj.execute(*args)
-
-                    # POST_COMMAND hook'unu tetikle (başarılı durum)
-                    if self.plugin_manager:
-                        self.plugin_manager.trigger_hook(
-                            HookType.POST_COMMAND,
-                            command_line=command_line,
-                            success=result,
-                        )
+                    result = bool(command_obj.execute(*args))
                     return result
-
                 except TypeError:
-                    # Komuta yanlış sayıda veya türde argüman verilirse
                     print(
                         f"[bold red]Argüman hatası:[/bold red] '{resolved_command_name}' komutuna yanlış argüman verildi."
                     )
                     logger.exception(
                         f"Komut '{resolved_command_name}' yürütülürken TypeError"
                     )
-
-                    if self.plugin_manager:
-                        self.plugin_manager.trigger_hook(
-                            HookType.POST_COMMAND,
-                            command_line=command_line,
-                            success=False,
-                        )
                     return False
-
                 except KeyboardInterrupt:
-                    # Kullanıcı CTRL+C'ye basarsa
                     print("\nKomut kullanıcı tarafından kesildi.")
                     logger.info(
                         f"Komut '{resolved_command_name}' kullanıcı tarafından kesildi"
                     )
-
-                    if self.plugin_manager:
-                        self.plugin_manager.trigger_hook(
-                            HookType.POST_COMMAND,
-                            command_line=command_line,
-                            success=False,
-                        )
                     return False
-
                 except Exception:
-                    # Diğer tüm beklenmeyen hatalar
                     print(
                         f"[bold red]Kritik hata:[/bold red] '{resolved_command_name}' yürütülürken beklenmeyen hata."
                     )
                     logger.exception(
                         f"Komut '{resolved_command_name}' yürütülürken beklenmeyen hata"
                     )
-
+                    return False
+                finally:
                     if self.plugin_manager:
                         self.plugin_manager.trigger_hook(
                             HookType.POST_COMMAND,
                             command_line=command_line,
-                            success=False,
+                            success=result,
                         )
-                    return False
             else:
-                # Alias çözüldü ama hedef komut (örneğin 'git') framework'te yüklü değil
                 print(f"'{resolved_command_name}' komutu bulunamadı.")
                 logger.warning(f"Komut bulunamadı: {resolved_command_name}")
                 return False
         else:
-            # Komut ne alias ne de yüklü bir komut
             print(f"'{command_name}' bilinmeyen bir komut veya alias.")
             logger.warning(f"Bilinmeyen komut: {command_name}")
             return False

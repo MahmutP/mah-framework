@@ -20,6 +20,39 @@ from core.session_manager import SessionManager
 from core.shared_state import shared_state
 
 
+def _get_cached_framework_version(base_dir: Path) -> str:
+    """Git commit sayısından sürüm üretir; HEAD değişmedikçe cache kullanır."""
+    import subprocess
+
+    cache_file = base_dir / "config" / ".version_cache"
+    git_head = base_dir / ".git" / "HEAD"
+    try:
+        if cache_file.exists() and git_head.exists():
+            if cache_file.stat().st_mtime_ns >= git_head.stat().st_mtime_ns:
+                cached = cache_file.read_text(encoding="utf-8").strip()
+                if cached:
+                    return cached
+
+        commit_count = int(
+            subprocess.check_output(
+                ["git", "rev-list", "--count", "HEAD"],
+                stderr=subprocess.DEVNULL,
+                cwd=str(base_dir),
+            )
+            .decode()
+            .strip()
+        )
+        major = commit_count // 100
+        minor = (commit_count % 100) // 10
+        patch = commit_count % 10
+        version = f"v{major}.{minor}.{patch}"
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(version + "\n", encoding="utf-8")
+        return version
+    except Exception:
+        return ""
+
+
 # ==============================================================================
 #  GRADIENT BANNER YARDIMCI FONKSİYONLARI (%20 İhtimalle Devreye Girer)
 # ==============================================================================
@@ -179,35 +212,13 @@ def print_startup_info(
         else:
             category_counts[display_name] = count
 
-    # Metasploit tarzı çıktı
-    # Git commit sayısından otomatik versiyon hesapla
-    import subprocess
-
-    try:
-        commit_count = int(
-            subprocess.check_output(
-                ["git", "rev-list", "--count", "HEAD"],
-                stderr=subprocess.DEVNULL,
-                cwd=str(Path(__file__).parent),
-            )
-            .decode()
-            .strip()
+    version = _get_cached_framework_version(Path(__file__).parent)
+    if version:
+        version_line = (
+            f"[dim]       =[[/dim] [bold cyan]Mah Framework[/bold cyan] "
+            f"[bold]{version}[/bold] [dim]]=[/dim]"
         )
-
-        # Versiyon hesaplama: commit sayısına göre major.minor.patch
-        # Örnek: 134 commits → v1.3.4
-        major = commit_count // 100
-        minor = (commit_count % 100) // 10
-        patch = commit_count % 10
-        version = f"v{major}.{minor}.{patch}"
-
-        # Adaptable renk (Tema uyumlu: Koyu temada beyaz, açık temada siyah)
-        version_line = f"[dim]       =[[/dim] [bold cyan]Mah Framework[/bold cyan] [bold]{version}[/bold] [dim]]=[/dim]"
-
-        # Eski format (commits gösterimi):
-        # version_line = f"[bold cyan]       =[ Mah Framework - {commit_count} commits ][/bold cyan]"
-
-    except Exception:
+    else:
         version_line = (
             "[dim]       =[[/dim] [bold cyan]Mah Framework[/bold cyan] [dim]]=[/dim]"
         )
@@ -372,28 +383,28 @@ def main() -> None:
     app_context.session_manager = session_manager
     container.register(SessionManager, session_manager)
 
-    # Repo Manager'ı başlat (Uzak depo yönetimi)
-    repo_manager = RepoManager()
-    app_context.repo_manager = repo_manager
-    container.register(RepoManager, repo_manager)
-
-    # Module Downloader'ı başlat (Modül indirme ve versiyon yönetimi)
-    module_downloader = ModuleDownloader(modules_dir=str(base_dir / "modules"))
-    app_context.module_downloader = module_downloader
-
-    # Plugin Downloader'ı başlat (Eklenti indirme ve versiyon yönetimi)
+    # Repo / downloader'ları lazy singleton olarak kaydet (ilk kullanımda oluşur)
     from core.plugin_downloader import PluginDownloader
 
-    plugin_downloader = PluginDownloader(plugins_dir=str(base_dir / "plugins"))
-    app_context.plugin_downloader = plugin_downloader
+    container.register_singleton(RepoManager, RepoManager)
+    container.register_singleton(
+        ModuleDownloader,
+        lambda: ModuleDownloader(modules_dir=str(base_dir / "modules")),
+    )
+    container.register_singleton(
+        PluginDownloader,
+        lambda: PluginDownloader(plugins_dir=str(base_dir / "plugins")),
+    )
 
     command_manager.load_commands()
-    module_manager.load_modules()
 
-    # Plugin Manager başlat
+    # Plugin'leri modüllerden önce yükle (PRE/POST_MODULE_LOAD hook'ları açılsın)
     plugin_manager = PluginManager(plugins_dir=str(base_dir / "plugins"))
     plugin_manager.load_plugins()
     app_context.plugin_manager = plugin_manager
+    module_manager.plugin_manager = plugin_manager
+
+    module_manager.load_modules()
 
     console = AppConsole(command_manager, module_manager, context=app_context)
     app_context.console_instance = console
@@ -410,7 +421,6 @@ def main() -> None:
     if args.resource:
         resource_path = Path(args.resource)
         if resource_path.exists():
-            # Resource komutunu al ve çalıştır
             resource_cmd = command_manager.get_all_commands().get("resource")
             if resource_cmd:
                 resource_cmd.run_resource_file(resource_path)  # type: ignore[attr-defined]
@@ -421,43 +431,15 @@ def main() -> None:
                 f"[bold red]Hata:[/bold red] Resource dosyası bulunamadı: {args.resource}"
             )
 
-    # -x ile komut belirtildiyse çalıştır
+    # -x ile komut belirtildiyse çalıştır (tek dispatcher: hook/log/alias/makro)
     if args.execute:
         rprint("\n[bold cyan]⚡ Komutlar çalıştırılıyor...[/bold cyan]\n")
-        commands = args.execute.split(";")
-        for cmd_line in commands:
+        for cmd_line in args.execute.split(";"):
             cmd_line = cmd_line.strip()
             if not cmd_line:
                 continue
-
             rprint(f"[bold yellow]>[/bold yellow] {cmd_line}")
-
-            parts = cmd_line.split()
-            if not parts:
-                continue
-
-            command_name = parts[0].lower()
-            command_args = parts[1:] if len(parts) > 1 else []
-
-            # Komutu çöz (alias kontrolü dahil)
-            resolved_name, _ = command_manager.resolve_command(command_name)
-
-            if not resolved_name:
-                rprint(f"[bold red]  ✗ Bilinmeyen komut: {command_name}[/bold red]")
-                continue
-
-            # Komutu al ve çalıştır
-            cmd_obj = command_manager.get_all_commands().get(resolved_name)
-            if cmd_obj:
-                try:
-                    cmd_obj.execute(*command_args)
-                except Exception as e:
-                    rprint(f"[bold red]  ✗ Hata: {e}[/bold red]")
-            else:
-                rprint(
-                    f"[bold red]  ✗ Komut objesi bulunamadı: {resolved_name}[/bold red]"
-                )
-
+            command_manager.execute_command(cmd_line)
         print()
 
     logger.info("Uygulama başlatıldı")

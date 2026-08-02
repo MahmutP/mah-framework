@@ -39,14 +39,9 @@ class ScanResult:
         return ", ".join(parts) if parts else "güvenli"
 
 
-def scan_file(file_path: str, strict: bool = False) -> ScanResult:
+def scan_source(source: str, file_path: str = "<memory>", strict: bool = False) -> ScanResult:
+    """Kaynak kodu bellekte tarar (ek disk okuması yapmaz)."""
     result = ScanResult(file_path)
-    try:
-        with open(file_path, encoding="utf-8", errors="ignore") as f:
-            source = f.read()
-    except Exception as e:
-        result.errors.append(f"Dosya okunamadı: {e}")
-        return result
 
     try:
         tree = ast.parse(source, filename=file_path)
@@ -104,6 +99,18 @@ def scan_file(file_path: str, strict: bool = False) -> ScanResult:
     result.dangerous = deduped
 
     return result
+
+
+def scan_file(file_path: str, strict: bool = False) -> ScanResult:
+    result = ScanResult(file_path)
+    try:
+        with open(file_path, encoding="utf-8", errors="ignore") as f:
+            source = f.read()
+    except Exception as e:
+        result.errors.append(f"Dosya okunamadı: {e}")
+        return result
+
+    return scan_source(source, file_path=file_path, strict=strict)
 
 
 def _get_full_func_name(node: ast.AST) -> str | None:

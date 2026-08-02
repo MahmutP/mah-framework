@@ -45,26 +45,27 @@ class Use(Command):
             List[str]: otomatik tamamlama listesi.
         """
         parts = text.split()
-        if len(parts) == 1 and text.endswith(" "):
-            module_manager = shared_state.module_manager
-            if module_manager:
-                return sorted(list(module_manager.get_all_modules().keys()))
+        module_manager = shared_state.module_manager
+        if not module_manager:
             return []
+
+        get_paths = getattr(module_manager, "get_module_paths", None)
+        all_module_paths = (
+            get_paths()
+            if callable(get_paths)
+            else sorted(module_manager.get_all_modules().keys())
+        )
+
+        if len(parts) == 1 and text.endswith(" "):
+            return list(all_module_paths)
         elif len(parts) == 2 and not text.endswith(" "):
             current_arg = parts[1]
-            manager = shared_state.module_manager
-            if manager:
-                all_module_paths = list(manager.get_all_modules().keys())
-                matches = sorted(
-                    [path for path in all_module_paths if path.startswith(current_arg)]
-                )
-                # Completion objesi döndürerek start_position'ı manuel ayarlıyoruz.
-                # Böylece "payloads/py" yazınca sadece "py" değil "payloads/py" tamamlanıyor.
-                return [
-                    Completion(path, start_position=-len(current_arg))
-                    for path in matches
-                ]
-            return []
+            matches = [
+                path for path in all_module_paths if path.startswith(current_arg)
+            ]
+            return [
+                Completion(path, start_position=-len(current_arg)) for path in matches
+            ]
         return []
 
     def execute(self, *args: str, **kwargs: Any) -> bool:

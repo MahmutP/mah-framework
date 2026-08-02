@@ -39,3 +39,8 @@ config/installed_modules.json
 
 # Local eklenti durumu
 config/installed_plugins.json
+
+# Lazy module keşif önbelleği
+config/module_manifest.json
+config/module_manifest.tmp
+config/.version_cache

@@ -150,37 +150,12 @@ class Resource(Command):
             # Komutu göster
             print(f"[dim]({line_num})[/dim] [bold yellow]>[/bold yellow] {line}")
 
-            # Komutu çalıştır
+            # Tek dispatcher: hook, logging, alias ve makro kaydı dahil
             try:
-                parts = line.split()
-                if not parts:
-                    continue
-
-                command_name = parts[0].lower()
-                command_args = parts[1:] if len(parts) > 1 else []
-
-                # Komutu çöz (alias kontrolü dahil)
-                resolved_name, _ = command_manager.resolve_command(command_name)
-
-                if not resolved_name:
-                    print(f"[bold red]  ✗ Bilinmeyen komut: {command_name}[/bold red]")
-                    error_count += 1
-                    continue
-
-                # Komutu al ve çalıştır
-                cmd_obj = command_manager.get_all_commands().get(resolved_name)
-                if cmd_obj:
-                    result = cmd_obj.execute(*command_args)
-                    if result:
-                        success_count += 1
-                    else:
-                        error_count += 1
+                if command_manager.execute_command(line):
+                    success_count += 1
                 else:
-                    print(
-                        f"[bold red]  ✗ Komut objesi bulunamadı: {resolved_name}[/bold red]"
-                    )
                     error_count += 1
-
             except Exception as e:
                 print(f"[bold red]  ✗ Hata: {e}[/bold red]")
                 error_count += 1

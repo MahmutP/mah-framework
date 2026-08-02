@@ -57,6 +57,9 @@ class BaseHandler:
         # Accept timeout süresi (saniye). 0 = sınırsız bekle.
         self.accept_timeout = float(options.get("ACCEPT_TIMEOUT", 0))
 
+        # Eşzamanlı istemci üst sınırı (kaynak koruması).
+        self.max_clients = int(options.get("MAX_CLIENTS", 50))
+
     def start(self) -> None:
         """
         Soketi oluşturur, bağlar (bind) ve dinlemeye (listen) başlar.
@@ -89,6 +92,16 @@ class BaseHandler:
                     # accept() bloklayıcıdır, bağlantı gelene kadar bekler.
                     client_sock, client_addr = self.sock.accept()
                     print(f"[+] Bağlantı geldi: {client_addr[0]}:{client_addr[1]}")
+
+                    with self.clients_lock:
+                        active_clients = len(self.clients)
+                    if active_clients >= self.max_clients:
+                        print(
+                            f"[!] Maksimum istemci sayısına ulaşıldı ({self.max_clients}); bağlantı reddedildi."
+                        )
+                        with contextlib.suppress(BaseException):
+                            client_sock.close()
+                        continue
 
                     # Geriye uyumluluk: son bağlanan istemciyi instance değişkenlerinde tut
                     self.client_sock = client_sock

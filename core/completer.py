@@ -104,55 +104,44 @@ class CLICompleter(Completer):
     def _get_command_completions(self, current_word: str) -> Iterable[Completion]:
         """
         Girilen kelime parçasına uygun komut ve alias önerilerini üretir.
-
-        Args:
-            current_word (str): Tamamlanmaya çalışılan kelime parçası (prefix).
-
-        Yields:
-             Completion: Komut adı ve açıklamasıyla birlikte öneri nesnesi.
         """
-        # Tüm komut isimlerini ve aliasları bir kümede topla.
-        all_names = set(self.command_manager.get_all_commands().keys())
+        get_names = getattr(self.command_manager, "get_completion_names", None)
+        if callable(get_names):
+            all_names = get_names()
+        else:
+            all_names = sorted(
+                set(self.command_manager.get_all_commands().keys())
+                | set(self.command_manager.get_aliases().keys())
+            )
+
         all_aliases = self.command_manager.get_aliases()
+        all_commands = self.command_manager.get_all_commands()
 
-        for alias, target_cmd in all_aliases.items():
-            all_names.add(alias)
-
-        # İsimleri alfabetik sıraya diz ve filtrele.
-        for name in sorted(list(all_names)):
+        for name in all_names:
             if name.startswith(current_word):
                 display_meta = ""
-
-                # Eğer alias ise, hangi komuta ait olduğunu göster (Örn: alias for execution).
                 if name in all_aliases:
                     display_meta = f"(alias for {all_aliases[name]})"
-                # Eğer gerçek komut ise, açıklamasını göster.
-                elif name in self.command_manager.get_all_commands():
-                    cmd_obj = self.command_manager.get_all_commands()[name]
-                    display_meta = cmd_obj.Description
+                elif name in all_commands:
+                    display_meta = all_commands[name].Description
 
-                # start_position negative değeri, mevcut kelimenin başından itibaren değiştirileceğini belirtir.
                 yield Completion(
                     name, start_position=-len(current_word), display_meta=display_meta
                 )
 
     def _get_module_paths_completions(self, current_word: str) -> list[str]:
-        """
-        Modül yollarını tamamlamak için yardımcı metod.
-        Genellikle 'use' gibi komutların özel tamamlama fonksiyonları tarafından kullanılır.
-        """
-        module_paths = list(self.module_manager.get_all_modules().keys())
-        return sorted([path for path in module_paths if path.startswith(current_word)])
+        """Modül yollarını tamamlamak için yardımcı metod."""
+        get_paths = getattr(self.module_manager, "get_module_paths", None)
+        if callable(get_paths):
+            module_paths = get_paths()
+        else:
+            module_paths = sorted(self.module_manager.get_all_modules().keys())
+        return [path for path in module_paths if path.startswith(current_word)]
 
     def _get_module_options_completions(self, current_word: str) -> list[str]:
-        """
-        Aktif modülün seçeneklerini (options) tamamlamak için yardımcı metod.
-        'set' komutu tarafından kullanılabilir.
-        """
+        """Aktif modülün seçeneklerini tamamlamak için yardımcı metod."""
         selected_module: BaseModule | None = shared_state.get_selected_module()
         if selected_module:
-            option_names = list(selected_module.get_options().keys())
-            return sorted(
-                [name for name in option_names if name.startswith(current_word)]
-            )
+            option_names = sorted(selected_module.get_options().keys())
+            return [name for name in option_names if name.startswith(current_word)]
         return []

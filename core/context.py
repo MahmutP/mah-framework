@@ -26,6 +26,7 @@ class AppContext:
     console_instance: Any = None
     plugin_manager: Any = None
     session_manager: Any = None
+    workspace_manager: Any = None
     repo_manager: Any = None
     module_downloader: Any = None
     plugin_downloader: Any = None

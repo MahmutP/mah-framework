@@ -37,6 +37,7 @@ class TestSystemInfo:
         assert "PROCESS_COUNT" in mod.Options
         assert "SHOW_NETWORK" in mod.Options
         assert "SHOW_DISK" in mod.Options
+        assert "SESSION" in mod.Options
 
     def test_bytes_to_human(self, mod):
         assert "KB" in mod._bytes_to_human(2048)
@@ -99,6 +100,7 @@ class TestCredentials:
 
     def test_init_options(self, mod):
         assert "TARGET_DIR" in mod.Options
+        assert "SESSION" in mod.Options
         assert "SEARCH_DEPTH" in mod.Options
         assert "SHOW_CONTENT" in mod.Options
         assert "PREVIEW_LINES" in mod.Options

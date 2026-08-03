@@ -44,3 +44,7 @@ config/installed_plugins.json
 config/module_manifest.json
 config/module_manifest.tmp
 config/.version_cache
+
+# Workspace loot (aktif çalışma alanları; iskelet git'te tutulmaz)
+config/workspaces/
+!config/workspaces/.gitkeep

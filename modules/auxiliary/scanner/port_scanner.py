@@ -1,10 +1,12 @@
 import concurrent.futures
 import socket
+from datetime import datetime, timezone
 
 from rich import print
 
 from core.module import BaseModule
 from core.option import Option
+from core.workspace_manager import get_workspace_manager
 
 
 class PortScanner(BaseModule):
@@ -35,6 +37,12 @@ class PortScanner(BaseModule):
                 required=True,
                 description="Eşzamanlı tarama yapacak thread sayısı",
             ),
+            "WORKSPACE": Option(
+                name="WORKSPACE",
+                value="",
+                required=False,
+                description="Opsiyonel; loot için aktif workspace kullanılır",
+            ),
         }
 
         super().__init__()
@@ -47,7 +55,7 @@ class PortScanner(BaseModule):
                 result = s.connect_ex((ip, int(port)))
                 if result == 0:
                     return port
-        except:
+        except Exception:
             pass
         return None
 
@@ -79,7 +87,7 @@ class PortScanner(BaseModule):
         rports_str = str(options.get("RPORTS"))
         try:
             threads = int(options.get("THREADS"))
-        except:
+        except Exception:
             threads = 10
 
         print(f"[bold blue][*][/bold blue] Hedef: {target_ip}")
@@ -111,6 +119,8 @@ class PortScanner(BaseModule):
                 except Exception:
                     pass
 
+        open_ports = sorted(open_ports)
+
         if open_ports:
             print(
                 f"\n[bold green]Tarama Tamamlandı![/bold green] Toplam {len(open_ports)} açık port bulundu."
@@ -118,6 +128,25 @@ class PortScanner(BaseModule):
         else:
             print(
                 "\n[bold yellow]Tarama Tamamlandı![/bold yellow] Açık port bulunamadı."
+            )
+
+        wm = get_workspace_manager()
+        if wm and wm.active_name:
+            loot_path = wm.write_ports_loot(
+                str(target_ip),
+                open_ports,
+                extra={
+                    "scanned_ports": len(target_ports),
+                    "scanned_at": datetime.now(timezone.utc).isoformat(),
+                    "module": "auxiliary/scanner/port_scanner",
+                },
+            )
+            if loot_path:
+                print(f"[bold blue][*][/bold blue] Loot yazıldı: {loot_path}")
+        elif options.get("WORKSPACE"):
+            print(
+                "[yellow][!] WORKSPACE seçeneği verildi ancak aktif workspace yok. "
+                "'workspace use <name>' çalıştırın.[/yellow]"
             )
 
         return True

@@ -18,6 +18,7 @@ from core.repo_manager import RepoManager
 from core.service_container import ServiceContainer, get_container
 from core.session_manager import SessionManager
 from core.shared_state import shared_state
+from core.workspace_manager import WorkspaceManager
 
 
 def _get_cached_framework_version(base_dir: Path) -> str:
@@ -382,6 +383,11 @@ def main() -> None:
     session_manager = SessionManager()
     app_context.session_manager = session_manager
     container.register(SessionManager, session_manager)
+
+    # Workspace / loot manager
+    workspace_manager = WorkspaceManager(root=base_dir / "config" / "workspaces")
+    app_context.workspace_manager = workspace_manager
+    container.register(WorkspaceManager, workspace_manager)
 
     # Repo / downloader'ları lazy singleton olarak kaydet (ilk kullanımda oluşur)
     from core.plugin_downloader import PluginDownloader

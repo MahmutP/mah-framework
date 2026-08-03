@@ -26,6 +26,7 @@ from rich.table import Table
 from core import logger
 from core.module import BaseModule
 from core.option import Option
+from core.session_bridge import warn_localhost_without_session
 
 
 class system_info(BaseModule):
@@ -43,6 +44,9 @@ class system_info(BaseModule):
         - Ağ: Arayüzler, IPv4, MAC, durum
         - Süreçler: En çok kaynak tüketen süreçler
         - Uptime & Boot zamanı
+
+    Not: SESSION yoksa localhost üzerinde çalışır. Uzak Chimera hedefi için
+    post/chimera/enum_system kullanın.
     """
 
     # ── META ──────────────────────────────────────────────────────────────────
@@ -59,6 +63,12 @@ class system_info(BaseModule):
     def __init__(self):
         super().__init__()
         self.Options = {
+            "SESSION": Option(
+                name="SESSION",
+                value="",
+                required=False,
+                description="Opsiyonel; boşsa localhost. Chimera için post/chimera/enum_system kullanın",
+            ),
             "SHOW_PROCESSES": Option(
                 name="SHOW_PROCESSES",
                 value="true",
@@ -87,6 +97,12 @@ class system_info(BaseModule):
                 required=False,
                 description="Disk bilgilerini göster (true/false)",
                 choices=["true", "false"],
+            ),
+            "WORKSPACE": Option(
+                name="WORKSPACE",
+                value="",
+                required=False,
+                description="Opsiyonel workspace adı (bilgi amaçlı; loot yazılmaz)",
             ),
         }
         for option_name, option_obj in self.Options.items():
@@ -256,6 +272,10 @@ class system_info(BaseModule):
 
     def run(self, options: dict[str, Any]) -> bool:
         """Sistem bilgilerini toplar ve rich tabloları ile görüntüler."""
+        session_val = options.get("SESSION", "")
+        if session_val is None or str(session_val).strip() == "":
+            warn_localhost_without_session(self.Name)
+
         show_processes = str(options.get("SHOW_PROCESSES", "true")).lower() == "true"
         process_count = int(options.get("PROCESS_COUNT", 10))
         show_network = str(options.get("SHOW_NETWORK", "true")).lower() == "true"

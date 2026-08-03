@@ -26,7 +26,7 @@ class Use(Command):
         "use exploit/vsftpd_234_backdoor",
         "use auxiliary/scanner/vsftpd_version",
         "use example/hash_generator",
-        "use uncategorized/systeminfo_uncategorized",
+        "use post/chimera/enum_system",
     ]
 
     def __init__(self) -> None:

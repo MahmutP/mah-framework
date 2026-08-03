@@ -72,6 +72,14 @@ class SharedState:
     def session_manager(self, value: Any) -> None:
         self._ctx.session_manager = value
 
+    @property
+    def workspace_manager(self) -> Any:
+        return self._ctx.workspace_manager
+
+    @workspace_manager.setter
+    def workspace_manager(self, value: Any) -> None:
+        self._ctx.workspace_manager = value
+
     def _lazy_resolve(self, attr: str, service_type: type) -> Any:
         """İlk erişimde ServiceContainer singleton factory'sinden çözer."""
         current = getattr(self._ctx, attr)

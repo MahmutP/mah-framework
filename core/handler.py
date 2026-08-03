@@ -87,7 +87,12 @@ class BaseHandler:
                 self.sock.settimeout(self.accept_timeout)
 
             self.running = True
-            print(f"[*] Dinleniyor: {self.lhost}:{self.lport} (Çıkmak için CTRL+C)")
+            # accept() ana thread'de değilse CTRL+C oraya düşmez; kısa timeout ile
+            # running bayrağını ve stop() ile kapanan soketi düzenli kontrol et.
+            poll_timeout = self.accept_timeout if self.accept_timeout > 0 else 0.5
+            self.sock.settimeout(poll_timeout)
+            print(f"[*] Dinleniyor: {self.lhost}:{self.lport}")
+            print("[*] Durdurmak: jobs -k   |  ön planda beklemede: CTRL+C")
 
             # Ana döngü: Bağlantılar gelene kadar bekle (multi-client)
             while self.running:
@@ -146,7 +151,12 @@ class BaseHandler:
                     client_thread.start()
 
                 except TimeoutError:
-                    # Accept timeout'u doldu, döngüye devam et
+                    # Accept timeout — running bayrağını yeniden kontrol et
+                    continue
+                except OSError:
+                    # stop() soketi kapattı
+                    if not self.running:
+                        break
                     continue
                 except KeyboardInterrupt:
                     # Kullanıcı CTRL+C ile keserse hatayı yukarı fırlat
@@ -226,11 +236,13 @@ class BaseHandler:
         if self.client_sock:
             with contextlib.suppress(BaseException):
                 self.client_sock.close()
+            self.client_sock = None
 
-        # Sunucu (dinleyici) soketini kapat
+        # Sunucu (dinleyici) soketini kapat — bloklu accept()'i uyandırır
         if self.sock:
             with contextlib.suppress(BaseException):
                 self.sock.close()
+            self.sock = None
 
     def handle_connection(
         self, client_sock: socket.socket, session_id: int | None = None

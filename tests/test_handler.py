@@ -245,12 +245,17 @@ class TestBaseHandlerStop(unittest.TestCase):
     def test_stop_closes_server_socket(self):
         """stop() sunucu soketini kapatır."""
         handler = ConcreteHandler()
-        handler.sock = MagicMock()
-        handler.client_sock = MagicMock()
+        sock = MagicMock()
+        client = MagicMock()
+        handler.sock = sock
+        handler.client_sock = client
 
         handler.stop()
 
-        handler.sock.close.assert_called_once()
+        sock.close.assert_called_once()
+        client.close.assert_called_once()
+        self.assertIsNone(handler.sock)
+        self.assertIsNone(handler.client_sock)
         self.assertFalse(handler.running)
 
     def test_stop_closes_all_client_sockets(self):

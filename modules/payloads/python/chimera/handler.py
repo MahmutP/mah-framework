@@ -59,9 +59,9 @@ class Handler(BaseHandler):
 
     def start(self):
         """
-        Soketi oluşturur, bağlar ve dinlemeye başlar. BaseHandler'dan
-        farklı olarak bağlantı koptuğunda break yapmaz, ajan yeniden
-        bağlanana kadar dinlemeye devam eder.
+        Soketi oluşturur, bağlar ve dinlemeye başlar.
+        Bağlantılar ayrı thread'de işlenir; accept kısa timeout ile
+        stop()/CTRL+C'ye yanıt verir.
         """
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -70,12 +70,27 @@ class Handler(BaseHandler):
             self.sock.listen(5)
 
             self.running = True
-            print(f"[*] Dinleniyor: {self.lhost}:{self.lport} (Çıkmak için CTRL+C)")
+            poll_timeout = self.accept_timeout if self.accept_timeout > 0 else 0.5
+            self.sock.settimeout(poll_timeout)
+            print(f"[*] Dinleniyor: {self.lhost}:{self.lport}")
+            print("[*] Durdurmak: jobs -k   |  ön planda beklemede: CTRL+C")
 
             while self.running:
                 try:
                     client_sock, client_addr = self.sock.accept()
                     print(f"[+] Bağlantı geldi: {client_addr[0]}:{client_addr[1]}")
+
+                    with self.clients_lock:
+                        if len(self.clients) >= self.max_clients:
+                            print(
+                                f"[!] Maksimum istemci ({self.max_clients}); bağlantı reddedildi."
+                            )
+                            with contextlib.suppress(BaseException):
+                                client_sock.close()
+                            continue
+
+                    self.client_sock = client_sock
+                    self.client_addr = client_addr
 
                     session_id = None
                     if shared_state.session_manager:
@@ -89,8 +104,28 @@ class Handler(BaseHandler):
                         )
                         print(f"[*] Oturum açıldı: Session {session_id}")
 
-                    self.handle_connection(client_sock, session_id)
+                    client_thread = threading.Thread(
+                        target=self._handle_client_thread,
+                        args=(client_sock, client_addr, session_id),
+                        daemon=True,
+                    )
+                    client_key = (
+                        session_id if session_id is not None else id(client_sock)
+                    )
+                    with self.clients_lock:
+                        self.clients[client_key] = {
+                            "sock": client_sock,
+                            "addr": client_addr,
+                            "thread": client_thread,
+                        }
+                    client_thread.start()
 
+                except TimeoutError:
+                    continue
+                except OSError:
+                    if not self.running:
+                        break
+                    continue
                 except KeyboardInterrupt:
                     raise
                 except Exception as e:

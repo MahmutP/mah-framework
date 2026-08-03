@@ -35,6 +35,14 @@ class Exit(Command):
             bool: Komutun başarılı olup olmadığının kontrolü.
         """
         print("Uygulamadan çıkış yapılıyor...")
+        try:
+            from core.listener_registry import get_listener_registry
+
+            n = get_listener_registry().stop_all()
+            if n:
+                print(f"[*] {n} dinleyici kapatıldı.")
+        except Exception:
+            pass
         if hasattr(shared_state, "console_instance") and shared_state.console_instance:
             shared_state.console_instance.shutdown()
         else:

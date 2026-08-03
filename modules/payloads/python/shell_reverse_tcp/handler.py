@@ -1,6 +1,3 @@
-import select
-import sys
-
 from rich import print
 
 from core.handler import BaseHandler
@@ -9,39 +6,21 @@ from core.handler import BaseHandler
 class Handler(BaseHandler):
     """
     Standart Reverse Shell Handler (Netcat clone).
+
+    handle_connection yalnızca bağlantıyı canlı tutar (stdin çalmaz).
+    Etkileşim: MultiHandler ön plan veya `sessions -i <id>`.
     """
 
     def handle_connection(self, client_sock, session_id=None):
-        print(f"[*] Shell oturumu başlatılıyor... (Session: {session_id})")
-        print("-" * 50)
+        self.client_sock = client_sock
+        print(f"[*] Shell oturumu hazır (Session: {session_id}).")
+        if session_id is not None:
+            print(f"[*] Etkileşim için: sessions -i {session_id}")
+        self.keep_connection_alive(client_sock)
 
-        # Basit bir loop yerine select ile hem socket hem stdin dinleyelim
-        # Bu sayede non-blocking I/O simüle edebiliriz
-
-        try:
-            while True:
-                # Okunabilir kaynakları belirle: user input (stdin) ve socket
-                rlist, _, _ = select.select([client_sock, sys.stdin], [], [])
-
-                for r in rlist:
-                    if r == client_sock:
-                        # Socket'ten veri geldi, ekrana bas
-                        data = client_sock.recv(4096)
-                        if not data:
-                            print("\n[!] Bağlantı karşı taraftan kapatıldı.")
-                            return
-                        # Gelen ham veriyi olduğu gibi bas (decode etmeye çalışmadan, binary olabilir)
-                        sys.stdout.buffer.write(data)
-                        sys.stdout.flush()
-
-                    elif r == sys.stdin:
-                        # Klavyeden veri geldi, socket'e gönder
-                        msg = sys.stdin.readline()
-                        if not msg:
-                            break  # EOF
-                        client_sock.sendall(msg.encode())
-
-        except KeyboardInterrupt:
-            print("\n[*] Shell oturumu sonlandırılıyor...")
-        except Exception as e:
-            print(f"[!] Hata: {e}")
+    def interact(self, session_id: int):
+        sock = self.resolve_client_sock(session_id)
+        if not sock:
+            print(f"[!] Session {session_id}: aktif soket yok.")
+            return
+        self.raw_shell_loop(sock, session_id=session_id)

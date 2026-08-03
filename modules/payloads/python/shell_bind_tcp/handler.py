@@ -1,6 +1,4 @@
-import select
 import socket
-import sys
 
 from rich import print
 
@@ -10,7 +8,7 @@ from core.handler import BaseHandler
 class Handler(BaseHandler):
     """
     Python Bind TCP Handler.
-    Hedef sistemdeki porta bağlanır ve shell oturumu başlatır.
+    Hedef sistemdeki porta bağlanır; shell MultiHandler/sessions -i ile açılır.
     """
 
     def start(self):
@@ -19,7 +17,7 @@ class Handler(BaseHandler):
         Dinlemek yerine, hedefe (RHOST) bağlanır.
         """
         rhost = self.options.get("RHOST")
-        lport = self.lport  # Bind shell'de hedef port LPORT olarak geçiyor genelde (veya RPORT?), standart msf'de LPORT kullanılır.
+        lport = self.lport
 
         if not rhost:
             print("[!] RHOST belirtilmedi! Bind shell için RHOST gereklidir.")
@@ -31,10 +29,21 @@ class Handler(BaseHandler):
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.connect((rhost, lport))
             self.running = True
+            self.client_sock = self.sock
             print("[+] Bağlantı sağlandı!")
 
-            # Bağlantı kuruldu, shell oturumunu başlat
-            self.handle_connection(self.sock)
+            # Session kaydı (MultiHandler interact için)
+            from core.shared_state import shared_state
+
+            session_id = None
+            if shared_state.session_manager:
+                session_id = shared_state.session_manager.add_session(
+                    self,
+                    {"host": rhost, "port": lport, "type": self.__class__.__name__},
+                )
+                print(f"[*] Oturum açıldı: Session {session_id}")
+
+            self.handle_connection(self.sock, session_id)
 
         except ConnectionRefusedError:
             print(
@@ -46,33 +55,15 @@ class Handler(BaseHandler):
             self.stop()
 
     def handle_connection(self, client_sock, session_id=None):
-        print(f"[*] Shell oturumu başlatılıyor... (Session: {session_id})")
-        print("-" * 50)
+        self.client_sock = client_sock
+        print(f"[*] Shell oturumu hazır (Session: {session_id}).")
+        if session_id is not None:
+            print(f"[*] Etkileşim için: sessions -i {session_id}")
+        self.keep_connection_alive(client_sock)
 
-        try:
-            while True:
-                # Select ile stdin ve socket'i dinle
-                rlist, _, _ = select.select([client_sock, sys.stdin], [], [])
-
-                for r in rlist:
-                    if r == client_sock:
-                        try:
-                            data = client_sock.recv(4096)
-                            if not data:
-                                print("\n[!] Bağlantı koptu.")
-                                return
-                            sys.stdout.buffer.write(data)
-                            sys.stdout.flush()
-                        except:
-                            return
-
-                    elif r == sys.stdin:
-                        msg = sys.stdin.readline()
-                        if not msg:
-                            break
-                        client_sock.sendall(msg.encode())
-
-        except KeyboardInterrupt:
-            print("\n[*] Shell oturumu sonlandırılıyor...")
-        except Exception as e:
-            print(f"[!] Hata: {e}")
+    def interact(self, session_id: int):
+        sock = self.resolve_client_sock(session_id) or self.client_sock
+        if not sock:
+            print(f"[!] Session {session_id}: aktif soket yok.")
+            return
+        self.raw_shell_loop(sock, session_id=session_id)

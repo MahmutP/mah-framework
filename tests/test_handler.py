@@ -343,13 +343,14 @@ class TestBaseHandlerAbstractMethods(unittest.TestCase):
             handler.handle_connection(MagicMock())
 
     @patch("core.handler.print")
-    def test_interact_default_message(self, mock_print):
-        """Varsayılan interact mesaj basar."""
+    def test_interact_without_socket_warns(self, mock_print):
+        """Soket yoksa interact uyarı basar."""
         handler = BaseHandler({"LHOST": "0.0.0.0", "LPORT": 4444})
         handler.interact(5)
 
-        # print çağrılmış olmalı
         mock_print.assert_called()
+        msg = str(mock_print.call_args[0][0])
+        self.assertIn("aktif soket yok", msg)
 
 
 class TestHandleClientThread(unittest.TestCase):

@@ -2,8 +2,11 @@
 # Reverse Shell veya Bind Shell bağlantılarını karşılamak için kullanılır.
 
 import contextlib
+import select
 import socket
+import sys
 import threading
+import time
 from typing import Any
 
 from rich import print
@@ -245,16 +248,77 @@ class BaseHandler:
             "Alt sınıflar handle_connection metodunu uygulamalıdır."
         )
 
+    def resolve_client_sock(self, session_id: int | None = None) -> Any:
+        """Session ID veya son istemci soketini döndürür."""
+        if session_id is not None:
+            with self.clients_lock:
+                info = self.clients.get(session_id)
+                if info and info.get("sock"):
+                    return info["sock"]
+        return self.client_sock
+
+    def keep_connection_alive(self, client_sock: Any) -> None:
+        """
+        Bağlantıyı stdin çalmadan canlı tutar.
+
+        MultiHandler mimarisinde handle_connection arka planda çalışır;
+        interaktif I/O yalnızca interact() / sessions -i ile main thread'de olmalı.
+        Aksi halde select(stdin) konsolu kilitler.
+        """
+        try:
+            while getattr(self, "running", True) and client_sock:
+                try:
+                    # Peer kapandı mı? (okumadan kontrol — interact ile yarışmaz)
+                    err = client_sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+                    if err:
+                        break
+                except OSError:
+                    break
+                time.sleep(0.5)
+        except Exception:
+            pass
+
+    def raw_shell_loop(self, client_sock: Any, session_id: int | None = None) -> None:
+        """Netcat tarzı interaktif shell (stdin ↔ socket)."""
+        label = f"Session {session_id}" if session_id is not None else "shell"
+        print(f"[*] Shell oturumu aktif ({label}). Çıkmak için CTRL+C.")
+        print("-" * 50)
+
+        try:
+            while getattr(self, "running", True) and client_sock:
+                rlist, _, _ = select.select([client_sock, sys.stdin], [], [])
+
+                for r in rlist:
+                    if r == client_sock:
+                        data = client_sock.recv(4096)
+                        if not data:
+                            print("\n[!] Bağlantı karşı taraftan kapatıldı.")
+                            return
+                        sys.stdout.buffer.write(data)
+                        sys.stdout.flush()
+                    elif r == sys.stdin:
+                        msg = sys.stdin.readline()
+                        if not msg:
+                            return
+                        client_sock.sendall(msg.encode())
+        except KeyboardInterrupt:
+            print("\n[*] Shell oturumu arka plana alındı (CTRL+C).")
+        except Exception as e:
+            print(f"[!] Shell hatası: {e}")
+
     def interact(self, session_id: int) -> None:
         """
-        Oturumla etkileşime geçen (Interactive Shell) soyut metod.
-        Kullanıcı 'sessions -i ID' dediğinde burası çalışır.
-        Alt sınıflar bunu override ederek kendi kabuk (shell) mantığını uygulamalıdır.
-
-        Args:
-            session_id (int): Etkileşime girilecek oturum ID'si.
+        Oturumla etkileşime geçen (Interactive Shell) metod.
+        Kullanıcı 'sessions -i ID' veya MultiHandler ön plan bağlanınca çağrılır.
+        Alt sınıflar override edebilir; varsayılan netcat shell döngüsünü dener.
         """
-        print(f"[*] {session_id} numaralı oturum interaktif modu desteklemiyor.")
+        client_sock = self.resolve_client_sock(session_id)
+        if not client_sock:
+            print(f"[!] Session {session_id}: aktif soket yok.")
+            return
+
+        # Alt sınıf özel interact uygulamadıysa ham shell dene
+        self.raw_shell_loop(client_sock, session_id=session_id)
 
 
 class BindHandler(BaseHandler):

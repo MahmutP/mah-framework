@@ -52,9 +52,8 @@ class Run(Command):
             }
             result = selected_module.run(current_options)
 
-            # [Fix/Explanation] Modüllerden dönen çıktıların ekrana basılması sağlandı.
-            # Önceden return edilen değerler (örneğin IP bilgisi) ekrana yazdırılmıyordu.
-            if result:
+            # bool başarı bayrağını ekrana basma; anlamlı dönüşleri (str/list) yazdır
+            if result is not None and not isinstance(result, bool):
                 print(result)
 
             print(f"[{selected_module.Name}] Modül başarıyla çalıştırıldı.")

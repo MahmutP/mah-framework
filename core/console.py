@@ -16,7 +16,6 @@ from prompt_toolkit import (
 from prompt_toolkit.auto_suggest import (
     AutoSuggestFromHistory,  # Geçmişten gelen komutları silik bir şekilde önermek için
 )
-from prompt_toolkit.document import Document
 from prompt_toolkit.formatted_text import (
     HTML,  # Prompt metnini HTML benzeri etiketlerle biçimlendirmek için
 )
@@ -25,7 +24,6 @@ from prompt_toolkit.history import (
 )
 from prompt_toolkit.key_binding import KeyBindings  # Özel klavye tuş kombinasyonları
 from prompt_toolkit.styles import Style  # Terminaldeki renk ve stilleri tanımlamak için
-from prompt_toolkit.validation import ValidationError, Validator
 from rich import print
 
 from core import logger
@@ -55,86 +53,6 @@ def _trim_history_file(history_file: str, max_lines: int = MAX_HISTORY_LINES) ->
             f.writelines(lines[-max_lines:])
     except OSError:
         pass
-
-
-class CLIValidator(Validator):
-    """
-    Komut Satırı Doğrulayıcısı (CLI Validator).
-
-    Kullanıcı bir komut girip Enter tuşuna bastığında, bu sınıf devreye girer.
-    Girdinin geçerli bir komut olup olmadığını kontrol eder.
-    Eğer geçersizse, hata mesajı gösterir ve komutun çalışmasını engeller.
-    """
-
-    def __init__(
-        self, command_manager: "CommandManager", module_manager: "ModuleManager"
-    ):
-        """
-        Validator'ü başlatır.
-
-        Args:
-            command_manager: Komutların geçerliliğini kontrol etmek için gerekli yönetici.
-            module_manager: Modüllerin varlığını kontrol etmek için gerekli yönetici.
-        """
-        self.command_manager = command_manager
-        self.module_manager = module_manager
-
-    def validate(self, document: Document) -> None:
-        """
-        Doğrulama işleminin yapıldığı ana metod.
-
-        Args:
-            document (Document): Kullanıcının girdiği metin ve imleç bilgisi.
-
-        Raises:
-            ValidationError: Girdi geçersizse fırlatılan hata.
-        """
-        text = document.text.strip()
-
-        # Yorum satırlarını (#) ve boş satırları doğrulama dışı bırak (geçerli say).
-        if text.startswith("#"):
-            return
-        if not text:
-            return
-
-        parts = text.split(maxsplit=1)
-        command_name = parts[0].lower()
-        args = parts[1] if len(parts) > 1 else ""
-
-        # 1. Komutun var olup olmadığını kontrol et.
-        resolved_command_name, _is_alias = self.command_manager.resolve_command(
-            command_name
-        )
-
-        if not resolved_command_name:
-            # Komut bulunamadıysa hata fırlat (İmleci komut sonuna getir).
-            raise ValidationError(
-                message=f"Hata: '{command_name}' bilinmeyen bir komut veya alias.",
-                cursor_position=len(command_name),
-            )
-
-        # 2. 'use' komutu özel kontrolü.
-        if resolved_command_name == "use":
-            # Modül yolu girilmemişse hata ver.
-            if not args:
-                raise ValidationError(
-                    message="Hata: 'use' komutu bir modül yolu gerektirir.",
-                    cursor_position=len(text),
-                )
-
-            # Katalogda var mı bak (lazy load tetikleme — get_module kullanma).
-            module_path = args.strip()
-            has_module = getattr(self.module_manager, "has_module", None)
-            exists = (
-                has_module(module_path)
-                if callable(has_module)
-                else module_path in self.module_manager.get_all_modules()
-            )
-            if not exists:
-                raise ValidationError(
-                    message=f"Hata: '{module_path}' modülü bulunamadı.",
-                    cursor_position=len(text),
-                )
 
 
 class Console:
@@ -173,9 +91,6 @@ class Console:
         # Otomatik tamamlama nesnesini oluştur
         self.completer = CLICompleter(command_manager, module_manager)
 
-        # Girdi doğrulayıcı nesnesini oluştur
-        self.validator = CLIValidator(command_manager, module_manager)
-
         # Prompt oturumunu yapılandır
         self.session = self._create_session()
 
@@ -211,7 +126,6 @@ class Console:
             history=self.history,  # Geçmiş yönetimi (Artık FileHistory)
             auto_suggest=AutoSuggestFromHistory(),  # Geçmişten öneriler (sağ ok ile tamamlama)
             completer=self.completer,  # Tab ile tamamlama mantığı
-            validator=self.validator,  # Girdi doğrulama
             key_bindings=bindings,  # Tuş atamaları
             style=Style.from_dict(
                 {

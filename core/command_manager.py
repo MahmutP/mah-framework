@@ -505,11 +505,15 @@ class CommandManager:
                             success=result,
                         )
             else:
-                print(f"'{resolved_command_name}' komutu bulunamadı.")
+                print(
+                    f"[bold red]Hata:[/bold red] '{resolved_command_name}' komutu bulunamadı."
+                )
                 logger.warning(f"Komut bulunamadı: {resolved_command_name}")
                 return False
         else:
-            print(f"'{command_name}' bilinmeyen bir komut veya alias.")
+            print(
+                f"[bold red]Hata:[/bold red] '{command_name}' bilinmeyen bir komut veya alias."
+            )
             logger.warning(f"Bilinmeyen komut: {command_name}")
             return False
 

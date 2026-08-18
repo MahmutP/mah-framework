@@ -48,3 +48,10 @@ config/.version_cache
 # Workspace loot (aktif çalışma alanları; iskelet git'te tutulmaz)
 config/workspaces/
 !config/workspaces/.gitkeep
+
+# Cursor yerel AI yapılandırması (skill, kural, ignore, rehber)
+# Bu dosyalar yalnızca bu makinedeki ajan oturumları içindir; GitHub'a gitmez.
+.cursor/
+.cursorrules
+.cursorignore
+CURSOR_AI_SETUP.md

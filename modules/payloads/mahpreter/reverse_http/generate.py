@@ -75,5 +75,5 @@ if __name__ == "__main__":
 
         print(f"[*] Mahpreter (HTTP) Payload oluşturuldu ({len(code)} bytes):")
         # print(code) # Çok uzun olabilir, ekrana basmıyoruz
-        print("[!] Not: 'server.py' handler'ını başlatmayı unutmayın.")
+        print("[!] Not: exploit/multi/handler ile aynı LHOST/LPORT dinleyicisini başlatın.")
         return code

@@ -44,7 +44,7 @@ mah (exploit/multi/handler) > run
 This module starts a secure listener continuously running in the foreground (AES-256-GCM + ECDH) that supports multi-client connections. If `BACKGROUND` is set to `true`, the shell drops back to the main prompt while listening silently.
 
 #### 1.3. Session Management
-When a connection is received, a new session is created. Use the `sessions` command to manage sessions.
+When a connection is received, a new session is created. Use the `sessions` command to manage sessions. If the agent process dies on the target, the framework detects the closed socket and removes the session automatically (no stale `sessions -l` entry).
 
 *   To list:
     ```
@@ -203,7 +203,7 @@ mah (exploit/multi/handler) > run
 Bu modül ön planda güvenli (AES-256-GCM + ECDH) ve çoklu bağlantı (multi-client) destekleyen dinleyiciyi başlatır. Eğer `BACKGROUND` seçeneği `true` yapılırsa, dinleyici sessizce ana menünün arkasında çalışmaya devam eder.
 
 #### 1.3. Session Yönetimi
-Bağlantı geldiğinde yeni bir session oluşur. Session'ları yönetmek için `sessions` komutu kullanılır.
+Bağlantı geldiğinde yeni bir session oluşur. Session'ları yönetmek için `sessions` komutu kullanılır. Hedefteki agent süreci ölürse framework kapalı soketi algılar ve session'ı otomatik listeden düşürür (`sessions -l` içinde ölü kayıt kalmaz).
 
 *   Listelemek için:
     ```

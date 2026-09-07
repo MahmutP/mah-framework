@@ -124,6 +124,16 @@ Logs system resource usage (CPU, RAM, Disk, Network) in the background.
 * **Enable:** `plugins enable resource_monitor` (or the display name shown in `plugins list`)
 * Monitoring starts after enable when subsequent commands run; it stays in the background.
 
+#### Session Notifier
+
+Console alerts (and optional file log) when sessions open or close. Uses `ON_SESSION_OPEN`, `ON_SESSION_CLOSE`, and `ON_SHUTDOWN`.
+
+* **Default:** enabled
+* **Log file:** `config/logs/sessions.log` (when `log_to_file` is true)
+* **Config:** `config/plugins/session_notifier.json` (`log_to_file`, `verbose`)
+* **Manage:** `plugins enable "Session Notifier"` / `plugins disable "Session Notifier"`
+* On shutdown, prints a short open/close summary.
+
 ### Tips
 
 * Keep handlers fast — they run on the hot path of every command/module event.
@@ -252,6 +262,16 @@ Sistem kaynak kullanımını (CPU, RAM, Disk, Ağ) arka planda loglar.
 * **Aralık:** 5 saniye
 * **Açma:** `plugins enable resource_monitor` (`plugins list`teki görünen ad)
 * Etkinleştirmeden sonra komutlar çalıştıkça arka planda sürer.
+
+#### Session Notifier
+
+Oturum açılış/kapanışında konsol bildirimi (ve isteğe bağlı dosya günlüğü). `ON_SESSION_OPEN`, `ON_SESSION_CLOSE`, `ON_SHUTDOWN` dinler.
+
+* **Varsayılan:** açık
+* **Log dosyası:** `config/logs/sessions.log` (`log_to_file` açıksa)
+* **Config:** `config/plugins/session_notifier.json` (`log_to_file`, `verbose`)
+* **Yönetim:** `plugins enable "Session Notifier"` / `plugins disable "Session Notifier"`
+* Kapanışta kısa açılış/kapanış özeti basar.
 
 ### İpuçları
 

@@ -51,12 +51,12 @@ Mah Framework comes with built-in modules across various categories:
 *   **Exploit**: `vsftpd_234_backdoor` ...
 *   **Auxiliary**: `scanner/port_scanner`, `scanner/http_dir_buster`, [`recon/github_tracker`](docs/GITHUB_TRACKER.md), `scanner/vsftpd_234_scanner` ...
 *   **Forensics**: [`forensics/metadata_extractor`](docs/METADATA_MODULES.md), [`forensics/metadata_cleaner`](docs/METADATA_MODULES.md)
-*   **Payloads**: `python/shell_reverse_tcp`, `python/mahpreter/reverse_tcp`, `linux/bash_reverse_tcp`, `mahpreter/reverse_dns`, `php/reverse_tcp` ...
+*   **Payloads**: `python/shell_reverse_tcp`, `python/mahpreter/reverse_tcp`, `mahpreter/reverse_http`, `linux/bash_reverse_tcp`, `mahpreter/reverse_dns`, `php/reverse_tcp` ...
 *   **Handler**: `exploit/multi/handler` (Unified Listener)
 *   **Example**: `hash_generator`, `toplama` ...
-*   **Plugins**: `Audit Logger` (System Activity Monitoring) ...
+*   **Plugins**: `Audit Logger`, `Session Notifier`, `Resource Monitor` ...
 
-Full catalog: **[Modules Catalog](docs/MODULES.md)**.
+Full catalog: **[Modules Catalog](docs/MODULES.md)** · Plugins: **[Plugin Guide](docs/PLUGIN_GUIDE.md)**.
 
 ### 📚 Documentation
 
@@ -187,12 +187,13 @@ mahmut > checkupdate
 > ⚠️ **Important:** Run `checkupdate` periodically to ensure you're using the latest version.
 
 ### 🖥️ Session Management
-Mah Framework includes a built-in session manager to handle multiple active connections (shells, payloads).
+Mah Framework includes a built-in session manager to handle multiple active connections (shells, payloads). Dead peer connections (for example when a mahpreter/Chimera payload process exits) are detected and removed from the session list automatically. The **Session Notifier** plugin prints open/close alerts and can log them under `config/logs/sessions.log`.
 
 ```bash
 mahmut > sessions -l            # List active sessions
 mahmut > sessions -i 1          # Interact with session 1
 mahmut > sessions -k 1          # Kill session 1
+mahmut > plugins list           # Built-in plugins (Audit / Session Notifier / …)
 ```
 
 ### 🤝 Contributing
@@ -248,12 +249,12 @@ Mah Framework, çeşitli kategorilerde yerleşik modüllerle gelir:
 *   **Exploit**: `vsftpd_234_backdoor` ...
 *   **Auxiliary**: `scanner/port_scanner`, `scanner/http_dir_buster`, [`recon/github_tracker`](docs/GITHUB_TRACKER.md), `scanner/vsftpd_234_scanner` ...
 *   **Forensics**: [`forensics/metadata_extractor`](docs/METADATA_MODULES.md), [`forensics/metadata_cleaner`](docs/METADATA_MODULES.md)
-*   **Payloads**: `python/shell_reverse_tcp`, `python/mahpreter/reverse_tcp`, `linux/bash_reverse_tcp`, `mahpreter/reverse_dns`, `php/reverse_tcp` ...
+*   **Payloads**: `python/shell_reverse_tcp`, `python/mahpreter/reverse_tcp`, `mahpreter/reverse_http`, `linux/bash_reverse_tcp`, `mahpreter/reverse_dns`, `php/reverse_tcp` ...
 *   **Handler**: `exploit/multi/handler` (Unified Listener)
 *   **Example**: `hash_generator`, `toplama` ...
-*   **Plugins**: `Audit Logger` (Sistem Aktivite İzleme) ...
+*   **Plugins**: `Audit Logger`, `Session Notifier`, `Resource Monitor` ...
 
-Tam katalog: **[Modül Kataloğu](docs/MODULES.md)**.
+Tam katalog: **[Modül Kataloğu](docs/MODULES.md)** · Pluginler: **[Plugin Rehberi](docs/PLUGIN_GUIDE.md)**.
 
 ### 📚 Dokümantasyon
 
@@ -384,12 +385,13 @@ mahmut > checkupdate
 > ⚠️ **Önemli:** En son sürümü kullandığınızdan emin olmak için `checkupdate` komutunu düzenli olarak çalıştırın.
 
 ### 🖥️ Oturum Yönetimi (Sessions)
-Mah Framework, birden fazla aktif bağlantıyı (shell, payload) yönetmek için dahili bir oturum yöneticisi içerir.
+Mah Framework, birden fazla aktif bağlantıyı (shell, payload) yönetmek için dahili bir oturum yöneticisi içerir. Karşı taraf (ör. mahpreter/Chimera payload süreci) öldüğünde bağlantı otomatik algılanır ve session listesinden düşülür. **Session Notifier** eklentisi açılış/kapanış bildirimlerini konsola basar; isteğe bağlı log: `config/logs/sessions.log`.
 
 ```bash
 mahmut > sessions -l            # Aktif oturumları listele
 mahmut > sessions -i 1          # 1 numaralı oturuma bağlan (etkileşim)
 mahmut > sessions -k 1          # 1 numaralı oturumu sonlandır
+mahmut > plugins list           # Yerleşik pluginler (Audit / Session Notifier / …)
 ```
 
 ### 🤝 Katkıda Bulunma

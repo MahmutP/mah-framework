@@ -141,6 +141,8 @@ Priority: lower `Priority` value runs earlier.
 
 Payloads / handlers register connections with `SessionManager`. Users manage them via `sessions`. Chimera sessions expose an interactive sub-shell (`chimera (N) >`) with agent commands documented in [CHIMERA_USER_GUIDE.md](CHIMERA_USER_GUIDE.md).
 
+Background handlers call `keep_connection_alive()` (peer check via `select` + `MSG_PEEK`). When the remote side closes, `_handle_client_thread` removes the session so the list stays accurate. The **Session Notifier** plugin reacts to `ON_SESSION_OPEN` / `ON_SESSION_CLOSE`.
+
 ### Configuration & Runtime Artifacts
 
 | Path | Purpose |
@@ -150,7 +152,8 @@ Payloads / handlers register connections with `SessionManager`. Users manage the
 | `config/repos/` | Cloned repository checkouts |
 | `config/installed_modules.json` | Downloaded module registry |
 | `config/installed_plugins.json` | Downloaded plugin registry |
-| `config/logs/` | Rotating application logs |
+| `config/plugins/` | Per-plugin JSON settings (e.g. `session_notifier.json`) |
+| `config/logs/` | Rotating application logs (incl. `audit.log`, `sessions.log`, `resources.log`) |
 | `config/wordlists/` | Shared wordlists for scanners |
 | `.mah_history` | prompt_toolkit history |
 
@@ -291,6 +294,8 @@ Pluginler `BasePlugin` miras alır ve `get_hooks()` ile `{HookType: handler}` d�
 
 Payload / handler bağlantıları `SessionManager`'a kaydolur. Kullanıcı `sessions` ile yönetir. Chimera oturumları `chimera (N) >` alt kabuğu açar — detay: [CHIMERA_USER_GUIDE.md](CHIMERA_USER_GUIDE.md).
 
+Arka plan handler'ları `keep_connection_alive()` kullanır (peer kontrolü: `select` + `MSG_PEEK`). Karşı taraf kapanınca `_handle_client_thread` session'ı siler; liste güncel kalır. **Session Notifier** eklentisi `ON_SESSION_OPEN` / `ON_SESSION_CLOSE` olaylarına tepki verir.
+
 ### Yapılandırma ve Çalışma Zamanı Artıkları
 
 | Yol | Amaç |
@@ -300,7 +305,8 @@ Payload / handler bağlantıları `SessionManager`'a kaydolur. Kullanıcı `sess
 | `config/repos/` | Klonlanmış depolar |
 | `config/installed_modules.json` | İndirilen modül kaydı |
 | `config/installed_plugins.json` | İndirilen plugin kaydı |
-| `config/logs/` | Dönen uygulama logları |
+| `config/plugins/` | Plugin JSON ayarları (örn. `session_notifier.json`) |
+| `config/logs/` | Dönen uygulama logları (`audit.log`, `sessions.log`, `resources.log`) |
 | `config/wordlists/` | Tarayıcı wordlist'leri |
 | `.mah_history` | prompt_toolkit geçmişi |
 

@@ -109,6 +109,8 @@ sessions -k 1             # Kill
 sessions -g               # Group by host
 ```
 
+If the remote payload process dies, the session is dropped automatically (no stale entry in `sessions -l`). Optional alerts: **Session Notifier** plugin (`config/logs/sessions.log`).
+
 For Chimera agents, see [CHIMERA_USER_GUIDE.md](CHIMERA_USER_GUIDE.md).
 
 ### Automate With Macros
@@ -138,6 +140,8 @@ Aliases persist in `config/aliases.json`.
 plugins list
 plugins enable "Audit Logger"
 plugins info "Audit Logger"
+plugins enable "Session Notifier"
+plugins info "Session Notifier"
 ```
 
 Details: [PLUGIN_GUIDE.md](PLUGIN_GUIDE.md).
@@ -264,6 +268,8 @@ sessions -k 1             # Sonlandır
 sessions -g               # Hedefe göre grupla
 ```
 
+Uzak payload süreci ölürse session otomatik listeden düşer (`sessions -l` içinde ölü kayıt kalmaz). İsteğe bağlı bildirim: **Session Notifier** eklentisi (`config/logs/sessions.log`).
+
 Chimera ajanları için: [CHIMERA_USER_GUIDE.md](CHIMERA_USER_GUIDE.md).
 
 ### Makro ile Otomasyon
@@ -293,6 +299,8 @@ Alias'lar `config/aliases.json` içinde kalıcıdır.
 plugins list
 plugins enable "Audit Logger"
 plugins info "Audit Logger"
+plugins enable "Session Notifier"
+plugins info "Session Notifier"
 ```
 
 Detay: [PLUGIN_GUIDE.md](PLUGIN_GUIDE.md).

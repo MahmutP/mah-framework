@@ -129,6 +129,8 @@ Mah-Framework offers encoding mechanisms to obfuscate payloads:
 
 Once a payload executes on the target and connects back to your listener, a new session is created.
 
+Handlers keep the TCP link alive without stealing stdin. If the remote process dies (kill / crash / exit), peer disconnect is detected (`select` + peek) and the session is removed automatically — you should not see a stale entry in `sessions -l`.
+
 *   **List Sessions:**
     ```bash
     sessions -l
@@ -141,6 +143,8 @@ Once a payload executes on the target and connects back to your listener, a new 
     ```bash
     sessions -k <session_id>
     ```
+
+Open/close console alerts: enable **Session Notifier** (see [PLUGIN_GUIDE.md](PLUGIN_GUIDE.md)).
 
 ---
 
@@ -258,6 +262,8 @@ Mah-Framework, payloadların tespit edilmesini zorlaştırmak için çeşitli en
 
 Bir payload hedef sistemde çalışıp dinleyicinize bağlandığında, yeni bir oturum oluşturulur.
 
+Handler'lar stdin çalmadan TCP bağlantısını canlı tutar. Uzak süreç ölürse (kill / crash / exit) peer kopuşu algılanır (`select` + peek) ve session otomatik silinir — `sessions -l` içinde ölü kayıt kalmamalıdır.
+
 *   **Oturumları Listele:**
     ```bash
     sessions -l
@@ -271,4 +277,6 @@ Bir payload hedef sistemde çalışıp dinleyicinize bağlandığında, yeni bir
     sessions -k <session_id>
     ```
 
-*Dokümantasyon son güncelleme tarihi: 2026-07-31*
+Açılış/kapanış konsol bildirimleri: **Session Notifier** ([PLUGIN_GUIDE.md](PLUGIN_GUIDE.md)).
+
+*Dokümantasyon son güncelleme tarihi: 2026-09-07*

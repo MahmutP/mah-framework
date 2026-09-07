@@ -1,5 +1,5 @@
+import contextlib
 import struct
-import time
 
 from rich import print
 
@@ -29,11 +29,8 @@ class Handler(BaseHandler):
         if session_id is not None:
             print(f"[*] Etkileşim için: sessions -i {session_id}")
 
-        try:
-            while getattr(self, "running", True) and self.client_sock:
-                time.sleep(0.5)
-        except Exception:
-            pass
+        # Peer (payload) ölünce döner → _handle_client_thread session'ı siler
+        self.keep_connection_alive(client_sock)
 
     def interact(self, session_id: int):
         sock = self.resolve_client_sock(session_id)
@@ -41,6 +38,10 @@ class Handler(BaseHandler):
             self.client_sock = sock
         if not self.client_sock:
             print(f"[!] Session {session_id}: aktif soket yok.")
+            return
+        if self.peer_connection_closed(self.client_sock):
+            print(f"[!] Session {session_id}: bağlantı kopmuş.")
+            self._mark_socket_dead(self.client_sock)
             return
         self.session_id = session_id
         self.interactive_session()
@@ -68,6 +69,13 @@ class Handler(BaseHandler):
             data += chunk
         return data.decode("utf-8")
 
+    def _mark_socket_dead(self, sock) -> None:
+        """Soketi kapatır; keep_connection_alive çıkar ve session temizlenir."""
+        with contextlib.suppress(OSError, AttributeError):
+            sock.shutdown(2)
+        with contextlib.suppress(OSError, AttributeError):
+            sock.close()
+
     def interactive_session(self):
         print("-" * 50)
         print("[*] Komut satırı aktif. Çıkmak için 'exit', 'background' veya CTRL+C.")
@@ -83,6 +91,7 @@ class Handler(BaseHandler):
                     print("[*] Oturum kapatılıyor...")
                     if cmd == "terminate":
                         self.send_data("terminate")
+                        self._mark_socket_dead(self.client_sock)
                     break
 
                 if cmd in ("background", "bg"):
@@ -96,10 +105,12 @@ class Handler(BaseHandler):
                     print(response)
                 else:
                     print("[!] Bağlantı koptu.")
+                    self._mark_socket_dead(self.client_sock)
                     break
             except KeyboardInterrupt:
                 print("\n[*] Oturum arka plana alındı (CTRL+C).")
                 break
             except Exception as e:
                 print(f"[!] Hata: {e}")
+                self._mark_socket_dead(self.client_sock)
                 break

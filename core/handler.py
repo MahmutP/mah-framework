@@ -6,7 +6,6 @@ import select
 import socket
 import sys
 import threading
-import time
 from typing import Any
 
 from rich import print
@@ -269,24 +268,51 @@ class BaseHandler:
                     return info["sock"]
         return self.client_sock
 
+    def peer_connection_closed(self, client_sock: Any) -> bool:
+        """
+        Karşı tarafın bağlantıyı kapatıp kapatmadığını okumadan (MSG_PEEK) kontrol eder.
+
+        SO_ERROR tek başına yeterli değildir: süreç kill edilince FIN/RST gelince
+        hata bayrağı set olmayabilir; soket okunabilir hale gelir ve peek boş döner.
+        """
+        if not client_sock:
+            return True
+        try:
+            ready, _, exceptional = select.select([client_sock], [], [client_sock], 0)
+            if exceptional:
+                return True
+            if not ready:
+                return False
+            data = client_sock.recv(1, socket.MSG_PEEK)
+            return not data
+        except (OSError, ValueError):
+            return True
+
     def keep_connection_alive(self, client_sock: Any) -> None:
         """
-        Bağlantıyı stdin çalmadan canlı tutar.
+        Bağlantıyı stdin çalmadan canlı tutar; peer kapanınca döner.
 
         MultiHandler mimarisinde handle_connection arka planda çalışır;
         interaktif I/O yalnızca interact() / sessions -i ile main thread'de olmalı.
         Aksi halde select(stdin) konsolu kilitler.
+
+        Peer ölümünü select + MSG_PEEK ile izler (veriyi tüketmez; interact ile yarışmaz).
         """
         try:
             while getattr(self, "running", True) and client_sock:
                 try:
-                    # Peer kapandı mı? (okumadan kontrol — interact ile yarışmaz)
-                    err = client_sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-                    if err:
+                    ready, _, exceptional = select.select(
+                        [client_sock], [], [client_sock], 0.5
+                    )
+                    if exceptional:
                         break
-                except OSError:
+                    if ready:
+                        # Okunabilir: ya bekleyen veri (interact alır) ya da EOF
+                        data = client_sock.recv(1, socket.MSG_PEEK)
+                        if not data:
+                            break
+                except (OSError, ValueError):
                     break
-                time.sleep(0.5)
         except Exception:
             pass
 

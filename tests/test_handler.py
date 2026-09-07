@@ -477,5 +477,95 @@ class TestBindHandlerStart(unittest.TestCase):
         handler.stop()
 
 
+# ============================================================
+# Peer disconnect / keep_connection_alive
+# ============================================================
+
+
+class KeepAliveOnlyHandler(BaseHandler):
+    """Yalnızca keep_connection_alive kullanan handler (mahpreter idle yolu)."""
+
+    def handle_connection(self, client_sock, session_id=None):
+        self.keep_connection_alive(client_sock)
+
+
+class TestKeepConnectionAlive(unittest.TestCase):
+    """Peer kill sonrası oturum temizliği."""
+
+    def test_peer_connection_closed_on_eof(self):
+        a, b = socket.socketpair()
+        handler = ConcreteHandler({"LHOST": "127.0.0.1", "LPORT": 0})
+        try:
+            self.assertFalse(handler.peer_connection_closed(a))
+            b.close()
+            deadline = time.time() + 2.0
+            while time.time() < deadline and not handler.peer_connection_closed(a):
+                time.sleep(0.05)
+            self.assertTrue(handler.peer_connection_closed(a))
+        finally:
+            a.close()
+
+    def test_keep_connection_alive_exits_when_peer_closes(self):
+        a, b = socket.socketpair()
+        handler = ConcreteHandler({"LHOST": "127.0.0.1", "LPORT": 0})
+        handler.running = True
+        done = threading.Event()
+
+        def _run():
+            handler.keep_connection_alive(a)
+            done.set()
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        time.sleep(0.2)
+        self.assertFalse(done.is_set())
+        b.close()
+        self.assertTrue(done.wait(timeout=3.0))
+        a.close()
+
+    def test_session_removed_when_client_dies(self):
+        """Payload kill simülasyonu: istemci kapanınca session silinmeli."""
+        session_manager = SessionManager()
+        shared_state.session_manager = session_manager
+
+        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+        probe.close()
+
+        handler = KeepAliveOnlyHandler({"LHOST": "127.0.0.1", "LPORT": port})
+        t = threading.Thread(target=handler.start, daemon=True)
+        t.start()
+
+        for _ in range(50):
+            if handler.sock is not None:
+                break
+            time.sleep(0.05)
+        self.assertIsNotNone(handler.sock)
+
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client.connect(("127.0.0.1", port))
+
+        for _ in range(50):
+            if session_manager.get_all_sessions():
+                break
+            time.sleep(0.05)
+        sessions = session_manager.get_all_sessions()
+        self.assertEqual(len(sessions), 1)
+        sid = next(iter(sessions))
+
+        client.close()  # payload kill
+
+        for _ in range(40):
+            if sid not in session_manager.get_all_sessions():
+                break
+            time.sleep(0.1)
+
+        self.assertNotIn(sid, session_manager.get_all_sessions())
+        handler.stop()
+        t.join(timeout=2)
+
+
 if __name__ == "__main__":
     unittest.main()

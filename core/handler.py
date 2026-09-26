@@ -199,12 +199,22 @@ class BaseHandler:
             with self.clients_lock:
                 self.clients.pop(client_key, None)
 
-            # Session Manager'dan otomatik oturum temizliği (Dead Session Detection)
+            # Soketi her durumda kapat (uzak taraf exit yazmış, bağlantı kopmuş vb.)
+            # Bu "ghost" bağlantı kalmamasını garantiler.
+            with contextlib.suppress(BaseException):
+                client_sock.shutdown(socket.SHUT_RDWR)
+            with contextlib.suppress(BaseException):
+                client_sock.close()
+
+            # Session Manager'dan oturum temizliği (Dead Session Detection)
             if session_id is not None:
                 from core.shared_state import shared_state
 
                 if shared_state.session_manager:
-                    shared_state.session_manager.remove_session(session_id)
+                    # Oturum hâlâ session_manager'da varsa temizle
+                    if shared_state.session_manager.get_session(session_id):
+                        shared_state.session_manager.remove_session(session_id)
+                        print(f"[*] Session {session_id} kapandı (uzak taraf bağlantıyı kesti).")
 
     def close_client(self, session_id: int) -> None:
         """
@@ -317,32 +327,133 @@ class BaseHandler:
             pass
 
     def raw_shell_loop(self, client_sock: Any, session_id: int | None = None) -> None:
-        """Netcat tarzı interaktif shell (stdin ↔ socket)."""
-        label = f"Session {session_id}" if session_id is not None else "shell"
-        print(f"[*] Shell oturumu aktif ({label}). Çıkmak için CTRL+C.")
-        print("-" * 50)
+        """
+        Netcat tarzı interaktif shell (stdin ↔ socket).
 
+        Background alma:
+          - CTRL+C          → framework'e dön, oturum açık kalır
+          - background / bg → aynı, uzak shell'e hiçbir şey gönderilmez
+        """
+        label = f"Session {session_id}" if session_id is not None else "shell"
+        sid_hint = f"sessions -i {session_id}" if session_id is not None else "sessions -i <id>"
+        print(f"[*] Shell oturumu aktif ({label}).")
+        print(f"[*] Background: CTRL+C  |  'background' veya 'bg' yaz")
+        print(f"[*] Geri dönünce: {sid_hint}")
+        print("-" * 55)
+
+        _backgrounded = False
         try:
             while getattr(self, "running", True) and client_sock:
-                rlist, _, _ = select.select([client_sock, sys.stdin], [], [])
+                try:
+                    rlist, _, _ = select.select([client_sock, sys.stdin], [], [], 0.5)
+                except (ValueError, OSError):
+                    break
 
                 for r in rlist:
                     if r == client_sock:
-                        data = client_sock.recv(4096)
+                        try:
+                            data = client_sock.recv(4096)
+                        except (OSError, ConnectionError):
+                            data = b""
                         if not data:
-                            print("\n[!] Bağlantı karşı taraftan kapatıldı.")
+                            # Uzak taraf bağlantıyı kapattı (exit yazıldı vb.)
+                            # Sadece loop'tan çıkıyoruz; session_manager kaydını
+                            # handler thread temizleyecek.
+                            print("\n[!] Uzak shell kapandı (exit veya bağlantı koptu).")
                             return
                         sys.stdout.buffer.write(data)
                         sys.stdout.flush()
+
                     elif r == sys.stdin:
                         msg = sys.stdin.readline()
                         if not msg:
+                            _backgrounded = True
                             return
-                        client_sock.sendall(msg.encode())
+                        # ── Background komutu ───────────────────────────────
+                        if msg.strip().lower() in ("background", "bg"):
+                            _backgrounded = True
+                            return
+                        # ────────────────────────────────────────────────────
+                        try:
+                            client_sock.sendall(msg.encode())
+                        except (OSError, BrokenPipeError):
+                            print("\n[!] Soket yazma hatası — bağlantı koptu.")
+                            return
+
         except KeyboardInterrupt:
-            print("\n[*] Shell oturumu arka plana alındı (CTRL+C).")
+            _backgrounded = True
         except Exception as e:
-            print(f"[!] Shell hatası: {e}")
+            print(f"\n[!] Shell hatası: {e}")
+        finally:
+            if _backgrounded:
+                print(f"\n[*] Oturum arka plana alındı ({label}).")
+                if session_id is not None:
+                    print(f"[*] Geri dönmek için: sessions -i {session_id}")
+                    print(f"[*] Kapatmak için:    sessions -k {session_id}")
+
+    def pty_shell_loop(
+        self,
+        client_sock: Any,
+        session_id: int | None = None,
+        auto_upgrade: bool = False,
+        upgrade_method: str | None = None,
+    ) -> None:
+        """
+        Tam etkileşimli PTY shell döngüsü.
+
+        Yerel terminali raw moda alır — Ctrl+C, Ctrl+Z, Tab, ok tuşları
+        doğrudan uzak tarafa iletilir. Framework sonlanmaz.
+
+        Çıkış: Ctrl+] (escape character).
+
+        Args:
+            client_sock: Uzak bağlantı soketi.
+            session_id: Oturum numarası (görüntüleme amaçlı).
+            auto_upgrade: True ise önce PTY upgrade payload'u gönderilir.
+            upgrade_method: Kullanılacak upgrade yöntemi (python3, script, socat vb.).
+        """
+        try:
+            from core.pty_handler import upgrade_and_interact
+        except ImportError:
+            print("[!] PTY handler modülü yüklenemedi. Standart shell kullanılıyor.")
+            self.raw_shell_loop(client_sock, session_id=session_id)
+            return
+
+        upgrade_and_interact(
+            sock=client_sock,
+            session_id=session_id,
+            method=upgrade_method,
+            auto_upgrade=auto_upgrade,
+        )
+
+    def upgrade_to_pty(
+        self,
+        session_id: int | None = None,
+        method: str | None = None,
+    ) -> bool:
+        """
+        Mevcut oturumu PTY'ye yükseltir (upgrade payload'u gönderir).
+        Etkileşimli moda girmez — sadece upgrade yapar.
+
+        Args:
+            session_id: Yükseltilecek oturum ID'si.
+            method: Upgrade yöntemi (None = otomatik).
+
+        Returns:
+            True: Upgrade komutu gönderildiyse.
+        """
+        client_sock = self.resolve_client_sock(session_id)
+        if not client_sock:
+            print(f"[!] Session {session_id}: aktif soket yok.")
+            return False
+
+        try:
+            from core.pty_handler import send_upgrade_payload
+        except ImportError:
+            print("[!] PTY handler modülü yüklenemedi.")
+            return False
+
+        return send_upgrade_payload(client_sock, method=method)
 
     def interact(self, session_id: int) -> None:
         """

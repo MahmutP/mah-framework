@@ -349,7 +349,7 @@ class PTYSession:
                             # session_manager'ı temizleyecek.
                             os.write(
                                 sys.stdout.fileno(),
-                                b"\r\n[!] Uzak shell kapandı.\r\n",
+                                "\r\n[!] Uzak shell kapandı.\r\n".encode("utf-8"),
                             )
                             self.running = False
                             break

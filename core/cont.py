@@ -58,6 +58,11 @@ INSTALLED_PLUGINS_FILE = "config/installed_plugins.json"
 # Eklentilerin (plugins) yükleneceği dizin.
 PLUGINS_DIR = "plugins"
 
+# Çalışma anında üretilen SSL/TLS sertifikalarının saklandığı dizin.
+# Chimera handler bu dizinde kendi kendine imzalı sertifika üretir;
+# kök dizine dosya yazılmaz, özel anahtar 0600 izinle korunur.
+CERTS_DIR = "config/certs"
+
 # ==============================================================================
 # KONSOL VE ÇIKTI BİÇİMLENDİRME SABİTLERİ
 # Terminal çıktılarının düzenlenmesi ve hizalanması için kullanılır.

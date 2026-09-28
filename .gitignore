@@ -18,6 +18,9 @@ server.key
 *.key
 *.pem
 
+# Çalışma anında üretilen TLS sertifikaları (Chimera handler)
+config/certs/
+
 # Geçici dosyalar
 .mah_history
 

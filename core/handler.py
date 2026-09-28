@@ -404,7 +404,7 @@ class BaseHandler:
         Yerel terminali raw moda alır — Ctrl+C, Ctrl+Z, Tab, ok tuşları
         doğrudan uzak tarafa iletilir. Framework sonlanmaz.
 
-        Çıkış: Ctrl+] (escape character).
+        Çıkış / arka plan: Ctrl+Z (veya Ctrl+] sonrası 'bg').
 
         Args:
             client_sock: Uzak bağlantı soketi.

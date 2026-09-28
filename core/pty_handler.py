@@ -20,6 +20,7 @@ import signal
 import struct
 import sys
 import termios
+import threading
 import time
 import tty
 from typing import Any
@@ -193,6 +194,13 @@ class PTYSession:
         self.escape_char = escape_char
         self.running = False
 
+        # Escape (telnet benzeri) modu: Ctrl+] sonrası yerel komut modu
+        self._escape_mode = False
+
+        # Arka plan / oturum kapatma bayrakları
+        self._backgrounded = False
+        self._kill_session = False
+
         # Orijinal terminal ayarları (geri yükleme için)
         self._old_tty_attrs: list[Any] | None = None
         self._old_sigwinch: Any = None
@@ -233,13 +241,74 @@ class PTYSession:
         """Terminal yeniden boyutlandırıldığında pencere boyutunu iletir."""
         self._send_window_size()
 
+    def _print_escape_menu(self) -> None:
+        """Ctrl+] sonrası gösterilen yerel komut menüsü."""
+        print()
+        print("[*] ── Escape modu (komutlar uzak tarafa GİTMEZ) ──")
+        print("[*]   bg / b / g  → shell'i arka plana al (framework'e dön)")
+        print("[*]   enter / esc  → PTY moduna geri dön")
+        print("[*]   z            → uzak tarafa tek ^Z gönder (iş askıya al)")
+        print("[*]   k            → oturumu kapat (bağlantıyı kes)")
+        print("[*]   ? / h        → bu menü")
+        print("[*] ──────────────────────────────────────────────")
+        sys.stdout.flush()
+
+    def _handle_escape_input(self, data: bytes) -> str:
+        """
+        Escape modundayken gelen yerel tuşları işler.
+
+        Args:
+            data: Yerel tuşlardan gelen baytlar.
+
+        Returns:
+            "continue"  → escape modunda kalınacak
+            "pty"       → PTY moduna geri dönülecek
+            "background"→ oturum arka plana alınacak
+            "kill"      → oturum kapatılacak
+            "send-^Z"   → uzak tarafa bir ^Z gönderilecek
+        """
+        action = "continue"
+        for byte in data:
+            char = bytes([byte])
+            if char in (b"\x1b", b"\x1d", b"\r", b"\n"):
+                # ESC / Ctrl+] / Enter → PTY'ye geri dön
+                return "pty"
+            if char in (b"b", b"B", b"g", b"G"):
+                return "background"
+            if char in (b"k", b"K"):
+                return "kill"
+            if char in (b"z", b"Z"):
+                return "send-^Z"
+            if char in (b"?", b"h", b"H"):
+                self._print_escape_menu()
+        return action
+
+    def _close_session(self) -> None:
+        """Uzak bağlantıyı kapatır ve oturumu session manager'dan siler."""
+        with contextlib.suppress(Exception):
+            self.sock.shutdown(2)  # SHUT_RDWR
+        with contextlib.suppress(Exception):
+            self.sock.close()
+        if self.session_id is not None:
+            with contextlib.suppress(Exception):
+                from core.shared_state import shared_state
+
+                if shared_state.session_manager:
+                    shared_state.session_manager.remove_session(self.session_id)
+
     def _install_signal_handlers(self) -> None:
         """
         Sinyal yöneticilerini özelleştirir:
         - SIGWINCH: pencere boyutu değişikliği → uzak tarafa ilet
         - SIGINT (Ctrl+C): raw modda zaten socket'e gider, yine de güvence
         - SIGTSTP (Ctrl+Z): görmezden gel (raw modda gitmeyecek zaten)
+
+        Sinyal yönetimi yalnızca ana thread'de kurulabilir; başka bir
+        thread'den çağrılırsa sessizce atlanır (I/O döngüsü yine çalışır).
         """
+        if threading.current_thread() is not threading.main_thread():
+            return
+
         self._old_sigwinch = signal.getsignal(signal.SIGWINCH)
         self._old_sigint = signal.getsignal(signal.SIGINT)
         self._old_sigtstp = signal.getsignal(signal.SIGTSTP)
@@ -250,6 +319,8 @@ class PTYSession:
 
     def _restore_signal_handlers(self) -> None:
         """Orijinal sinyal yöneticilerini geri yükler."""
+        if threading.current_thread() is not threading.main_thread():
+            return
         if self._old_sigwinch is not None:
             signal.signal(signal.SIGWINCH, self._old_sigwinch)
         if self._old_sigint is not None:
@@ -278,7 +349,7 @@ class PTYSession:
             else "sessions -i <id>"
         )
         print(f"[*] PTY oturumu aktif ({label}).")
-        print(f"[*] Background: Ctrl+]  veya  Ctrl+Z")
+        print(f"[*] Arka plan:  Ctrl+Z  |  veya  Ctrl+] sonrası 'bg' + Enter")
         print(f"[*] Geri dönünce: {sid_hint}")
         print(f"[*] Kapatmak için: sessions -k {self.session_id}" if self.session_id else "")
         print("-" * 55)
@@ -296,7 +367,10 @@ class PTYSession:
             self._restore_terminal()
             self._restore_signal_handlers()
             print()
-            if getattr(self, "_backgrounded", False):
+            if getattr(self, "_kill_session", False):
+                self._close_session()
+                print(f"[*] PTY oturumu kapatıldı ({label}).")
+            elif getattr(self, "_backgrounded", False):
                 print(f"[*] Oturum arka plana alındı ({label}).")
                 if self.session_id is not None:
                     print(f"[*] Geri dönmek için: sessions -i {self.session_id}")
@@ -310,10 +384,14 @@ class PTYSession:
         """
         Ana I/O döngüsü — byte düzeyinde stdin ↔ socket aktarımı.
 
-        Escape tuşları (background yapar, oturumu kapatmaz):
-          - Ctrl+]  0x1d  → PTY'den çık, framework'e dön
-          - Ctrl+Z  0x1a  → aynı (raw modda SIGTSTP göndermez, background yapar)
-            Not: Uzak PTY'ye Ctrl+Z göndermek istiyorsan iki kez bas: Ctrl+Z Ctrl+Z
+        Yerel komutlar (uzak tarafa GİTMEZ):
+          - Ctrl+Z          → oturumu arka plana al (tek basış)
+          - Ctrl+]          → escape menüsü; ardından:
+                               bg/b/g + Enter → arka plan
+                               Enter/Esc      → PTY'ye geri dön
+                               z               → uzak tarafa ^Z (iş askıya al)
+                               k               → oturumu kapat
+          - Ctrl+] bg (aynı anda) → doğrudan arka plan
 
         Ctrl+C (0x03) → doğrudan uzak tarafa gönderilir (uzak işlemi durdurur).
         """
@@ -321,7 +399,6 @@ class PTYSession:
         BG_CHARS = {b"\x1d", b"\x1a"}  # Ctrl+], Ctrl+Z
 
         stdin_fd = sys.stdin.fileno()
-        _ctrlz_count = 0   # Ctrl+Z çift basma sayacı
 
         try:
             while self.running:
@@ -368,29 +445,52 @@ class PTYSession:
                             self.running = False
                             break
 
-                        # Ctrl+] → her zaman background
-                        if b"\x1d" in data:
-                            self._backgrounded = True
-                            self.running = False
-                            break
-
-                        # Ctrl+Z → çift basınca background, tekse uzak tarafa gönder
-                        if data == b"\x1a":
-                            _ctrlz_count += 1
-                            if _ctrlz_count >= 2:
-                                # İkinci Ctrl+Z → background
+                        # Escape modu: tuşlar yerelde yorumlanır, uzağa gitmez
+                        if self._escape_mode:
+                            action = self._handle_escape_input(data)
+                            if action in ("background", "kill"):
+                                if action == "kill":
+                                    self._kill_session = True
+                                self._escape_mode = False
                                 self._backgrounded = True
                                 self.running = False
                                 break
-                            # İlk Ctrl+Z → uzak tarafa gönder (uzak işlemi durdurur)
-                            try:
-                                self.sock.sendall(data)
-                            except (OSError, BrokenPipeError):
-                                self.running = False
-                                break
+                            if action == "pty":
+                                self._escape_mode = False
+                                print("[*] Escape modundan çıkıldı — PTY modu.")
+                                continue
+                            if action == "send-^Z":
+                                self._escape_mode = False
+                                with contextlib.suppress(OSError, BrokenPipeError):
+                                    self.sock.sendall(b"\x1a")
+                                continue
                             continue
-                        else:
-                            _ctrlz_count = 0  # Ctrl+Z sayacını sıfırla
+
+                        # Ctrl+] → escape menüsü (bg ile arka plana al)
+                        if b"\x1d" in data:
+                            self._escape_mode = True
+                            self._print_escape_menu()
+                            # Aynı okumada gelen kalan tuşlar (örn: Ctrl+]bg)
+                            rest = data.replace(b"\x1d", b"")
+                            if rest:
+                                action = self._handle_escape_input(rest)
+                                if action in ("background", "kill"):
+                                    if action == "kill":
+                                        self._kill_session = True
+                                    self._escape_mode = False
+                                    self._backgrounded = True
+                                    self.running = False
+                                    break
+                                if action == "pty":
+                                    self._escape_mode = False
+                                    print("[*] Escape modundan çıkıldı — PTY modu.")
+                            continue
+
+                        # Ctrl+Z → tek basış yerelde background
+                        if data == b"\x1a":
+                            self._backgrounded = True
+                            self.running = False
+                            break
 
                         try:
                             self.sock.sendall(data)

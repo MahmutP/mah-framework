@@ -136,7 +136,9 @@ class PTYUpgrade(BaseModule):
 
             if interact_flag:
                 print("[*] PTY oturumuna giriliyor...")
-                print("[*] Çıkış: Ctrl+] | Ctrl+C artık uzak tarafa gider!")
+                print("[*] Çıkış/arka plan: Ctrl+Z | Ctrl+] sonrası 'bg' + Enter")
+                print("[*] Ctrl+C artık uzak tarafa gider!")
+
                 pty_session = PTYSession(client_sock, session_id=session_id)
                 pty_session.start()
             else:

@@ -19,12 +19,16 @@ from typing import Any
 
 from rich import print
 
+from core.cont import CERTS_DIR
 from core.handler import BaseHandler
 from core.shared_state import shared_state
 
-# Sertifika dosyaları için yollar
-CERT_FILE = "server.crt"
-KEY_FILE = "server.key"
+# Sertifika dosyaları config/certs/ altında tutulur (kök dizin kirletilmez).
+CERT_FILE = os.path.join(CERTS_DIR, "server.crt")
+KEY_FILE = os.path.join(CERTS_DIR, "server.key")
+
+# openssl subj değeri (kendi kendine imzalı sertifika)
+CERT_SUBJECT = "/C=US/ST=California/L=San Francisco/O=jQuery Inc/CN=jquery.com"
 
 
 class Handler(BaseHandler):
@@ -37,25 +41,63 @@ class Handler(BaseHandler):
         self.session_id = None
         self.cert_file = os.path.abspath(options.get("CERT_FILE", CERT_FILE))
         self.key_file = os.path.abspath(options.get("KEY_FILE", KEY_FILE))
-        self.check_and_generate_cert()
+        self.cert_ready = self.check_and_generate_cert()
 
-    def check_and_generate_cert(self):
-        """SSL sertifikası yoksa oluşturur."""
-        if not os.path.exists(self.cert_file) or not os.path.exists(self.key_file):
-            print(f"[*] SSL Sertifikası oluşturuluyor... ({self.cert_file})")
-            try:
-                subprocess.check_call(
-                    f"openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 "
-                    f'-keyout "{self.key_file}" -out "{self.cert_file}" '
-                    f'-subj "/C=US/ST=California/L=San Francisco/O=jQuery Inc/CN=jquery.com"',
-                    shell=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                print("[+] Sertifika oluşturuldu.")
-            except Exception as e:
-                print(f"[!] Sertifika oluşturma hatası: {e}")
-                print("[!] Lütfen openssl'in yüklü olduğundan emin olun.")
+    def check_and_generate_cert(self) -> bool:
+        """
+        SSL sertifikası yoksa üretir, üretilemezse False döner.
+
+        Sertifika `config/certs/` altında tutulur; özel anahtar 0600 izinle
+        yazılır. openssl argüman listesi ile çağrılır (shell=True kullanılmaz).
+
+        Returns:
+            bool: Sertifika mevcut ve kullanılabilir ise True.
+        """
+        if os.path.exists(self.cert_file) and os.path.exists(self.key_file):
+            return True
+
+        print(f"[*] SSL Sertifikası oluşturuluyor... ({self.cert_file})")
+        try:
+            os.makedirs(os.path.dirname(self.cert_file), exist_ok=True)
+            os.makedirs(os.path.dirname(self.key_file), exist_ok=True)
+
+            subprocess.check_call(
+                [
+                    "openssl",
+                    "req",
+                    "-new",
+                    "-newkey",
+                    "rsa:2048",
+                    "-days",
+                    "365",
+                    "-nodes",
+                    "-x509",
+                    "-keyout",
+                    self.key_file,
+                    "-out",
+                    self.cert_file,
+                    "-subj",
+                    CERT_SUBJECT,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+            # Özel anahtar yalnızca sahibi tarafından okunabilsin
+            with contextlib.suppress(OSError):
+                os.chmod(self.key_file, 0o600)
+
+            print("[+] Sertifika oluşturuldu.")
+            return True
+
+        except FileNotFoundError:
+            print("[!] 'openssl' bulunamadı — SSL dinleyici başlatılamaz.")
+            print("[*] macOS: brew install openssl | Linux: apt install openssl")
+            return False
+        except Exception as e:
+            print(f"[!] Sertifika oluşturma hatası: {e}")
+            print("[!] Lütfen openssl'in yüklü olduğundan emin olun.")
+            return False
 
     def start(self):
         """
@@ -63,6 +105,11 @@ class Handler(BaseHandler):
         Bağlantılar ayrı thread'de işlenir; accept kısa timeout ile
         stop()/CTRL+C'ye yanıt verir.
         """
+        # Sertifika yoksa dinleyici hiç açılmaz (belirsiz SSL hatası yerine net mesaj)
+        if not getattr(self, "cert_ready", False):
+            print("[!] SSL sertifikası hazır değil — Chimera handler başlatılamıyor.")
+            return False
+
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

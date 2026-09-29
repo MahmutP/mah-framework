@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import os
 import time
@@ -27,9 +28,17 @@ from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
+from rich.progress import (
+    BarColumn,
+    DownloadColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
+)
 
-from core import logger
 from core.module import BaseModule
 from core.option import Option
 from core.shared_state import shared_state
@@ -74,8 +83,58 @@ class RemoteDownload(BaseModule):
                 "Hash ile doğrulama yap (true/false).",
                 choices=["true", "false"],
             ),
+            "CHUNK_SIZE": Option(
+                "CHUNK_SIZE", 65536, False,
+                "Transfer parça boyutu (bayt). Büyük dosyalar parça parça aktarılır.",
+            ),
         }
         self.console = Console()
+
+    # ─── Progress yardımcıları ─────────────────────────────────────────────
+
+    def _progress(self, total: int = 0) -> Progress:
+        """Bayt cinsinden ilerleme çubuğu oluşturur (total=0 ise belirsiz)."""
+        columns = [
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=32),
+            DownloadColumn(),
+        ]
+        if total > 0:
+            columns += [TransferSpeedColumn(), TimeRemainingColumn()]
+        else:
+            columns.append(TimeElapsedColumn())
+        return Progress(*columns, console=self.console, transient=False)
+
+    @staticmethod
+    def _drain_socket(sock: Any, max_bytes: int = 262144) -> int:
+        """
+        Gönderim sırasında uzak tarafın echo/input çıktısını boşaltır.
+
+        PTY/canonical echo açıksa uzak, gönderdiğimiz veriyi geri yazar; biz
+        okumazsak receive buffer dolar ve iki taraf da bloklanır (deadlock).
+        """
+        drained = 0
+        previous_timeout = None
+        try:
+            previous_timeout = sock.gettimeout()
+            sock.settimeout(0)
+            while drained < max_bytes:
+                try:
+                    chunk = sock.recv(8192)
+                except (BlockingIOError, InterruptedError):
+                    break
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                drained += len(chunk)
+        except OSError:
+            pass
+        finally:
+            with contextlib.suppress(OSError):
+                sock.settimeout(previous_timeout)
+        return drained
 
     # ─── Socket üzerinden komut çalıştırma ──────────────────────────────
 
@@ -132,9 +191,9 @@ class RemoteDownload(BaseModule):
                 start_idx = decoded.index(start_marker) + len(start_marker)
                 end_idx = decoded.index(end_marker)
                 output = decoded[start_idx:end_idx].strip()
-                lines = [l for l in output.split("\n")
-                         if start_marker not in l and end_marker not in l
-                         and "echo " + start_marker not in l]
+                lines = [ln for ln in output.split("\n")
+                         if start_marker not in ln and end_marker not in ln
+                         and "echo " + start_marker not in ln]
                 return "\n".join(lines).strip()
             elif start_marker in decoded:
                 start_idx = decoded.index(start_marker) + len(start_marker)
@@ -157,9 +216,106 @@ class RemoteDownload(BaseModule):
 
     # ─── Download ──────────────────────────────────────────────────────────
 
+    def _remote_file_size(
+        self, sock: Any, remote_path: str, target_os: str, timeout: float
+    ) -> int:
+        """Uzak dosyanın boyutunu bayt cinsinden döndürür (bilinmiyorsa 0)."""
+        if target_os == "windows":
+            size_str = self._exec_on_session(
+                sock,
+                f'powershell -NoProfile -Command "(Get-Item \'{remote_path}\').Length"',
+                timeout=timeout,
+            )
+        else:
+            size_str = self._exec_on_session(
+                sock,
+                f'stat -c%s "{remote_path}" 2>/dev/null || '
+                f'stat -f%z "{remote_path}" 2>/dev/null || '
+                f'wc -c < "{remote_path}" 2>/dev/null || echo 0',
+                timeout=timeout,
+            )
+
+        # Yanıtın son satırındaki ilk sayıyı al (ekranda echo'lar olabilir)
+        for line in reversed(size_str.strip().splitlines()):
+            cleaned = "".join(c for c in line if c.isdigit())
+            if cleaned:
+                try:
+                    return int(cleaned)
+                except ValueError:
+                    continue
+        return 0
+
+    def _read_remote_chunk(
+        self, sock: Any, remote_path: str, offset: int, length: int,
+        target_os: str, timeout: float,
+    ) -> bytes:
+        """
+        Uzak dosyanın belirtilen aralığını okur ve ham bayt olarak döndürür.
+
+        Büyük dosyaların tek seferde base64'lenmesi bellek/zaman aşımı
+        sorunu yaratır; bu yüzden `dd` (Unix) / `FileStream` (Windows) ile
+        parça parça okunur.
+        """
+        if target_os == "windows":
+            # PowerShell: FileStream.Seek + Read + base64
+            command = (
+                "powershell -NoProfile -Command \""
+                f"$s=[IO.File]::OpenRead('{remote_path}');"
+                f"$s.Seek({offset},'Begin')|Out-Null;"
+                f"$b=New-Object byte[] {length};"
+                "$n=$s.Read($b,0," + str(length) + ");"
+                "if($n -gt 0){[Console]::Out.Write("
+                "[Convert]::ToBase64String($b,0,$n))};"
+                "$s.Close()\""
+            )
+        else:
+            # offset her zaman chunk_size'ın katı olduğu için skip = offset // length
+            command = (
+                f'dd if="{remote_path}" bs={length} skip={offset // length} '
+                f'count=1 2>/dev/null | base64'
+            )
+
+        b64_output = self._exec_on_session(sock, command, timeout=timeout)
+        b64_output = "".join(b64_output.split())
+
+        if not b64_output or "[Hata" in b64_output:
+            return b""
+
+        try:
+            return base64.b64decode(b64_output)
+        except Exception:
+            return b""
+
+    def _verify_remote_hash(
+        self, sock: Any, remote_path: str, local_data_hash: str,
+        target_os: str, timeout: float,
+    ) -> None:
+        """Yerel hash ile uzak hash'i karşılaştırır."""
+        if target_os == "windows":
+            return
+
+        remote_hash_output = self._exec_on_session(
+            sock,
+            f'sha256sum "{remote_path}" 2>/dev/null || '
+            f'shasum -a 256 "{remote_path}" 2>/dev/null',
+            timeout=timeout,
+        )
+        if not remote_hash_output.strip():
+            return
+
+        remote_hash = remote_hash_output.strip().split()[0]
+        if local_data_hash == remote_hash:
+            self.console.print("[bold green][✓] Hash doğrulaması başarılı.[/bold green]")
+        else:
+            self.console.print(
+                f"[bold yellow][!] Hash uyuşmazlığı!\n"
+                f"    Yerel : {local_data_hash}\n"
+                f"    Uzak  : {remote_hash}[/bold yellow]"
+            )
+
     def _download_file(
         self, sock: Any, remote_path: str, local_path: str,
-        target_os: str, timeout: float, verify: bool,
+        target_os: str, timeout: float, verify: bool, chunk_size: int = 65536,
     ) -> bool:
         """Uzak dosyayı base64 ile indirip yerel dosyaya yazar."""
         self.console.print(f"[cyan][*] İndiriliyor: {remote_path}[/cyan]")
@@ -181,82 +337,121 @@ class RemoteDownload(BaseModule):
             return False
 
         # Dosya boyutunu öğren
-        if target_os != "windows":
-            size_str = self._exec_on_session(
-                sock, f'stat -c%s "{remote_path}" 2>/dev/null || '
-                      f'stat -f%z "{remote_path}" 2>/dev/null || echo 0',
-                timeout=timeout,
-            )
-            try:
-                file_size = int(size_str.strip().split("\n")[-1])
-            except ValueError:
-                file_size = 0
-            self.console.print(f"[*] Dosya boyutu: {file_size:,} byte")
-
-        # base64 ile oku
-        if target_os == "windows":
-            b64_cmd = f'certutil -encode "{remote_path}" CON'
-        else:
-            b64_cmd = f'base64 "{remote_path}"'
-
-        b64_output = self._exec_on_session(sock, b64_cmd, timeout=timeout)
-
-        if not b64_output or "[Hata" in b64_output:
-            self.console.print(f"[bold red][!] base64 okuması başarısız.[/bold red]")
-            return False
-
-        # Windows certutil çıktısını temizle
-        if target_os == "windows":
-            lines = b64_output.split("\n")
-            cleaned = [l for l in lines
-                       if "BEGIN CERTIFICATE" not in l
-                       and "END CERTIFICATE" not in l
-                       and "CertUtil" not in l]
-            b64_output = "".join(l.strip() for l in cleaned)
-        else:
-            b64_output = "".join(b64_output.split())
-
-        # Decode
-        try:
-            file_data = base64.b64decode(b64_output)
-        except Exception as e:
-            self.console.print(f"[bold red][!] Base64 decode hatası: {e}[/bold red]")
-            return False
+        file_size = self._remote_file_size(sock, remote_path, target_os, timeout)
+        self.console.print(f"[*] Dosya boyutu: {file_size:,} byte")
 
         # Yerel dizini oluştur
         local_dir = os.path.dirname(os.path.abspath(local_path))
         if local_dir:
             os.makedirs(local_dir, exist_ok=True)
 
-        with open(local_path, "wb") as f:
-            f.write(file_data)
+        if file_size > 0 and file_size > chunk_size:
+            # Büyük dosya: parça parça indir (progress bar ile)
+            success = self._download_chunked(
+                sock, remote_path, local_path, file_size,
+                target_os, timeout, chunk_size,
+            )
+            if not success:
+                return False
+        else:
+            # Küçük dosya veya boyut bilinmiyorsa: tek seferde oku
+            success = self._download_whole(
+                sock, remote_path, local_path, target_os, timeout,
+            )
+            if not success:
+                return False
 
+        actual_size = os.path.getsize(local_path)
         self.console.print(
             f"[bold green][+] İndirildi: {local_path} "
-            f"({len(file_data):,} byte)[/bold green]"
+            f"({actual_size:,} byte)[/bold green]"
         )
 
         # Hash doğrulama
         if verify and target_os != "windows":
-            local_hash = hashlib.sha256(file_data).hexdigest()
-            remote_hash_output = self._exec_on_session(
-                sock,
-                f'sha256sum "{remote_path}" 2>/dev/null || '
-                f'shasum -a 256 "{remote_path}" 2>/dev/null',
-                timeout=timeout,
+            with open(local_path, "rb") as f:
+                local_hash = hashlib.sha256(f.read()).hexdigest()
+            self._verify_remote_hash(
+                sock, remote_path, local_hash, target_os, timeout
             )
-            if remote_hash_output:
-                remote_hash = remote_hash_output.strip().split()[0] if remote_hash_output.strip() else ""
-                if local_hash == remote_hash:
-                    self.console.print("[bold green][✓] Hash doğrulaması başarılı.[/bold green]")
-                else:
-                    self.console.print(
-                        f"[bold yellow][!] Hash uyuşmazlığı!\n"
-                        f"    Yerel : {local_hash}\n"
-                        f"    Uzak  : {remote_hash}[/bold yellow]"
-                    )
 
         return True
+
+    def _download_chunked(
+        self, sock: Any, remote_path: str, local_path: str, file_size: int,
+        target_os: str, timeout: float, chunk_size: int,
+    ) -> bool:
+        """Büyük dosyaları parça parça indirir; ilerleme çubuğu gösterir."""
+        chunk_count = (file_size + chunk_size - 1) // chunk_size
+        downloaded = 0
+
+        with open(local_path, "wb") as f, self._progress(file_size) as progress:
+            task = progress.add_task(
+                f"İndiriliyor: {remote_path}", total=file_size
+            )
+            for _ in range(chunk_count):
+                chunk = self._read_remote_chunk(
+                    sock, remote_path, downloaded, chunk_size,
+                    target_os, timeout,
+                )
+                if not chunk:
+                    break
+                f.write(chunk)
+                downloaded += len(chunk)
+                progress.update(task, completed=downloaded)
+
+        if downloaded < file_size:
+            self.console.print(
+                f"[bold yellow][!] Transfer yarıda kesildi: "
+                f"{downloaded:,} / {file_size:,} byte alındı.[/bold yellow]"
+            )
+            return False
+
+        return True
+
+    def _download_whole(
+        self, sock: Any, remote_path: str, local_path: str,
+        target_os: str, timeout: float,
+    ) -> bool:
+        """Küçük dosyaları tek komutta base64 olarak indirir."""
+        if target_os == "windows":
+            b64_cmd = f'certutil -encode "{remote_path}" CON'
+        else:
+            # NOT: macOS/BSD base64 pozisyonel dosya argümanı desteklemez
+            # ("invalid argument"); yönlendirme ile okumak her ikisinde de çalışır.
+            b64_cmd = f'base64 < "{remote_path}"'
+
+        with self._progress(0) as progress:
+            task = progress.add_task(f"Okunuyor: {remote_path}", total=None)
+            b64_output = self._exec_on_session(sock, b64_cmd, timeout=timeout)
+            progress.update(task, completed=1)
+
+        if not b64_output or "[Hata" in b64_output:
+            self.console.print("[bold red][!] base64 okuması başarısız.[/bold red]")
+            return False
+
+        # Windows certutil çıktısını temizle
+        if target_os == "windows":
+            lines = b64_output.split("\n")
+            cleaned = [ln for ln in lines
+                       if "BEGIN CERTIFICATE" not in ln
+                       and "END CERTIFICATE" not in ln
+                       and "CertUtil" not in ln]
+            b64_output = "".join(ln.strip() for ln in cleaned)
+        else:
+            b64_output = "".join(b64_output.split())
+
+        try:
+            file_data = base64.b64decode(b64_output)
+        except Exception as e:
+            self.console.print(f"[bold red][!] Base64 decode hatası: {e}[/bold red]")
+            return False
+
+        with open(local_path, "wb") as f:
+            f.write(file_data)
+
+        return True
+
 
     # ─── Upload ────────────────────────────────────────────────────────────
 
@@ -278,42 +473,87 @@ class RemoteDownload(BaseModule):
 
         b64_data = base64.b64encode(file_data).decode("ascii")
 
-        # Chunk'lara böl (shell satır sınırı nedeniyle)
-        chunk_size = 4096
-        chunks = [b64_data[i:i + chunk_size] for i in range(0, len(b64_data), chunk_size)]
+        # Chunk'lara böl. PTY oturumlarında terminal satır sınırı ~4096 bayt
+        # olduğu için komut satırı bu sınırın altında kalmalı.
+        chunk_size = 2048
+        chunks = [
+            b64_data[i:i + chunk_size] for i in range(0, len(b64_data), chunk_size)
+        ]
+
+        if file_size == 0:
+            self.console.print("[bold yellow][*] Dosya boş, boş dosya oluşturulacak.[/bold yellow]")
+            if target_os == "windows":
+                self._exec_on_session(
+                    sock, f'type nul > "{remote_path}"', timeout=timeout
+                )
+            else:
+                self._exec_on_session(
+                    sock, f': > "{remote_path}"', timeout=timeout
+                )
+            self.console.print(
+                f"[bold green][+] Yüklendi: {remote_path} (0 byte)[/bold green]"
+            )
+            return True
 
         self.console.print(f"[*] {len(chunks)} parça olarak gönderiliyor...")
 
-        # İlk chunk: dosyayı oluştur
-        if target_os == "windows":
-            # Windows: certutil yöntemi
-            tmp_b64 = remote_path + ".b64"
-            self._exec_on_session(
-                sock, f'echo {chunks[0]} > "{tmp_b64}"', timeout=timeout
+        # Windows: certutil yöntemi (tmp dosya yanına)
+        tmp_b64 = (
+            remote_path + ".b64" if target_os == "windows" else "/tmp/.mah_upload.b64"
+        )
+        prefix = "" if target_os == "windows" else "-n "
+
+        sent = 0
+        with self._progress(file_size) as progress:
+            task = progress.add_task(
+                f"Yükleniyor: {remote_path}", total=file_size
             )
-            for i, chunk in enumerate(chunks[1:], 2):
-                self._exec_on_session(
-                    sock, f'echo {chunk} >> "{tmp_b64}"', timeout=timeout
-                )
-            self._exec_on_session(
+            for i, chunk in enumerate(chunks):
+                redirect = ">" if i == 0 else ">>"
+                line = f"echo {prefix}'{chunk}' {redirect} \"{tmp_b64}\"\n"
+                try:
+                    sock.sendall(line.encode("utf-8", errors="replace"))
+                except (OSError, BrokenPipeError) as e:
+                    self.console.print(f"[bold red][!] Gönderme hatası: {e}[/bold red]")
+                    return False
+
+                sent += len(chunk) * 3 // 4
+                progress.update(task, completed=min(sent, file_size))
+
+                # Uzak tarafın echo/input çıktısını boşalt (deadlock koruması)
+                self._drain_socket(sock)
+
+        # Gönderilen verinin tamamı tüketildikten sonra decode et
+        if target_os == "windows":
+            result = self._exec_on_session(
                 sock, f'certutil -decode "{tmp_b64}" "{remote_path}" && del "{tmp_b64}"',
                 timeout=timeout,
             )
         else:
-            # Unix: base64 -d
-            self._exec_on_session(
-                sock, f'echo -n "{chunks[0]}" > /tmp/.mah_upload.b64', timeout=timeout
-            )
-            for chunk in chunks[1:]:
-                self._exec_on_session(
-                    sock, f'echo -n "{chunk}" >> /tmp/.mah_upload.b64', timeout=timeout
-                )
-            self._exec_on_session(
+            # GNU base64 '-d', BSD/macOS '-D' kullanır. macOS ayrıca dosyayı
+            # konumsal argüman olarak kabul etmez; yönlendirme şart.
+            result = self._exec_on_session(
                 sock,
-                f'base64 -d /tmp/.mah_upload.b64 > "{remote_path}" && '
-                f'rm -f /tmp/.mah_upload.b64',
+                f'base64 -d < "{tmp_b64}" > "{remote_path}" 2>/dev/null || '
+                f'base64 -D < "{tmp_b64}" > "{remote_path}" 2>/dev/null; '
+                f'rm -f "{tmp_b64}"',
                 timeout=timeout,
             )
+
+        if "[Hata" in result:
+            self.console.print(f"[bold red][!] Decode hatası: {result}[/bold red]")
+            return False
+
+        # Boyut kontrolü: decode sessizce başarısız olup boş dosya bırakabilir
+        remote_size = self._remote_file_size(
+            sock, remote_path, target_os, timeout
+        )
+        if remote_size != file_size:
+            self.console.print(
+                f"[bold red][!] Boyut uyuşmazlığı: yerel {file_size:,} byte, "
+                f"uzak {remote_size:,} byte.[/bold red]"
+            )
+            return False
 
         self.console.print(
             f"[bold green][+] Yüklendi: {remote_path} ({file_size:,} byte)[/bold green]"
@@ -334,7 +574,7 @@ class RemoteDownload(BaseModule):
                     self.console.print("[bold green][✓] Hash doğrulaması başarılı.[/bold green]")
                 else:
                     self.console.print(
-                        f"[bold yellow][!] Hash uyuşmazlığı![/bold yellow]"
+                        "[bold yellow][!] Hash uyuşmazlığı![/bold yellow]"
                     )
 
         return True
@@ -402,9 +642,15 @@ class RemoteDownload(BaseModule):
             border_style="cyan",
         ))
 
+        try:
+            chunk_size = max(1024, int(options.get("CHUNK_SIZE", 65536)))
+        except (TypeError, ValueError):
+            chunk_size = 65536
+
         if mode == "download":
             success = self._download_file(
-                sock, remote_path, local_path, target_os, timeout, verify
+                sock, remote_path, local_path, target_os, timeout, verify,
+                chunk_size=chunk_size,
             )
         elif mode == "upload":
             success = self._upload_file(

@@ -16,19 +16,16 @@
 
 from __future__ import annotations
 
-import time
-import uuid
 from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from core import logger
+from core import logger, shell_exec
 from core.module import BaseModule
 from core.option import Option
 from core.shared_state import shared_state
-
 
 # ── Taranacak dosya desenleri ─────────────────────────────────────────────────
 
@@ -121,65 +118,12 @@ class RemoteCreds(BaseModule):
 
     @staticmethod
     def _exec_on_session(sock: Any, command: str, timeout: float = 10.0) -> str:
-        """Shell oturumuna marker tabanlı komut gönderir."""
-        marker = f"__MAH_{uuid.uuid4().hex[:12]}__"
-        start_marker = f"{marker}START"
-        end_marker = f"{marker}END"
-        wrapped = f"echo {start_marker} && {command} 2>/dev/null && echo {end_marker}\n"
+        """Shell oturumuna komut gönderir ve marker tabanlı çıktıyı yakalar.
 
-        try:
-            sock.setblocking(False)
-            try:
-                while True:
-                    d = sock.recv(4096)
-                    if not d:
-                        break
-            except (BlockingIOError, OSError):
-                pass
-            sock.setblocking(True)
-
-            sock.sendall(wrapped.encode("utf-8", errors="replace"))
-            sock.settimeout(timeout)
-            response = b""
-            deadline = time.time() + timeout
-
-            while time.time() < deadline:
-                try:
-                    chunk = sock.recv(4096)
-                    if not chunk:
-                        break
-                    response += chunk
-                    if end_marker.encode() in response:
-                        time.sleep(0.1)
-                        try:
-                            extra = sock.recv(4096)
-                            if extra:
-                                response += extra
-                        except (TimeoutError, BlockingIOError, OSError):
-                            pass
-                        break
-                except TimeoutError:
-                    break
-                except (BlockingIOError, OSError):
-                    break
-
-            sock.settimeout(None)
-            decoded = response.decode("utf-8", errors="replace")
-
-            if start_marker in decoded and end_marker in decoded:
-                s = decoded.index(start_marker) + len(start_marker)
-                e = decoded.index(end_marker)
-                output = decoded[s:e].strip()
-                lines = [l for l in output.split("\n")
-                         if start_marker not in l and end_marker not in l
-                         and "echo " + start_marker not in l]
-                return "\n".join(lines).strip()
-            elif start_marker in decoded:
-                s = decoded.index(start_marker) + len(start_marker)
-                return decoded[s:].strip()
-            return decoded.strip()
-        except Exception as exc:
-            return f"[Hata: {exc}]"
+        Protokolün tek uygulaması core/shell_exec.py'de: PTY prompt'u ve
+        terminal echo'su temizlenir, hata durumunda "[Hata: ...]" döner.
+        """
+        return shell_exec.exec_on_session(sock, command, timeout)
 
     def _detect_os(self, sock: Any, timeout: float) -> str:
         """Uzak OS'u algılar."""
@@ -254,7 +198,7 @@ class RemoteCreds(BaseModule):
             timeout=min(timeout, 15),
         )
         if result and "[Hata" not in result:
-            return [l.strip() for l in result.split("\n") if l.strip()]
+            return [line.strip() for line in result.split("\n") if line.strip()]
         return []
 
     # ─── Geçmiş dosyalarda hassas pattern arama ─────────────────────────
@@ -367,7 +311,6 @@ class RemoteCreds(BaseModule):
         )
         show_content = str(options.get("SHOW_CONTENT", "false")).lower() == "true"
         preview_lines = int(options.get("PREVIEW_LINES", 5))
-        loot_dir = str(options.get("LOOT_DIR", "") or "")
         timeout = float(options.get("TIMEOUT", 10))
 
         # Oturumu bul
@@ -395,6 +338,16 @@ class RemoteCreds(BaseModule):
             return False
 
         logger.info(f"Remote cred taraması başlatılıyor (Session {session_id})")
+
+        # PTY oturumlarda echo'yu kapat: readline uzun satırlari yeniden
+        # cizer ve marker'lari bozar (cikti "[Hata: komut tamamlanmadi]" olur).
+        shell_exec.prepare_remote(
+            sock, min(timeout, 10),
+            warn=lambda: self.console.print(
+                "[yellow][!] Terminal echo'su kapatilamadi; "
+                "uzak oturumda bazi ciktilar eksik gelebilir.[/yellow]"
+            ),
+        )
 
         # OS algıla
         target_os = self._detect_os(sock, min(timeout, 10))

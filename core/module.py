@@ -2,7 +2,9 @@
 # Bu dosya, bir modülün sahip olması gereken standart yapıyı, özellikleri ve metodları tanımlar.
 
 import importlib.util
+import re
 import shutil
+import unicodedata
 from typing import Any
 
 from core.option import Option
@@ -83,6 +85,53 @@ class BaseModule:
         """
         return self.Options
 
+    @staticmethod
+    def _normalize_option_key(name: str) -> str:
+        """
+        Seçenek adını karşılaştırma için normalleştirir.
+
+        Kullanıcı büyük/küçük harf, Türkçe locale (I/İ/ı) ve '_'/'-'
+        farklılıklarında yazabiliyor: 'session', 'SESSION', 'SESİON', 'sesıon'
+        hepsi aynı seçeneğe çözülmeli.
+        """
+        text = str(name).strip()
+        # Türkçe'ye özgü harfler ÖNCE çevrilir: 'İ'.casefold() -> 'i' + birleşen
+        # nokta üretir, sonrasında temizlenemez.
+        for src, dst in (("ı", "i"), ("İ", "i"), ("î", "i"), ("Î", "i"),
+                         ("ş", "s"), ("Ş", "s"), ("ğ", "g"), ("Ğ", "g"),
+                         ("ü", "u"), ("Ü", "u"), ("ö", "o"), ("Ö", "o"),
+                         ("ç", "c"), ("Ç", "c"), ("û", "u"), ("Û", "u")):
+            text = text.replace(src, dst)
+        # Aksanları ayır ve birleşen işaretleri at
+        text = unicodedata.normalize("NFKD", text.casefold())
+        text = "".join(c for c in text if not unicodedata.combining(c))
+        # Alt çizgi/tire/boşluk: 'S_E_S_S_I_O_N' -> 'session'
+        return re.sub(r"[^a-z0-9]", "", text)
+
+    def resolve_option_name(self, option_name: str) -> str | None:
+        """
+        Verilen isme karşılık gelen gerçek seçenek adını döndürür.
+
+        Önce birebir, sonra büyük/küçük harf ve Türkçe harf duyarsız arama yapılır.
+
+        Args:
+            option_name (str): Kullanıcının yazdığı seçenek adı.
+
+        Returns:
+            str | None: Gerçek seçenek adı veya bulunamadıysa None.
+        """
+        if option_name in self.Options:
+            return option_name
+
+        target = self._normalize_option_key(option_name)
+        if not target:
+            return None
+
+        for existing in self.Options:
+            if self._normalize_option_key(existing) == target:
+                return existing
+        return None
+
     def get_option_value(self, option_name: str) -> Any:
         """
         Belirli bir seçeneğin o anki değerini döndürür.
@@ -93,9 +142,9 @@ class BaseModule:
         Returns:
             Any: Seçeneğin değeri veya bulunamazsa None.
         """
-        option = self.Options.get(option_name)
-        if option:
-            return option.value
+        resolved = self.resolve_option_name(option_name)
+        if resolved:
+            return self.Options[resolved].value
         return None
 
     def set_option_value(self, option_name: str, value: Any) -> bool:
@@ -110,13 +159,18 @@ class BaseModule:
         Returns:
             bool: İşlem başarılıysa True, seçenek bulunamazsa False.
         """
-        option = self.Options.get(option_name)
-        if option:
+        resolved = self.resolve_option_name(option_name)
+        if resolved:
+            option = self.Options[resolved]
             # Option nesnesinin değerini güncelle
             option.value = value
             # Sınıf attribute'unu da güncelle (self.RHOST gibi erişimler için)
-            setattr(self, option_name, value)
-            print(f"[{self.Name}] Option '{option_name}' set to '{value}'.")
+            setattr(self, resolved, value)
+            if resolved != option_name:
+                print(
+                    f"[dim]('{option_name}' → '{resolved}')[/dim]"
+                )
+            print(f"[{self.Name}] Option '{resolved}' set to '{value}'.")
             return True
 
         print(f"[{self.Name}] Option '{option_name}' bulunamadı.")

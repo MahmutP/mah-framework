@@ -19,11 +19,8 @@
 from __future__ import annotations
 
 import base64
-import contextlib
 import hashlib
 import os
-import time
-import uuid
 from typing import Any
 
 from rich.console import Console
@@ -39,6 +36,7 @@ from rich.progress import (
     TransferSpeedColumn,
 )
 
+from core import shell_exec
 from core.module import BaseModule
 from core.option import Option
 from core.shared_state import shared_state
@@ -98,109 +96,50 @@ class RemoteDownload(BaseModule):
             SpinnerColumn(),
             TextColumn("[bold blue]{task.description}"),
             BarColumn(bar_width=32),
-            DownloadColumn(),
         ]
         if total > 0:
-            columns += [TransferSpeedColumn(), TimeRemainingColumn()]
+            columns += [DownloadColumn(), TransferSpeedColumn(),
+                        TimeRemainingColumn()]
         else:
+            columns.append(TextColumn("boyut bilinmiyor"))
             columns.append(TimeElapsedColumn())
         return Progress(*columns, console=self.console, transient=False)
 
     @staticmethod
     def _drain_socket(sock: Any, max_bytes: int = 262144) -> int:
-        """
-        Gönderim sırasında uzak tarafın echo/input çıktısını boşaltır.
-
-        PTY/canonical echo açıksa uzak, gönderdiğimiz veriyi geri yazar; biz
-        okumazsak receive buffer dolar ve iki taraf da bloklanır (deadlock).
-        """
-        drained = 0
-        previous_timeout = None
-        try:
-            previous_timeout = sock.gettimeout()
-            sock.settimeout(0)
-            while drained < max_bytes:
-                try:
-                    chunk = sock.recv(8192)
-                except (BlockingIOError, InterruptedError):
-                    break
-                except OSError:
-                    break
-                if not chunk:
-                    break
-                drained += len(chunk)
-        except OSError:
-            pass
-        finally:
-            with contextlib.suppress(OSError):
-                sock.settimeout(previous_timeout)
-        return drained
+        """Gönderim sırasında uzak tarafın echo/input çıktısını boşaltır."""
+        return shell_exec.drain_socket(sock, max_bytes)
 
     # ─── Socket üzerinden komut çalıştırma ──────────────────────────────
+    # Protokolün tek uygulaması core/shell_exec.py'de; aşağıdaki ince
+    # sarmalayıcılar modül içi çağrıları bozmamak için korunmuştur.
+
+    @staticmethod
+    def _split_lines(data: bytes) -> list[str]:
+        return shell_exec.split_lines(data)
+
+    @classmethod
+    def _has_marker_line(cls, data: bytes, marker: str) -> bool:
+        return shell_exec.has_marker_line(data, marker)
+
+    @classmethod
+    def _extract_marked(cls, data: bytes, start_marker: str, end_marker: str) -> str:
+        return shell_exec.extract_marked(data, start_marker, end_marker)
+
+    @classmethod
+    def _wait_quiet(cls, sock: Any, idle: float = 0.3, max_wait: float = 30.0) -> None:
+        shell_exec.wait_quiet(sock, idle, max_wait)
+
+    @staticmethod
+    def _probe_echo(sock: Any, timeout: float = 5.0) -> bool:
+        return shell_exec.probe_echo(sock, timeout)
+
+    def _set_remote_echo(self, sock: Any, enabled: bool, timeout: float) -> None:
+        self._echo_disabled = shell_exec.set_remote_echo(sock, enabled, timeout)
 
     @staticmethod
     def _exec_on_session(sock: Any, command: str, timeout: float = 10.0) -> str:
-        """Shell oturumuna komut gönderir ve marker tabanlı çıktı yakalar."""
-        marker = f"__MAH_{uuid.uuid4().hex[:12]}__"
-        start_marker = f"{marker}START"
-        end_marker = f"{marker}END"
-
-        wrapped = f"echo {start_marker} && {command} 2>/dev/null && echo {end_marker}\n"
-
-        try:
-            sock.setblocking(False)
-            try:
-                while True:
-                    d = sock.recv(4096)
-                    if not d:
-                        break
-            except (BlockingIOError, OSError):
-                pass
-            sock.setblocking(True)
-
-            sock.sendall(wrapped.encode("utf-8", errors="replace"))
-
-            sock.settimeout(timeout)
-            response = b""
-            deadline = time.time() + timeout
-
-            while time.time() < deadline:
-                try:
-                    chunk = sock.recv(8192)
-                    if not chunk:
-                        break
-                    response += chunk
-                    if end_marker.encode() in response:
-                        time.sleep(0.1)
-                        try:
-                            extra = sock.recv(8192)
-                            if extra:
-                                response += extra
-                        except (TimeoutError, BlockingIOError, OSError):
-                            pass
-                        break
-                except TimeoutError:
-                    break
-                except (BlockingIOError, OSError):
-                    break
-
-            sock.settimeout(None)
-            decoded = response.decode("utf-8", errors="replace")
-
-            if start_marker in decoded and end_marker in decoded:
-                start_idx = decoded.index(start_marker) + len(start_marker)
-                end_idx = decoded.index(end_marker)
-                output = decoded[start_idx:end_idx].strip()
-                lines = [ln for ln in output.split("\n")
-                         if start_marker not in ln and end_marker not in ln
-                         and "echo " + start_marker not in ln]
-                return "\n".join(lines).strip()
-            elif start_marker in decoded:
-                start_idx = decoded.index(start_marker) + len(start_marker)
-                return decoded[start_idx:].strip()
-            return decoded.strip()
-        except Exception as e:
-            return f"[Hata: {e}]"
+        return shell_exec.exec_on_session(sock, command, timeout)
 
     def _detect_os(self, sock: Any, timeout: float) -> str:
         """Uzak hedefin OS'unu algılar."""
@@ -234,6 +173,9 @@ class RemoteDownload(BaseModule):
                 f'wc -c < "{remote_path}" 2>/dev/null || echo 0',
                 timeout=timeout,
             )
+
+        if "[Hata" in size_str:
+            return 0
 
         # Yanıtın son satırındaki ilk sayıyı al (ekranda echo'lar olabilir)
         for line in reversed(size_str.strip().splitlines()):
@@ -300,7 +242,7 @@ class RemoteDownload(BaseModule):
             f'shasum -a 256 "{remote_path}" 2>/dev/null',
             timeout=timeout,
         )
-        if not remote_hash_output.strip():
+        if not remote_hash_output.strip() or "[Hata" in remote_hash_output:
             return
 
         remote_hash = remote_hash_output.strip().split()[0]
@@ -334,6 +276,11 @@ class RemoteDownload(BaseModule):
 
         if "NOTFOUND" in check:
             self.console.print(f"[bold red][!] Dosya bulunamadı: {remote_path}[/bold red]")
+            return False
+        if "[Hata" in check:
+            self.console.print(
+                f"[bold red][!] Uzak komut çalıştırılamadı: {check}[/bold red]"
+            )
             return False
 
         # Dosya boyutunu öğren
@@ -497,11 +444,23 @@ class RemoteDownload(BaseModule):
 
         self.console.print(f"[*] {len(chunks)} parça olarak gönderiliyor...")
 
+        # Yığın veri göndermeden önce yankının gerçekten kapalı olduğundan emin ol.
+        # Echo açıkken her satır geri yazılır; readline redisplay'i yüzünden uzak
+        # shell komut satırlarını bozar (base64 bozulur, hatta shell çöker).
+        if getattr(self, "_echo_on", False):
+            self.console.print(
+                "[bold red][!] Uzak terminal yankısı (echo) kapatılamadı; "
+                "yükleme iptal edildi.[/bold red]\n"
+                "    Çözüm: uzak shell'de [cyan]stty -echo[/cyan] çalıştırıp "
+                "tekrar deneyin, ya da oturumu [cyan]background[/cyan] "
+                "yapmadan önce yankıyı kapatın."
+            )
+            return False
+
         # Windows: certutil yöntemi (tmp dosya yanına)
         tmp_b64 = (
             remote_path + ".b64" if target_os == "windows" else "/tmp/.mah_upload.b64"
         )
-        prefix = "" if target_os == "windows" else "-n "
 
         sent = 0
         with self._progress(file_size) as progress:
@@ -510,7 +469,13 @@ class RemoteDownload(BaseModule):
             )
             for i, chunk in enumerate(chunks):
                 redirect = ">" if i == 0 else ">>"
-                line = f"echo {prefix}'{chunk}' {redirect} \"{tmp_b64}\"\n"
+                if target_os == "windows":
+                    line = f"echo {chunk}{redirect} \"{tmp_b64}\"\n"
+                else:
+                    # `echo -n` POSIX modunda (/bin/sh) -n'i metin olarak yazar
+                    # (bash'ın xpg_echo davranışı) → dosyaya "-n " sızar.
+                    # printf '%s' her POSIX shell'de sorunsuz çalışır.
+                    line = f"printf '%s' '{chunk}' {redirect} \"{tmp_b64}\"\n"
                 try:
                     sock.sendall(line.encode("utf-8", errors="replace"))
                 except (OSError, BrokenPipeError) as e:
@@ -523,11 +488,15 @@ class RemoteDownload(BaseModule):
                 # Uzak tarafın echo/input çıktısını boşalt (deadlock koruması)
                 self._drain_socket(sock)
 
+        # Son parçanın echo'su gecikmeli gelebiliyor (readline redisplay).
+        # Decode komutunu göndermeden önce uzak tarafın sessizleşmesini bekle.
+        self._wait_quiet(sock, idle=0.4, max_wait=max(timeout, 30))
+
         # Gönderilen verinin tamamı tüketildikten sonra decode et
         if target_os == "windows":
             result = self._exec_on_session(
                 sock, f'certutil -decode "{tmp_b64}" "{remote_path}" && del "{tmp_b64}"',
-                timeout=timeout,
+                timeout=max(timeout, 30),
             )
         else:
             # GNU base64 '-d', BSD/macOS '-D' kullanır. macOS ayrıca dosyayı
@@ -537,7 +506,7 @@ class RemoteDownload(BaseModule):
                 f'base64 -d < "{tmp_b64}" > "{remote_path}" 2>/dev/null || '
                 f'base64 -D < "{tmp_b64}" > "{remote_path}" 2>/dev/null; '
                 f'rm -f "{tmp_b64}"',
-                timeout=timeout,
+                timeout=max(timeout, 30),
             )
 
         if "[Hata" in result:
@@ -647,18 +616,42 @@ class RemoteDownload(BaseModule):
         except (TypeError, ValueError):
             chunk_size = 65536
 
-        if mode == "download":
-            success = self._download_file(
-                sock, remote_path, local_path, target_os, timeout, verify,
-                chunk_size=chunk_size,
+        # PTY'li oturumlarda echo'yu kapat: yankı hem çıktıyı kirletir hem de
+        # receive buffer'ı doldurarak iki tarafı da bloklar.
+        self._echo_disabled = False
+        self._set_remote_echo(sock, False, min(timeout, 10))
+
+        # `stty` sessizce başarısız olabilir; echo'nun gerçekten kapandığını
+        # doğrula. Açıksa indirme bozulabilir (hash uyarısı yakalar),
+        # yükleme ise uzak shell'i bozabildiği için hiç denenmez.
+        self._echo_on = (
+            not self._echo_disabled and self._probe_echo(sock, min(timeout, 10))
+        )
+        if self._echo_on:
+            self.console.print(
+                "[bold yellow][!] Uzak terminal yankısı (echo) kapatılamadı.[/bold yellow]\n"
+                "    [dim]Çıktılar bozulabilir; yükleme (upload) çalıştırılmayacak.[/dim]"
             )
-        elif mode == "upload":
-            success = self._upload_file(
-                sock, local_path, remote_path, target_os, timeout, verify
-            )
-        else:
-            self.console.print(f"[bold red][!] Geçersiz mod: {mode}[/bold red]")
-            return False
+
+        try:
+            if mode == "download":
+                success = self._download_file(
+                    sock, remote_path, local_path, target_os, timeout, verify,
+                    chunk_size=chunk_size,
+                )
+            elif mode == "upload":
+                success = self._upload_file(
+                    sock, local_path, remote_path, target_os, timeout, verify
+                )
+            else:
+                self.console.print(
+                    f"[bold red][!] Geçersiz mod: {mode}[/bold red]"
+                )
+                return False
+        finally:
+            if getattr(self, "_echo_disabled", False):
+                self._set_remote_echo(sock, True, min(timeout, 10))
+                self._echo_disabled = False
 
         if shared_state.session_manager:
             shared_state.session_manager.update_session_activity(session_id)

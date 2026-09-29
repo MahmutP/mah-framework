@@ -28,7 +28,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from core import logger
+from core import logger, shell_exec
 from core.module import BaseModule
 from core.option import Option
 from core.shared_state import shared_state
@@ -94,105 +94,13 @@ class RemoteEnum(BaseModule):
             sock.setblocking(True)
 
     @staticmethod
-    def _exec_on_session(
-        sock: Any,
-        command: str,
-        timeout: float = 10.0,
-    ) -> str:
+    def _exec_on_session(sock: Any, command: str, timeout: float = 10.0) -> str:
+        """Shell oturumuna komut gönderir ve marker tabanlı çıktıyı yakalar.
+
+        Protokolün tek uygulaması core/shell_exec.py'de: PTY prompt'u ve
+        terminal echo'su temizlenir, hata durumunda "[Hata: ...]" döner.
         """
-        Shell oturumuna komut gönderir ve marker tabanlı çıktı yakalar.
-
-        UUID benzersiz marker'lar kullanarak güvenilir output parsing sağlar.
-        Hem PTY hem raw shell ile uyumludur (echo temizleme dahil).
-
-        Args:
-            sock: Uzak bağlantı soketi.
-            command: Çalıştırılacak shell komutu.
-            timeout: Çıktı bekleme süresi (saniye).
-
-        Returns:
-            Komut çıktısı (temizlenmiş string).
-        """
-        marker = f"__MAH_{uuid.uuid4().hex[:12]}__"
-        start_marker = f"{marker}START"
-        end_marker = f"{marker}END"
-
-        # Marker'lı komut oluştur — çıktıyı güvenilir şekilde ayıklamak için
-        wrapped = f"echo {start_marker} && {command} 2>/dev/null && echo {end_marker}\n"
-
-        try:
-            # Buffer'ı temizle
-            sock.setblocking(False)
-            try:
-                while True:
-                    d = sock.recv(4096)
-                    if not d:
-                        break
-            except (BlockingIOError, OSError):
-                pass
-            sock.setblocking(True)
-
-            # Komutu gönder
-            sock.sendall(wrapped.encode("utf-8", errors="replace"))
-
-            # Yanıtı topla
-            sock.settimeout(timeout)
-            response = b""
-            deadline = time.time() + timeout
-
-            while time.time() < deadline:
-                try:
-                    chunk = sock.recv(4096)
-                    if not chunk:
-                        break
-                    response += chunk
-                    # End marker geldi mi?
-                    if end_marker.encode() in response:
-                        # Biraz daha bekle (buffer'da kalan veri)
-                        time.sleep(0.1)
-                        try:
-                            extra = sock.recv(4096)
-                            if extra:
-                                response += extra
-                        except (TimeoutError, BlockingIOError, OSError):
-                            pass
-                        break
-                except TimeoutError:
-                    break
-                except (BlockingIOError, OSError):
-                    break
-
-            sock.settimeout(None)
-
-            decoded = response.decode("utf-8", errors="replace")
-
-            # Marker'lar arasını çıkar
-            if start_marker in decoded and end_marker in decoded:
-                start_idx = decoded.index(start_marker) + len(start_marker)
-                end_idx = decoded.index(end_marker)
-                output = decoded[start_idx:end_idx].strip()
-                # PTY echo temizleme — gönderilen komut satırı çıktıda görünebilir
-                lines = output.split("\n")
-                cleaned = []
-                for line in lines:
-                    # Gönderilen komutu veya marker'ı içeren satırları atla
-                    if start_marker in line or end_marker in line:
-                        continue
-                    if "echo " + start_marker in line:
-                        continue
-                    cleaned.append(line)
-                return "\n".join(cleaned).strip()
-            elif start_marker in decoded:
-                # End marker gelmedi (timeout) — kısmi çıktıyı dön
-                start_idx = decoded.index(start_marker) + len(start_marker)
-                return decoded[start_idx:].strip()
-            else:
-                return decoded.strip()
-
-        except Exception as e:
-            return f"[Hata: {e}]"
-
-    # ─── OS Algılama ────────────────────────────────────────────────────────
+        return shell_exec.exec_on_session(sock, command, timeout)
 
     def _detect_os(self, sock: Any, timeout: float) -> str:
         """Uzak hedefin OS'unu algılar (linux/windows/macos)."""
@@ -230,9 +138,12 @@ class RemoteEnum(BaseModule):
             # Distro bilgisi
             info["distro"] = self._exec_on_session(
                 sock,
-                "cat /etc/os-release 2>/dev/null | head -5 || "
-                "cat /etc/issue 2>/dev/null | head -2 || "
-                "sw_vers 2>/dev/null",
+                # Süzgeci komutun BASARISIZ oldugunu gizlemez; bu yüzden
+                # zincir süzgeçten ÖNCE kurulur, aksi halde `||` dallari hic
+                # çalışmaz (head bos cikti ile basarili sayilir).
+                "{ cat /etc/os-release 2>/dev/null || "
+                "cat /etc/issue 2>/dev/null || "
+                "sw_vers 2>/dev/null; } | head -5",
                 timeout=timeout,
             )
         return info
@@ -365,19 +276,87 @@ class RemoteEnum(BaseModule):
             )
         return info
 
+    def _exec_backgrounded(
+        self,
+        sock: Any,
+        command: str,
+        timeout: float,
+        max_wait: float = 45.0,
+        poll: float = 2.0,
+    ) -> str:
+        """
+        Yavaş komutu arka planda çalıştırıp sonucu yoklayarak toplar.
+
+        `find /` gibi komutlar uzak sistemde onlarca saniye sürebilir. Tek
+        seferde çalıştırılırsa komut süresi dolar, kabuk hâlâ meşgul
+        olduğu için sonraki HER komut da kuyrukta kalır. Bu yüzden komut
+        arka planda çalışır, bitim işaretiyle haber verir; oturum serbest
+        kalır ve kısa yoklama komutlarıyla sonuç alınır.
+        """
+        token = uuid.uuid4().hex[:10]
+        out_path = f"/tmp/.mah_{token}.out"
+        done_path = f"/tmp/.mah_{token}.done"
+        pid_path = f"/tmp/.mah_{token}.pid"
+
+        started = self._exec_on_session(
+            sock,
+            f"rm -f {out_path} {done_path} {pid_path}; "
+            f"( {command} > {out_path} 2>/dev/null & echo $! > {pid_path}; "
+            f"wait; echo done > {done_path} ) >/dev/null 2>&1 &",
+            timeout=timeout,
+        )
+        if started.startswith("[Hata"):
+            return started
+
+        deadline = time.time() + max_wait
+        while time.time() < deadline:
+            time.sleep(poll)
+            status = self._exec_on_session(
+                sock, f"test -f {done_path} && echo BITTIM || echo BEKLIYOR",
+                timeout=timeout,
+            )
+            if "BITTIM" in status:
+                result = self._exec_on_session(
+                    sock, f"cat {out_path} 2>/dev/null", timeout=timeout
+                )
+                self._exec_on_session(
+                    sock, f"rm -f {out_path} {done_path} {pid_path}", timeout=timeout
+                )
+                return result
+            if status.startswith("[Hata"):
+                return "[Hata: arka plan komutu baslatilamadi]"
+
+        # Süre doldu: kısmi sonucu al, dosyaları temizle ve ARTA PLANDA
+        # KALAN TARAMA SÜRECİNİ ÖLDÜR. Aksi halde `find /` hedefte sonsuza
+        # kadar çalışmaya devam eder; dosyaları silmek süreci durdurmaz
+        # (açık fd silinen inode'a yazmaya devam eder) ve hedef gereksiz
+        # I/O ile yüklenir.
+        partial = self._exec_on_session(
+            sock, f"cat {out_path} 2>/dev/null", timeout=timeout
+        )
+        self._exec_on_session(
+            sock,
+            f"kill $(cat {pid_path} 2>/dev/null) 2>/dev/null; "
+            f"rm -f {out_path} {done_path} {pid_path}",
+            timeout=timeout,
+        )
+        if partial and not partial.startswith("[Hata"):
+            return partial + "\n[dim]... (zaman asimi, liste kisaltildi)[/dim]"
+        return "[Hata: komut zaman asimi] " + partial
+
     def _gather_files_info(self, sock: Any, target_os: str, timeout: float) -> dict:
         """İlginç dosya ve dizin bilgilerini toplar."""
         info = {}
         if target_os != "windows":
-            info["suid"] = self._exec_on_session(
+            info["suid"] = self._exec_backgrounded(
                 sock,
                 "find / -perm -4000 -type f 2>/dev/null | head -25",
-                timeout=min(timeout, 15),
+                timeout=timeout,
             )
-            info["writable_dirs"] = self._exec_on_session(
+            info["writable_dirs"] = self._exec_backgrounded(
                 sock,
                 "find / -writable -type d 2>/dev/null | head -15",
-                timeout=min(timeout, 15),
+                timeout=timeout,
             )
             info["cron_user"] = self._exec_on_session(
                 sock, "crontab -l 2>/dev/null || echo 'Kullanıcı cron yok'",
@@ -515,6 +494,16 @@ class RemoteEnum(BaseModule):
             return False
 
         logger.info(f"Remote enum başlatılıyor (Session {session_id})")
+
+        # PTY oturumlarda echo'yu kapat: readline uzun satırlari yeniden
+        # cizer ve marker'lari bozar (cikti "[Hata: komut tamamlanmadi]" olur).
+        shell_exec.prepare_remote(
+            sock, min(timeout, 10),
+            warn=lambda: self.console.print(
+                "[yellow][!] Terminal echo'su kapatilamadi; "
+                "uzak oturumda bazi ciktilar eksik gelebilir.[/yellow]"
+            ),
+        )
 
         self.console.print()
         self.console.print(Panel.fit(

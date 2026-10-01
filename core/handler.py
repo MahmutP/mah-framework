@@ -6,6 +6,7 @@ import select
 import socket
 import sys
 import threading
+import time
 from typing import Any
 
 from rich import print
@@ -295,6 +296,9 @@ class BaseHandler:
                 return False
             data = client_sock.recv(1, socket.MSG_PEEK)
             return not data
+        except (TimeoutError, BlockingIOError, InterruptedError):
+            # Geçici durum (modül veriyi tüketti) — bağlantı KAPALI DEĞİL.
+            return False
         except (OSError, ValueError):
             return True
 
@@ -321,6 +325,23 @@ class BaseHandler:
                         data = client_sock.recv(1, socket.MSG_PEEK)
                         if not data:
                             break
+                except (TimeoutError, BlockingIOError, InterruptedError):
+                    # GEÇİCİ durum, bağlantı ölmedi.
+                    #
+                    # Soket, post modülleri tarafından paylaşılan bir nesnedir:
+                    # exec_on_session() üzerine settimeout() uygular. Modül
+                    # select() ile recv() arasındaki mikrosaniyelerde veriyi
+                    # tüketirse peek burada "veri yok" bulur ve Python seviyesinde
+                    # TimeoutError/BlockingIOError fırlatır. İkisi de OSError
+                    # alt sınıfıdır; eski kod except (OSError) ile bunları
+                    # YANLIŞLIKLA "peer kapandı" sayıp döngüyü bitiriyordu.
+                    # Sonuç: modül çalışırken oturum listeden düşüyor ve
+                    # "uzak taraf bağlantıyı kesti" mesajı yanlış çıkıyordu.
+                    #
+                    # Kısa uyku: modül kesintisiz veri tüketirken select() hep
+                    # "hazır" döner ve bu yol sıcak döngüye dönüşebilir.
+                    time.sleep(0.01)
+                    continue
                 except (OSError, ValueError):
                     break
         except Exception:

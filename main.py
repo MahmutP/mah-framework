@@ -444,11 +444,14 @@ def main() -> None:
     if args.resource:
         resource_path = Path(args.resource)
         if resource_path.exists():
-            resource_cmd = command_manager.get_all_commands().get("resource")
-            if resource_cmd:
+            # Komutlar lazy stub olarak tutulur; "resource" bir CommandStub
+            # döndürebileceği için gerçek sınıfı ensure_loaded ile yükleyip
+            # run_resource_file metoduna öyle erişmeliyiz.
+            resource_cmd = command_manager.ensure_loaded("resource")
+            if resource_cmd is not None:
                 resource_cmd.run_resource_file(resource_path)  # type: ignore[attr-defined]
             else:
-                print("[bold red]Hata:[/bold red] resource komutu bulunamadı")
+                print("[bold red]Hata:[/bold red] resource komutu yüklenemedi")
         else:
             print(
                 f"[bold red]Hata:[/bold red] Resource dosyası bulunamadı: {args.resource}"

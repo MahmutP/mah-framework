@@ -22,17 +22,34 @@ from core.workspace_manager import WorkspaceManager
 
 
 def _get_cached_framework_version(base_dir: Path) -> str:
-    """Git commit sayısından sürüm üretir; HEAD değişmedikçe cache kullanır."""
+    """Git commit sayısından sürüm üretir; HEAD commit'i değişmedikçe cache kullanır.
+
+    Cache, dosya mtime'ı yerine mevcut commit hash'ine bağlıdır. Normal bir
+    commit işleminde ``.git/HEAD`` değişmez (sadece ``ref: refs/heads/...``
+    içerir), değişen ``.git/refs/heads/<branch>`` olduğundan mtime tabanlı
+    geçersiz kılma çalışmaz ve sürüm hiç artmaz. Commit hash karşılaştırması
+    ise detached HEAD, packed-refs ve branch geçişlerinde de doğru çalışır.
+    """
     import subprocess
 
     cache_file = base_dir / "config" / ".version_cache"
-    git_head = base_dir / ".git" / "HEAD"
     try:
-        if cache_file.exists() and git_head.exists():
-            if cache_file.stat().st_mtime_ns >= git_head.stat().st_mtime_ns:
-                cached = cache_file.read_text(encoding="utf-8").strip()
-                if cached:
-                    return cached
+        head_commit = (
+            subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                stderr=subprocess.DEVNULL,
+                cwd=str(base_dir),
+            )
+            .decode()
+            .strip()
+        )
+
+        if cache_file.exists():
+            cached_lines = cache_file.read_text(encoding="utf-8").splitlines()
+            if len(cached_lines) >= 2 and cached_lines[0].strip() == head_commit:
+                cached_version = cached_lines[1].strip()
+                if cached_version:
+                    return cached_version
 
         commit_count = int(
             subprocess.check_output(
@@ -48,7 +65,7 @@ def _get_cached_framework_version(base_dir: Path) -> str:
         patch = commit_count % 10
         version = f"v{major}.{minor}.{patch}"
         cache_file.parent.mkdir(parents=True, exist_ok=True)
-        cache_file.write_text(version + "\n", encoding="utf-8")
+        cache_file.write_text(f"{head_commit}\n{version}\n", encoding="utf-8")
         return version
     except Exception:
         return ""

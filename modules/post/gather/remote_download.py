@@ -153,6 +153,42 @@ class RemoteDownload(BaseModule):
             return "windows"
         return "linux"
 
+    @staticmethod
+    def _unescape_shell_path(path: str) -> str:
+        r"""Kabuk tarzı kaçışlı yolu (\ , \(, \) ...) normalize eder.
+
+        Konsol dosya tamamlama veya kullanıcı girişi, boşlukları ters eğik
+        çizgi ile kaçırabilir (ör. ``SIGNLENS\ Yapay.pdf``). Modül yolu zaten
+        çift tırnak içine aldığından çift tırnak içinde bu kaçışlar literal
+        kalır ve dosya bulunamaz. Bu yardımcı, kaçışlı karakterleri çözerek
+        gerçek dosya adına ulaşır. Ayrıca baş/son tırnakları da temizler.
+
+        Not: Bu yalnızca Windows dışı (POSIX) hedeflerde çağrılmalıdır; Windows
+        yollarında ters eğik çizgi dizin ayırıcıdır ve çözülmemelidir.
+        """
+        if not path:
+            return path
+
+        path = path.strip()
+
+        # Kullanıcı yolu tırnak içine almışsa (ör. "/a b/c") tırnakları at.
+        if len(path) >= 2 and path[0] == path[-1] and path[0] in ("'", '"'):
+            path = path[1:-1]
+
+        # Kabukta özel anlam taşıyan ve kaçırılmış olabilecek karakterler.
+        escapable = set(" ()[]{}&;'\"\\!#$~*?<>|`")
+        result: list[str] = []
+        i = 0
+        while i < len(path):
+            ch = path[i]
+            if ch == "\\" and i + 1 < len(path) and path[i + 1] in escapable:
+                result.append(path[i + 1])
+                i += 2
+            else:
+                result.append(ch)
+                i += 1
+        return "".join(result)
+
     # ─── Download ──────────────────────────────────────────────────────────
 
     def _remote_file_size(
@@ -602,6 +638,20 @@ class RemoteDownload(BaseModule):
 
         # OS algıla
         target_os = self._detect_os(sock, min(timeout, 10))
+
+        # Kullanıcı/konsol tamamlama yolu kabuk tarzı kaçışlı girmiş olabilir
+        # (ör. "SIGNLENS\ Yapay\ Zeka.pdf"). Komutlar yolu zaten çift tırnak
+        # içine aldığından bu kaçışlar dosya adında literal kalır ve dosya
+        # bulunamaz. Windows dışı hedeflerde kaçışları çöz (Windows'ta ters
+        # eğik çizgi dizin ayırıcıdır).
+        if target_os != "windows":
+            remote_path = self._unescape_shell_path(remote_path)
+
+        # Yerel yol da kaçışlı girilmiş olabilir. Windows dışı yerel
+        # sistemlerde ters eğik çizgi gerçek bir yol karakteri değildir,
+        # bu yüzden güvenle normalize edilebilir.
+        if os.name != "nt":
+            local_path = self._unescape_shell_path(local_path)
 
         self.console.print()
         mode_icon = "⬇️" if mode == "download" else "⬆️"

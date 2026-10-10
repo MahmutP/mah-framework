@@ -135,24 +135,34 @@ class SessionManager:
         """
         Tüm aktif oturumları güvenli bir şekilde kapatır ve listeyi temizler.
         Framework kapanırken çağrılır.
+
+        Handler.stop() ağ I/O'su (uzak shell'e "exit" + soket kapatma) yaptığı
+        için kilit DIŞINDA çağrılır: aksi halde yavaş/yanıt vermeyen bir istemci
+        kapanışı kilitliyken bloklayabilir. Aynı handler birden fazla oturumu
+        yönetiyorsa (multi-client) yalnızca bir kez durdurulur.
         """
         with self.lock:
-            # Iterasyon sırasında silme yapmamak için list() kullanılır
-            for session_id, session in list(self.sessions.items()):
+            sessions = list(self.sessions.items())
+            self.sessions.clear()
+
+        stopped_handlers: set[int] = set()
+        for session_id, session in sessions:
+            handler = session.get("handler")
+            if handler is not None and id(handler) not in stopped_handlers:
+                stopped_handlers.add(id(handler))
                 try:
-                    if hasattr(session["handler"], "stop"):
-                        session["handler"].stop()
-
-                    try:
-                        from core.hooks import HookType
-                        from core.shared_state import shared_state
-
-                        if shared_state.plugin_manager:
-                            shared_state.plugin_manager.trigger_hook(
-                                HookType.ON_SESSION_CLOSE, session_id=session_id
-                            )
-                    except Exception:
-                        pass
+                    if hasattr(handler, "stop"):
+                        handler.stop()
                 except Exception:
                     pass
-            self.sessions.clear()
+
+            try:
+                from core.hooks import HookType
+                from core.shared_state import shared_state
+
+                if shared_state.plugin_manager:
+                    shared_state.plugin_manager.trigger_hook(
+                        HookType.ON_SESSION_CLOSE, session_id=session_id
+                    )
+            except Exception:
+                pass

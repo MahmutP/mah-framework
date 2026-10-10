@@ -225,25 +225,47 @@ class BaseHandler:
         with self.clients_lock:
             client_info = self.clients.pop(session_id, None)
         if client_info:
-            with contextlib.suppress(BaseException):
-                client_info["sock"].close()
+            sock = client_info.get("sock")
+            if sock is not None:
+                # SHUT_RDWR, bekleyen veri olsa bile FIN'in gitmesini garanti
+                # eder; yalnızca close() bazı durumlarda RST üretip uzak
+                # sarmalayıcıların (python pty.spawn) temiz kapanmasını
+                # engelleyebilir.
+                with contextlib.suppress(BaseException):
+                    sock.shutdown(socket.SHUT_RDWR)
+                with contextlib.suppress(BaseException):
+                    sock.close()
 
     def stop(self) -> None:
         """
         Dinleyiciyi durdurur ve açık olan tüm soketleri güvenli bir şekilde kapatır.
         Multi-client modda tüm bağlı client soketlerini de kapatır.
+
+        Bağlı her istemciye önce nazikçe "exit" gönderilir. Uzak tarafta
+        shell bir PTY sarmalayıcısıyla (ör. ``python3 -c pty.spawn(...)``)
+        çalışıyorsa, yalnızca soketi kapatmak içteki shell'i sonlandırmaya
+        yetmeyebilir; açık bir çıkış komutu bunu garanti eder.
         """
         self.running = False
 
         # Tüm client soketlerini kapat
         with self.clients_lock:
             for key, client_info in list(self.clients.items()):
+                sock = client_info.get("sock")
+                if sock is None:
+                    continue
                 with contextlib.suppress(BaseException):
-                    client_info["sock"].close()
+                    sock.sendall(b"exit\n")
+                with contextlib.suppress(BaseException):
+                    sock.shutdown(socket.SHUT_RDWR)
+                with contextlib.suppress(BaseException):
+                    sock.close()
             self.clients.clear()
 
         # Eski tek-istemci soketini de kapat (geriye uyumluluk)
         if self.client_sock:
+            with contextlib.suppress(BaseException):
+                self.client_sock.shutdown(socket.SHUT_RDWR)
             with contextlib.suppress(BaseException):
                 self.client_sock.close()
             self.client_sock = None

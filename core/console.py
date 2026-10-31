@@ -8,6 +8,8 @@
 import datetime
 import os
 import shutil
+import sys
+import time
 from typing import Any
 
 from prompt_toolkit import (
@@ -38,6 +40,12 @@ from core.shared_state import shared_state
 
 MAX_HISTORY_LINES = 2000
 _PROMPT_UNSET = object()
+
+# Prompt hataları art arda bu sayıya ulaşırsa oturum kapatılır. Aksi halde
+# (ör. event loop kapanmışsa) döngü saniyede binlerce kez hata loglayıp
+# disk/log dosyalarını şişirir.
+MAX_CONSECUTIVE_PROMPT_ERRORS = 5
+PROMPT_RETRY_DELAY_SECONDS = 0.25
 
 
 def _trim_history_file(history_file: str, max_lines: int = MAX_HISTORY_LINES) -> None:
@@ -207,12 +215,26 @@ class Console:
         2. Kullanıcı girdisini beklemek.
         3. Girdiyi alıp işleyiciye göndermek.
         4. Hataları (Ctrl+C, EOF) yakalamak.
+
+        TTY yoksa (pipe, CI, `-x` ile boş stdin) prompt_toolkit hiç
+        çalıştırılmaz; satırlar doğrudan stdin'den okunur. Böylece sonsuz
+        hata döngüsü ve log şişmesi oluşmaz.
         """
+        if not self.running:
+            return
+
         logger.info("Konsol başlatıldı")
+
+        if not self._stdin_is_interactive():
+            self._run_non_interactive()
+            return
+
+        consecutive_errors = 0
         while self.running:
             try:
                 # Kullanıcıdan girdi al (Bloklayıcı işlem)
                 line = self.session.prompt(self._get_prompt_string())
+                consecutive_errors = 0
 
                 # Girdiyi işle
                 self._handle_input(line)
@@ -226,12 +248,53 @@ class Console:
                 # Kullanıcı Ctrl+C tuşuna bastığında (genellikle prompt session içinde yakalanır ama burası güvenlik ağıdır)
                 print("Klavye kesintisi algılandı (Ctrl+C).")
                 logger.info("Klavye kesintisi (Ctrl+C)")
-            except Exception:
-                # Beklenmeyen diğer tüm hatalar için
-                print(
-                    "[bold red]Beklenmedik hata:[/bold red] Konsol döngüsünde hata oluştu."
-                )
-                logger.exception("Konsol döngüsünde beklenmedik hata")
+            except Exception as exc:
+                consecutive_errors += 1
+                if consecutive_errors == 1:
+                    # İlk hatada tam kayıt; sonrakiler kısa tutulur (log şişmesin).
+                    print(
+                        "[bold red]Beklenmedik hata:[/bold red] Konsol döngüsünde hata oluştu."
+                    )
+                    logger.exception("Konsol döngüsünde beklenmedik hata")
+                else:
+                    logger.debug(
+                        f"Konsol döngüsü hatası tekrarlandı "
+                        f"({consecutive_errors}/{MAX_CONSECUTIVE_PROMPT_ERRORS}): {exc!r}"
+                    )
+
+                if consecutive_errors >= MAX_CONSECUTIVE_PROMPT_ERRORS:
+                    print(
+                        "[bold red]Konsol döngüsü art arda hata verdi.[/bold red] "
+                        "Oturum kapatılıyor."
+                    )
+                    logger.error(
+                        f"Konsol döngüsü {consecutive_errors} kez art arda hata verdi; "
+                        "oturum kapatılıyor"
+                    )
+                    self.running = False
+                else:
+                    # Busy-loop'u engelle: tekrar denemeden önce kısa bekleme.
+                    time.sleep(PROMPT_RETRY_DELAY_SECONDS * consecutive_errors)
+
+    @staticmethod
+    def _stdin_is_interactive() -> bool:
+        """Stdin gerçek bir terminal mi? (prompt_toolkit yalnızca o zaman çalışır)"""
+        try:
+            return bool(sys.stdin) and sys.stdin.isatty()
+        except (AttributeError, ValueError, OSError):
+            return False
+
+    def _run_non_interactive(self) -> None:
+        """TTY yokken komutları stdin'den satır satır okuyup çalıştırır."""
+        logger.info("TTY yok; etkileşimsiz (pipe) modda çalışılıyor")
+        try:
+            for raw_line in sys.stdin:
+                if not self.running:
+                    break
+                self._handle_input(raw_line)
+        except (OSError, ValueError, KeyboardInterrupt):
+            # Kapalı/boş stdin: sessizce normal çıkışa geç.
+            pass
 
     def shutdown(self) -> None:
         """

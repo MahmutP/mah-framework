@@ -1,4 +1,6 @@
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from core.module import BaseModule
@@ -91,5 +93,115 @@ class TestModuleManager(unittest.TestCase):
         mock_check_options.assert_called_once()
 
 
+MODULE_TEMPLATE = '''from core.module import BaseModule
+
+
+class Payload(BaseModule):
+    Name = "{name}"
+    Description = "{description}"
+    Category = "payloads"
+
+    def run(self, options):
+        return True
+'''
+
+BROKEN_MODULE = '''from core.module import BaseModule
+
+raise RuntimeError("import sırasında patlıyor")
+
+
+class Payload(BaseModule):
+    Name = "broken"
+    Description = "Bozuk modül"
+    Category = "payloads"
+
+    def run(self, options):
+        return True
+'''
+
+
+class TestModuleCatalogRefresh(unittest.TestCase):
+    """Katalog tam listelenmeli: yeni modüller tespit edilmeli, yüklenemeyen
+    modüller listeden düşmemeli."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.manager = ModuleManager(
+            modules_dir=str(self.root),
+            manifest_path=self.root / "manifest.json",
+        )
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _write_module(self, relative: str, name: str, description: str) -> Path:
+        file_path = self.root / relative
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(
+            MODULE_TEMPLATE.format(name=name, description=description),
+            encoding="utf-8",
+        )
+        return file_path
+
+    def test_refresh_detects_new_module(self):
+        """Çalışma sırasında eklenen modül refresh_modules ile listeye girmeli."""
+        self._write_module("payloads/python/chimera/generate.py", "chimera", "Chimera")
+        self.manager.load_modules()
+        self.assertIn("payloads/python/chimera/generate", self.manager.modules)
+
+        self._write_module("payloads/python/yeni/generate.py", "yeni", "Yeni payload")
+        changes = self.manager.refresh_modules()
+
+        self.assertIn("payloads/python/yeni/generate", changes["added"])
+        self.assertIn("payloads/python/yeni/generate", self.manager.modules)
+        # Kategori listesinde ve completer cache'inde de görünmeli
+        payloads = self.manager.get_modules_by_category()["Payloads"]
+        self.assertIn("payloads/python/yeni/generate", payloads)
+        self.assertIn("payloads/python/yeni/generate", self.manager.get_module_paths())
+
+    def test_refresh_detects_removed_module(self):
+        """Silinen modül katalogdan çıkarılmalı."""
+        module_file = self._write_module(
+            "payloads/python/chimera/generate.py", "chimera", "Chimera"
+        )
+        self.manager.load_modules()
+        module_file.unlink()
+
+        changes = self.manager.refresh_modules()
+
+        self.assertIn("payloads/python/chimera/generate", changes["removed"])
+        self.assertNotIn("payloads/python/chimera/generate", self.manager.modules)
+
+    @patch("builtins.print")
+    def test_failed_load_keeps_module_listed(self, mock_print):
+        """Yüklenemeyen modül 'show modules' listesinden kaybolmamalı."""
+        file_path = self.root / "payloads/python/boom/generate.py"
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(BROKEN_MODULE, encoding="utf-8")
+        self.manager.load_modules()
+
+        self.assertIsNone(self.manager.ensure_loaded("payloads/python/boom/generate"))
+
+        self.assertIn("payloads/python/boom/generate", self.manager.modules)
+        self.assertTrue(self.manager.is_load_failed("payloads/python/boom/generate"))
+        self.assertIn(
+            "payloads/python/boom/generate",
+            self.manager.get_modules_by_category()["Payloads"],
+        )
+
+    def test_get_module_finds_module_added_later(self):
+        """Oturum sırasında eklenen modül use/get_module ile bulunabilmeli."""
+        self._write_module("payloads/python/chimera/generate.py", "chimera", "Chimera")
+        self.manager.load_modules()
+
+        self._write_module("payloads/python/yeni/generate.py", "yeni", "Yeni payload")
+        module = self.manager.get_module("payloads/python/yeni/generate")
+
+        self.assertIsNotNone(module)
+        self.assertEqual(module.Name, "yeni")
+
+
 if __name__ == "__main__":
     unittest.main()
+

@@ -87,8 +87,18 @@ class Use(Command):
             shared_state.set_selected_module(module_obj)
             print(f"Modül '{module_obj.Path}' seçildi.")
             return True
-        else:
+
+        is_load_failed = getattr(module_manager, "is_load_failed", None)
+        if module_manager.has_module(module_path) or (
+            callable(is_load_failed) and is_load_failed(module_path)
+        ):
             print(
-                f"Modül bulunamadı: '{module_path}'. 'show modules' ile mevcut modülleri listeleyebilirsiniz."
+                f"Modül '{module_path}' katalogda var ancak yüklenemedi. "
+                "Ayrıntı için: config/logs/app.log ('show modules' listede gösterir)."
             )
             return False
+
+        print(
+            f"Modül bulunamadı: '{module_path}'. 'show modules' ile mevcut modülleri listeleyebilirsiniz."
+        )
+        return False

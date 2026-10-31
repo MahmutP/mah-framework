@@ -94,6 +94,16 @@ class Show(Command):
         Returns:
             bool: başarılı olup olmadığının kontolü
         """
+        # Disk her listelemede taranır: çalışma sırasında eklenen/silinen
+        # modüller (ör. yeni payload'lar) anında görünür.
+        refresh = getattr(module_manager, "refresh_modules", None)
+        if callable(refresh):
+            changes = refresh()
+            for module_path in changes.get("added", []):
+                print(f"[bold green]+ Yeni modül:[/bold green] {module_path}")
+            for module_path in changes.get("removed", []):
+                print(f"[bold yellow]- Kaldırılan modül:[/bold yellow] {module_path}")
+
         categorized_modules = module_manager.get_modules_by_category()
         terminal_width = self._get_terminal_width()
         module_header = "Module"
@@ -122,8 +132,11 @@ class Show(Command):
             print(
                 f"{' ' * LEFT_PADDING}{'-' * max_module_path_len}{' ' * (2 * TAB_SPING)}{'-' * len(desc_header)}"
             )
+            is_load_failed = getattr(module_manager, "is_load_failed", None)
             for module_path, module_obj in sorted(modules_in_category.items()):
-                description = module_obj.Description
+                description = module_obj.Description or ""
+                if callable(is_load_failed) and is_load_failed(module_path):
+                    description = f"[!] yüklenemedi - {description}"
                 display_description = self._truncate_description(
                     description, dynamic_max_desc_len
                 )

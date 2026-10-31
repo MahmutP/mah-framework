@@ -49,7 +49,7 @@ plugins remove "Name"
 #### `show` values
 
 ```bash
-show modules             # All loaded modules
+show modules             # All modules (rescans disk; new modules appear without restart)
 show options             # Options of current module
 show info                # Detailed info of current module
 ```
@@ -205,7 +205,7 @@ plugins remove "İsim"
 #### `show` değerleri
 
 ```bash
-show modules             # Yüklü tüm modüller
+show modules             # Tüm modüller (diski yeniden tarar; yeni modüller restart gerekmeden görünür)
 show options             # Seçili modül seçenekleri
 show info                # Seçili modül detayı
 ```

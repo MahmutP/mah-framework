@@ -8,6 +8,7 @@ import ast
 import hashlib
 import importlib.util
 import json
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,9 @@ from core.validation_pipeline import ValidationPipeline, print_validation_report
 
 MANIFEST_VERSION = 1
 DEFAULT_MANIFEST_PATH = Path("config/module_manifest.json")
+
+# Otomatik katalog yenilemelerini (completer gibi sık çağrılan yerler) sınırlar.
+REFRESH_THROTTLE_SECONDS = 1.0
 
 # Seçilebilir framework modülü olmayan destek dosya adları (yine de BaseModule varsa yüklenir).
 _SUPPORT_FILENAMES = frozenset(
@@ -191,6 +195,9 @@ class ModuleManager:
         )
         self.manifest_path = Path(manifest_path) if manifest_path else DEFAULT_MANIFEST_PATH
         self._module_paths_cache: list[str] | None = None
+        # Yüklenemeyen ama katalogda kalan modüller (show modules'ta işaretlenir)
+        self._failed_loads: dict[str, str] = {}
+        self._last_refresh = 0.0
 
     @property
     def plugin_manager(self) -> Any:
@@ -208,7 +215,12 @@ class ModuleManager:
         self._module_paths_cache = None
 
     def get_module_paths(self) -> list[str]:
-        """Sıralı modül yolu listesi (completer cache)."""
+        """Sıralı modül yolu listesi (completer cache).
+
+        Tamamlama sırasında da yeni eklenen modüller görünsün diye
+        katalog kısıtlı (throttle'lı) şekilde tazelenir.
+        """
+        self.refresh_modules(force=False)
         if self._module_paths_cache is None:
             self._module_paths_cache = sorted(self.modules.keys())
         return self._module_paths_cache
@@ -257,68 +269,153 @@ class ModuleManager:
             return True
         return False
 
+    def _meta_for_file(
+        self, file_path: Path, cached: dict[str, ModuleMeta]
+    ) -> ModuleMeta | None:
+        """Tek bir dosya için modül meta verisi üretir (manifest cache'i kullanır)."""
+        try:
+            stat = file_path.stat()
+        except OSError:
+            return None
+
+        module_id = self._module_id_for_file(file_path)
+        cached_meta = cached.get(module_id)
+
+        if (
+            cached_meta
+            and cached_meta.mtime_ns == stat.st_mtime_ns
+            and cached_meta.size == stat.st_size
+        ):
+            cached_meta.file_path = str(file_path)
+            return cached_meta
+
+        try:
+            source = file_path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            return None
+
+        meta = extract_module_meta_from_source(
+            source,
+            module_id,
+            file_path,
+            stat.st_mtime_ns,
+            stat.st_size,
+        )
+        if meta is None:
+            return None
+
+        is_payload = "payloads" in file_path.parts
+        if not is_payload:
+            scan_result = scan_source(source, str(file_path), strict=False)
+            meta.scan_ok = scan_result.is_safe
+            if not scan_result.is_safe:
+                print(
+                    f"[bold yellow]⚠ Güvenlik uyarısı:[/bold yellow] '{file_path.name}'"
+                )
+                print_scan_report(scan_result)
+
+        return meta
+
     def load_modules(self) -> None:
         """Modül kataloğunu diskten oluşturur (lazy; exec yok)."""
         self.modules.clear()
         self._catalog.clear()
+        self._failed_loads.clear()
         self._invalidate_path_cache()
 
         cached = self._load_manifest()
 
-        for file_path in self.modules_dir.rglob("*.py"):
+        for file_path in sorted(self.modules_dir.rglob("*.py")):
             if self._should_skip_file(file_path):
                 continue
 
-            try:
-                stat = file_path.stat()
-            except OSError:
+            meta = self._meta_for_file(file_path, cached)
+            if meta is None:
                 continue
-
-            module_id = self._module_id_for_file(file_path)
-            cached_meta = cached.get(module_id)
-
-            if (
-                cached_meta
-                and cached_meta.mtime_ns == stat.st_mtime_ns
-                and cached_meta.size == stat.st_size
-            ):
-                meta = cached_meta
-                meta.file_path = str(file_path)
-            else:
-                try:
-                    source = file_path.read_text(encoding="utf-8", errors="ignore")
-                except OSError:
-                    continue
-
-                extracted = extract_module_meta_from_source(
-                    source,
-                    module_id,
-                    file_path,
-                    stat.st_mtime_ns,
-                    stat.st_size,
-                )
-                if extracted is None:
-                    continue
-                meta = extracted
-
-                is_payload = "payloads" in file_path.parts
-                if not is_payload:
-                    scan_result = scan_source(source, str(file_path), strict=False)
-                    meta.scan_ok = scan_result.is_safe
-                    if not scan_result.is_safe:
-                        print(
-                            f"[bold yellow]⚠ Güvenlik uyarısı:[/bold yellow] '{file_path.name}'"
-                        )
-                        print_scan_report(scan_result)
 
             # Keşifte hook yok — PRE/POST_MODULE_LOAD yalnızca ensure_loaded sırasında.
             stub = ModuleStub(meta)
-            self._catalog[module_id] = meta
-            self.modules[module_id] = stub
+            self._catalog[meta.path] = meta
+            self.modules[meta.path] = stub
 
         self._save_manifest()
         self._invalidate_path_cache()
+        self._last_refresh = time.monotonic()
         logger.info(f"{len(self.modules)} modül indekslendi (lazy)")
+
+    def refresh_modules(self, force: bool = True) -> dict[str, list[str]]:
+        """Diskteki değişiklikleri kataloğa yansıtır (yeni/silinen/değişen modüller).
+
+        `show modules` her çalıştığında ve completer kullanıldığında çağrılır;
+        böylece çalışma sırasında eklenen modüller (ör. yeni bir payload) hiçbir
+        listeleme eksik kalmadan görünür.
+
+        Args:
+            force: True ise throttle beklemeden tarama yapılır.
+
+        Returns:
+            dict[str, list[str]]: {"added", "updated", "removed"} modül yolları.
+        """
+        changes: dict[str, list[str]] = {"added": [], "updated": [], "removed": []}
+
+        now = time.monotonic()
+        if not force and (now - self._last_refresh) < REFRESH_THROTTLE_SECONDS:
+            return changes
+        self._last_refresh = now
+
+        cached = self._load_manifest()
+        seen: set[str] = set()
+
+        for file_path in sorted(self.modules_dir.rglob("*.py")):
+            if self._should_skip_file(file_path):
+                continue
+
+            meta = self._meta_for_file(file_path, cached)
+            if meta is None:
+                continue
+
+            module_id = meta.path
+            seen.add(module_id)
+            existing = self._catalog.get(module_id)
+            current = self.modules.get(module_id)
+
+            if existing is None:
+                self._catalog[module_id] = meta
+                self.modules[module_id] = ModuleStub(meta)
+                self._failed_loads.pop(module_id, None)
+                changes["added"].append(module_id)
+                logger.info(f"Yeni modül tespit edildi: {module_id}")
+                continue
+
+            if existing.mtime_ns != meta.mtime_ns or existing.size != meta.size:
+                self._catalog[module_id] = meta
+                # Yüklü örnek varsa korunur; stub ise metadata tazelenir.
+                if current is None or getattr(current, "_is_stub", False):
+                    self.modules[module_id] = ModuleStub(meta)
+                self._failed_loads.pop(module_id, None)
+                changes["updated"].append(module_id)
+                logger.info(f"Modül güncellendi: {module_id}")
+            elif current is None:
+                # Daha önce listeden düşmüş kaydı geri getir (tam liste garantisi).
+                self.modules[module_id] = ModuleStub(meta)
+                changes["updated"].append(module_id)
+
+        for module_id in [path for path in self._catalog if path not in seen]:
+            self._catalog.pop(module_id, None)
+            self.modules.pop(module_id, None)
+            self._failed_loads.pop(module_id, None)
+            changes["removed"].append(module_id)
+            logger.info(f"Silinen modül kataloğdan çıkarıldı: {module_id}")
+
+        if any(changes.values()):
+            self._invalidate_path_cache()
+            self._save_manifest()
+
+        return changes
+
+    def is_load_failed(self, module_path: str) -> bool:
+        """Modül katalogda olup yüklenemedi mi? (show modules işaretlemesi için)"""
+        return module_path in self._failed_loads
 
     def _instantiate_from_file(self, module_path: str, file_path: Path) -> BaseModule | None:
         """Dosyayı import edip BaseModule örneği oluşturur."""
@@ -446,16 +543,25 @@ class ModuleManager:
             # Katalogda ölü kayıt kalmasın
             self.modules.pop(module_path, None)
             self._catalog.pop(module_path, None)
+            self._failed_loads.pop(module_path, None)
             self._invalidate_path_cache()
             return None
 
         instance = self._instantiate_from_file(module_path, file_path)
         if instance is None:
-            # Yükleme başarısız: stub ile yanıltıcı listelemeyi kaldır
-            self.modules.pop(module_path, None)
+            # Yükleme başarısız olsa bile modül katalogda/listede kalır.
+            # (Önceden burada pop ediliyordu ve 'show modules' eksik görünüyordu.)
+            self._failed_loads[module_path] = str(file_path)
+            stub_meta = self._catalog.get(module_path) or meta
+            if stub_meta is not None and module_path not in self.modules:
+                self.modules[module_path] = ModuleStub(stub_meta)
             self._invalidate_path_cache()
+            logger.warning(
+                f"Modül yüklenemedi; listede stub olarak korunuyor: {module_path}"
+            )
             return None
 
+        self._failed_loads.pop(module_path, None)
         self.modules[module_path] = instance
         return instance
 
@@ -483,8 +589,14 @@ class ModuleManager:
 
         instance = self._instantiate_from_file(module_path, full_path)
         if instance is None:
+            # Yeniden yükleme başarısız olsa da modül listede kalsın.
+            self._failed_loads[module_path] = str(full_path)
+            if meta is not None:
+                self.modules[module_path] = ModuleStub(meta)
+            self._invalidate_path_cache()
             return False
 
+        self._failed_loads.pop(module_path, None)
         self.modules[module_path] = instance
         self._invalidate_path_cache()
         logger.info(f"Modül başarıyla yeniden yüklendi: {module_path}")
@@ -497,11 +609,16 @@ class ModuleManager:
     def get_module(self, module_path: str) -> BaseModule | None:
         """Verilen yol ile eşleşen modülü döndürür (gerekirse lazy load)."""
         if not self.has_module(module_path):
+            # Oturum sırasında eklenmiş yeni bir modül olabilir: kataloğu tazele.
+            self.refresh_modules()
+        if not self.has_module(module_path):
             return None
         return self.ensure_loaded(module_path)
 
     def get_all_modules(self) -> dict[str, BaseModule]:
         """Katalogdaki tüm modülleri döndürür (stub veya loaded)."""
+        # search/list gibi yerlerde yeni eklenen modüller de görünsün.
+        self.refresh_modules(force=False)
         return self.modules
 
     def get_modules_by_category(self) -> dict[str, dict[str, BaseModule]]:

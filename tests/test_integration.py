@@ -7,7 +7,7 @@ from core.command_manager import CommandManager
 from core.context import get_global_context, reset_global_context
 from core.hooks import HookType
 from core.module import BaseModule
-from core.option import Option
+from core.option import Option, ensure_url_scheme
 
 
 def test_base_module_instantiation():
@@ -84,6 +84,65 @@ def test_option_validation():
     # Geçerli değer atanmalı
     opt.value = "123"
     assert opt.value == "123"
+
+
+def test_url_normalizer_runs_before_regex_validation(capsys):
+    """Şemasız URL kabul edilmeli, normalizer regex'ten önce çalışmalı."""
+    opt = Option(
+        "URL",
+        "http://httpbin.org/get",
+        True,
+        "Hedef URL",
+        regex_check=True,
+        regex=r"^https?://.+",
+        normalizer=ensure_url_scheme,
+    )
+
+    assert opt.set_value("kurs.findersyazilim.com") is True
+    assert opt.value == "http://kurs.findersyazilim.com"
+
+    assert opt.set_value("//kurs.findersyazilim.com") is True
+    assert opt.value == "http://kurs.findersyazilim.com"
+
+    assert capsys.readouterr().out == ""
+
+
+def test_invalid_option_value_is_rejected_without_mutating_state(capsys):
+    """Regex reddederse ne Option ne de modül attribute'u değişmeli."""
+
+    class TestModule(BaseModule):
+        Options = {  # noqa: RUF012
+            "URL": Option(
+                "URL",
+                "http://httpbin.org/get",
+                True,
+                "Hedef URL",
+                regex_check=True,
+                regex=r"^https?://.+",
+                normalizer=ensure_url_scheme,
+            )
+        }
+
+    module = TestModule()
+
+    assert module.set_option_value("URL", "ftp://kurs.findersyazilim.com") is False
+    assert module.get_option_value("URL") == "http://httpbin.org/get"
+    assert module.URL == "http://httpbin.org/get"
+
+    output = capsys.readouterr().out
+    assert "geçersiz" in output
+    assert "Değişiklik uygulanmadı" in output
+    assert "set to" not in output  # yanıltıcı başarı mesajı olmamalı
+
+
+def test_none_bypasses_regex_for_unset():
+    """unset akışında None doğrulamaya takılmamalı."""
+    opt = Option(
+        "URL", "http://httpbin.org/get", True, "Hedef URL",
+        regex_check=True, regex=r"^https?://.+", normalizer=ensure_url_scheme,
+    )
+    assert opt.set_value(None) is True
+    assert opt.value is None
 
 
 def test_option_default_values():

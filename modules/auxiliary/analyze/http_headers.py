@@ -4,7 +4,7 @@ from rich import print
 from rich.table import Table
 
 from core.module import BaseModule
-from core.option import Option
+from core.option import Option, ensure_url_scheme
 
 
 class HttpHeaderAnalyzer(BaseModule):
@@ -23,9 +23,10 @@ class HttpHeaderAnalyzer(BaseModule):
                 name="URL",
                 value="http://httpbin.org/get",
                 required=True,
-                description="Hedef URL adresi (örn: http://example.com)",
+                description="Hedef URL (örn: http://example.com; şemasız girişlerde http:// eklenir)",
                 regex_check=True,
                 regex=r"^https?://.+",  # Basit URL regex
+                normalizer=ensure_url_scheme,  # 'kurs.example.com' → 'http://kurs.example.com'
             ),
             "TIMEOUT": Option(
                 name="TIMEOUT",

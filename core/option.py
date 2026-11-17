@@ -3,11 +3,33 @@
 # ve doğrulamak (validation) için kullanılır.
 
 import re  # Regular Expression (Düzenli İfade) modülü, girdi doğrulaması için.
+from collections.abc import Callable
 from typing import Any
 
 from rich import print
 
 from core.cont import DEFAULT_REGEX  # Varsayılan (her şeyi kabul eden) regex deseni.
+
+
+def ensure_url_scheme(value: Any) -> Any:
+    """Şemasız URL girdilerine ``http://`` ekleyen normalizer.
+
+    Doğrulamadan *önce* çalışır; böylece ``kurs.example.com`` gibi bir giriş
+    ``^https?://.+`` regex'ine takılmaz. Diğer şemalara (``ftp://`` vb.)
+    dokunmaz — onların regex tarafından reddedilmesi gerekir.
+
+    ``None`` (unset akışı) ve boş değerler olduğu gibi bırakılır.
+    """
+    if value is None:
+        return value
+    text = str(value).strip()
+    if not text:
+        return text
+    if text.startswith("//"):  # protokol-relatif → http
+        return "http:" + text
+    if "://" not in text:
+        return f"http://{text}"
+    return text
 
 
 class Option:
@@ -29,6 +51,7 @@ class Option:
         choices: list[Any] | None = None,
         completion_dir: str | None = None,
         completion_extensions: list[str] | None = None,
+        normalizer: Callable[[Any], Any] | None = None,
     ):
         """
         Option nesnesini başlatır.
@@ -43,6 +66,8 @@ class Option:
             choices (list, optional): Kullanıcının seçebileceği ön tanımlı değerler listesi (Enum gibi).
             completion_dir (str, optional): Dosya yolu tamamlaması için varsayılan dizin.
             completion_extensions (list, optional): Dosya tamamlamada sadece bu uzantıları göster (örn: ['.txt']).
+            normalizer (Callable, optional): Doğrulamadan önce değeri dönüştüren fonksiyon
+                (örn: şemasız URL'lere 'http://' eklemek).
         """
         self.name = name
         self._value = value  # Asıl değeri tutan gizli değişken
@@ -53,6 +78,7 @@ class Option:
         self.choices = choices or []  # Otomatik tamamlama için seçenek listesi
         self.completion_dir = completion_dir
         self.completion_extensions = completion_extensions
+        self.normalizer = normalizer
 
     @property
     def value(self) -> Any:
@@ -64,26 +90,45 @@ class Option:
         """
         return self._value
 
-    @value.setter
-    def value(self, new_value: Any) -> None:
-        """
-        Seçeneğe yeni bir değer atayan setter metodu.
-        Burada veri doğrulama (validation) işlemleri yapılır.
+    def set_value(self, new_value: Any) -> bool:
+        """Değeri (varsa normalizer ile dönüştürüp) doğrular ve uygular.
+
+        Doğrulama başarısız olduğunda mevcut değer korunur ve ayrıntılı bir
+        hata mesajı basılır. ``value`` setter'ı da bu metodu kullanır.
 
         Args:
             new_value (Any): Atanmak istenen yeni değer.
-        """
-        # Eğer regex kontrolü aktifse
-        if self.regex_check:
-            if not re.fullmatch(self.regex, str(new_value)):
-                print(
-                    f"[bold red]Hata:[/bold red] '{new_value}' değeri '{self.name}' için geçersiz (regex: {self.regex})"
-                )
-                return
 
-        # Regex kontrolü yoksa veya geçildiyse değeri güncelle
+        Returns:
+            bool: Değer uygulandıysa True, reddedildiyse False.
+        """
+        if self.normalizer is not None:
+            new_value = self.normalizer(new_value)
+
+        # None: 'unset' akışı — regex'e sokmadan kabul et. Zorunluluk kontrolü
+        # çalışma zamanında check_required_options() tarafından yapılır.
+        if (
+            new_value is not None
+            and self.regex_check
+            and not re.fullmatch(self.regex, str(new_value))
+        ):
+            hint = ""
+            if "https?" in self.regex:
+                hint = " (http:// veya https:// ile başlamalı; örn: http://example.com)"
+            print(
+                f"[bold red]Hata:[/bold red] '{new_value}' değeri '{self.name}' "
+                f"için geçersiz — beklenen format: {self.regex}{hint}. "
+                f"Değişiklik uygulanmadı, mevcut değer korundu: '{self._value}'."
+            )
+            return False
+
         self._value = new_value
-        # print(f"Option '{self.name}' set to '{self._value}'")
+        return True
+
+    @value.setter
+    def value(self, new_value: Any) -> None:
+        """Setter: doğrulamayı ``set_value`` üzerinden yapar (eski davranış korunur)."""
+        self.set_value(new_value)
 
     def __str__(self) -> str:
         """

@@ -257,14 +257,15 @@ class Set(Command):
 
         if option_name in options or selected_module.resolve_option_name(option_name):
             if selected_module.set_option_value(option_name, option_value):
-                # Çıktı formatı ve rengi düzeltildi
-                print(f"{option_name} => {option_value}")
-                return True
-            else:
+                # Normalizer değeri değiştirebilir (örn. şemasız URL'ye http:// ekleme).
+                # Kullanıcıya yazdığı değil, gerçekte saklanan değeri göster.
                 print(
-                    f"Seçenek '{option_name}' değeri '{option_value}' olarak ayarlanamadı. Regex kontrolü başarısız olabilir."
+                    f"{option_name} => {selected_module.get_option_value(option_name)}"
                 )
-                return False
+                return True
+            # Doğrulama hatasını Option.set_value zaten ayrıntılı bastı; burada
+            # tekrar "=>" basmak başarılı gibi göründüğü için yapılmıyor.
+            return False
 
         # ── Seçenek bulunamadı: yardımcı ipuçları ver ──────────────────
         print(

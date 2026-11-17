@@ -162,15 +162,20 @@ class BaseModule:
         resolved = self.resolve_option_name(option_name)
         if resolved:
             option = self.Options[resolved]
-            # Option nesnesinin değerini güncelle
-            option.value = value
+            # Doğrulama/normalizasyon Option içinde yapılır. Başarısız olursa
+            # ne sınıf attribute'unu güncelle ne de "set edildi" mesajı ver;
+            # aksi halde ekran ile gerçek değer birbirinden ayrılır.
+            if not option.set_value(value):
+                return False
+
+            stored_value = option.value
             # Sınıf attribute'unu da güncelle (self.RHOST gibi erişimler için)
-            setattr(self, resolved, value)
+            setattr(self, resolved, stored_value)
             if resolved != option_name:
                 print(
                     f"[dim]('{option_name}' → '{resolved}')[/dim]"
                 )
-            print(f"[{self.Name}] Option '{resolved}' set to '{value}'.")
+            print(f"[{self.Name}] Option '{resolved}' set to '{stored_value}'.")
             return True
 
         print(f"[{self.Name}] Option '{option_name}' bulunamadı.")

@@ -12,6 +12,32 @@ from typing import Any
 from rich import print
 
 
+def _peer_alive(client_sock: Any) -> bool:
+    """TCP seviyesinde, uygulama verisini tüketmeden peer'ı kontrol eder.
+
+    ``ssl.SSLSocket.recv`` sıfırdan farklı flag ile çağrıldığında ``ValueError``
+    fırlatır (MSG_PEEK desteklenmez). Bu yüzden peek ham fd üzerinden yapılır:
+    TLS katmanının buffer'ına dokunulmaz, post modülün okumasıyla yarışmaz.
+    """
+    try:
+        fd = client_sock.fileno()
+    except (AttributeError, OSError, ValueError):
+        return False
+    if fd < 0:
+        return False
+
+    flags = socket.MSG_PEEK | getattr(socket, "MSG_DONTWAIT", 0)
+    probe = socket.socket(fileno=fd)
+    try:
+        return bool(probe.recv(1, flags))
+    except (BlockingIOError, InterruptedError):
+        return True
+    except (OSError, ValueError):
+        return False
+    finally:
+        probe.detach()
+
+
 class BaseHandler:
     """
     Tüm payload dinleyicileri (handlers) için temel sınıf.
@@ -316,13 +342,12 @@ class BaseHandler:
                 return True
             if not ready:
                 return False
-            data = client_sock.recv(1, socket.MSG_PEEK)
-            return not data
         except (TimeoutError, BlockingIOError, InterruptedError):
             # Geçici durum (modül veriyi tüketti) — bağlantı KAPALI DEĞİL.
             return False
         except (OSError, ValueError):
             return True
+        return not _peer_alive(client_sock)
 
     def keep_connection_alive(self, client_sock: Any) -> None:
         """
@@ -332,7 +357,8 @@ class BaseHandler:
         interaktif I/O yalnızca interact() / sessions -i ile main thread'de olmalı.
         Aksi halde select(stdin) konsolu kilitler.
 
-        Peer ölümünü select + MSG_PEEK ile izler (veriyi tüketmez; interact ile yarışmaz).
+        Peer ölümünü select + ham fd MSG_PEEK ile izler (veriyi tüketmez;
+        SSL/TLS ve post modül okumasıyla yarışmaz).
         """
         try:
             while getattr(self, "running", True) and client_sock:
@@ -342,26 +368,11 @@ class BaseHandler:
                     )
                     if exceptional:
                         break
-                    if ready:
-                        # Okunabilir: ya bekleyen veri (interact alır) ya da EOF
-                        data = client_sock.recv(1, socket.MSG_PEEK)
-                        if not data:
-                            break
+                    if ready and not _peer_alive(client_sock):
+                        break
                 except (TimeoutError, BlockingIOError, InterruptedError):
-                    # GEÇİCİ durum, bağlantı ölmedi.
-                    #
-                    # Soket, post modülleri tarafından paylaşılan bir nesnedir:
-                    # exec_on_session() üzerine settimeout() uygular. Modül
-                    # select() ile recv() arasındaki mikrosaniyelerde veriyi
-                    # tüketirse peek burada "veri yok" bulur ve Python seviyesinde
-                    # TimeoutError/BlockingIOError fırlatır. İkisi de OSError
-                    # alt sınıfıdır; eski kod except (OSError) ile bunları
-                    # YANLIŞLIKLA "peer kapandı" sayıp döngüyü bitiriyordu.
-                    # Sonuç: modül çalışırken oturum listeden düşüyor ve
-                    # "uzak taraf bağlantıyı kesti" mesajı yanlış çıkıyordu.
-                    #
-                    # Kısa uyku: modül kesintisiz veri tüketirken select() hep
-                    # "hazır" döner ve bu yol sıcak döngüye dönüşebilir.
+                    # GEÇİCİ durum, bağlantı ölmedi. Modül select() ile peek
+                    # arasında veriyi tüketebilir; kısa uyku sıcak döngüyü önler.
                     time.sleep(0.01)
                     continue
                 except (OSError, ValueError):

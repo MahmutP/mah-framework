@@ -489,6 +489,21 @@ class KeepAliveOnlyHandler(BaseHandler):
         self.keep_connection_alive(client_sock)
 
 
+class SSLLikeSocket:
+    """SSLSocket.recv davranışını taklit eder: flags != 0 ise ValueError."""
+
+    def __init__(self, sock):
+        self._sock = sock
+
+    def fileno(self):
+        return self._sock.fileno()
+
+    def recv(self, buflen, flags=0):
+        if flags:
+            raise ValueError("non-zero flags not allowed in calls to recv()")
+        return self._sock.recv(buflen, flags)
+
+
 class TestKeepConnectionAlive(unittest.TestCase):
     """Peer kill sonrası oturum temizliği."""
 
@@ -522,6 +537,33 @@ class TestKeepConnectionAlive(unittest.TestCase):
         b.close()
         self.assertTrue(done.wait(timeout=3.0))
         a.close()
+
+    def test_ssl_socket_data_does_not_end_keepalive(self):
+        """Chimera post modülü çıktısı oturumu düşürmemeli (MSG_PEEK hatası)."""
+        a, b = socket.socketpair()
+        wrapped = SSLLikeSocket(a)
+        handler = ConcreteHandler({"LHOST": "127.0.0.1", "LPORT": 0})
+        handler.running = True
+        done = threading.Event()
+
+        def _run():
+            handler.keep_connection_alive(wrapped)
+            done.set()
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        try:
+            time.sleep(0.2)
+            self.assertFalse(done.is_set())
+            b.sendall(b"module output")
+            time.sleep(0.5)
+            self.assertFalse(done.is_set())
+            self.assertFalse(handler.peer_connection_closed(wrapped))
+            self.assertEqual(a.recv(64), b"module output")
+        finally:
+            b.close()
+            self.assertTrue(done.wait(timeout=3.0))
+            a.close()
 
     def test_session_removed_when_client_dies(self):
         """Payload kill simülasyonu: istemci kapanınca session silinmeli."""
